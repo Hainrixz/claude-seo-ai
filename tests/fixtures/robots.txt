@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /assets/app.js
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: OAI-SearchBot
+Disallow:
+
+Sitemap: https://example.com/sitemap.xml

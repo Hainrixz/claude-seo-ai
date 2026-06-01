@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "claude-seo-ai",
+  "displayName": "Claude SEO AI",
+  "version": "0.1.0",
+  "description": "Audit and opt-in-fix classic SEO and AI-search visibility (GEO/AEO) for any website or web codebase. Two independent scores, reproducible findings, safe deterministic fixes.",
+  "author": {
+    "name": "Enrique",
+    "email": "enriqueers98@gmail.com"
+  },
+  "homepage": "https://github.com/Hainrixz/claude-seo-ai",
+  "repository": "https://github.com/Hainrixz/claude-seo-ai",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "geo",
+    "aeo",
+    "ai-search",
+    "generative-engine-optimization",
+    "answer-engine-optimization",
+    "schema",
+    "json-ld",
+    "core-web-vitals",
+    "structured-data",
+    "llms-txt",
+    "audit"
+  ]
+}

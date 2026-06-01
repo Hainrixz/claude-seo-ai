@@ -1,0 +1,16 @@
+{
+  "_readme": "OPTIONAL render MCPs. claude-seo-ai works at Tier 0 with zero MCPs (WebFetch + the bundled scripts). To enable JS rendering for SPA/CSR sites, copy the relevant entry into your project .mcp.json (or ~/.claude.json mcpServers) and approve it — we do NOT auto-start these, so enabling the plugin never forces a download or a credential prompt. Core Web Vitals come from scripts/psi-client.mjs (set PSI_API_KEY); Search Console is a separate Tier-2 MCP you add yourself.",
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "firecrawl": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": { "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}" }
+    }
+  }
+}

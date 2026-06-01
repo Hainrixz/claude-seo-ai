@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
+  "name": "claude-seo-ai",
+  "owner": {
+    "name": "Enrique",
+    "email": "enriqueers98@gmail.com"
+  },
+  "description": "SEO + AI-search (GEO/AEO) optimization suite for Claude Code.",
+  "plugins": [
+    {
+      "name": "claude-seo-ai",
+      "source": "./",
+      "description": "Audit and opt-in-fix classic SEO and AI-search visibility across a website or web codebase.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": ["seo", "geo", "aeo", "ai-search", "schema", "core-web-vitals"]
+    }
+  ]
+}

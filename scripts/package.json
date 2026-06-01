@@ -1,0 +1,14 @@
+{
+  "name": "claude-seo-ai-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional zero-dependency Node helpers backing claude-seo-ai finding verification. The skills work without these; they only sharpen accuracy and make verification.reproduce runnable.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node ../tests/run.mjs",
+    "check": "for f in *.mjs lib/*.mjs; do node --check \"$f\"; done"
+  }
+}

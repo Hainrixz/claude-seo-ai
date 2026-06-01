@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Hainrixz/claude-seo-ai/schema/audit-report.schema.json",
+  "title": "claude-seo-ai Audit Report",
+  "description": "Top-level result of `/claude-seo-ai audit`. Carries the two never-blended scores plus all findings.",
+  "type": "object",
+  "required": ["target", "generated_at", "tier", "vertical", "scores", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "type": "object",
+      "required": ["kind", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["url", "path"] },
+        "value": { "type": "string" },
+        "pages_analyzed": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "tier": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2,
+      "description": "Highest data tier reached: 0 offline, 1 render/PSI, 2 OAuth (GSC/Merchant)."
+    },
+    "vertical": {
+      "type": "string",
+      "enum": ["saas", "blog-publisher", "local-business", "ecommerce", "docs", "generic"]
+    },
+    "scores": {
+      "type": "object",
+      "required": ["search_seo", "ai_visibility"],
+      "additionalProperties": false,
+      "properties": {
+        "search_seo": { "$ref": "#/$defs/score" },
+        "ai_visibility": { "$ref": "#/$defs/score" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "https://github.com/Hainrixz/claude-seo-ai/schema/finding.schema.json" }
+    }
+  },
+  "$defs": {
+    "score": {
+      "type": "object",
+      "required": ["value", "band", "interpretation", "categories"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number", "minimum": 0, "maximum": 100 },
+        "band": { "type": "string", "enum": ["A", "B", "C", "D", "F"] },
+        "capped": { "type": "boolean", "description": "true if a severity-5 FAIL gated the score to <=40." },
+        "interpretation": { "type": "string" },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "weight", "value"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "weight": { "type": "number", "minimum": 0, "maximum": 100 },
+              "value": { "type": "number", "minimum": 0, "maximum": 100 },
+              "active": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

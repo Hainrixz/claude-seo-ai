@@ -1,0 +1,65 @@
+[
+  {
+    "id": "M1.robots.ok", "module": "M1", "title": "robots.txt valid and reachable",
+    "status": "pass", "severity": 5, "scope": "site",
+    "evidence": { "observed": "robots.txt returns 200 with a Sitemap directive" },
+    "expected": "robots.txt should be reachable and not block important resources",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "robots_parse", "assertion": "robots.txt parses; no Disallow: / for Googlebot", "reproduce": "node scripts/parse-robots-sitemap.mjs --url https://example.com" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Blocked crawl prevents indexing." }
+  },
+  {
+    "id": "M5.blogposting.missing_datemodified", "module": "M5", "title": "BlogPosting missing dateModified",
+    "status": "fail", "severity": 4, "scope": "page",
+    "evidence": { "observed": "BlogPosting has datePublished but no dateModified", "snippet": "{\"@type\":\"BlogPosting\",\"datePublished\":\"2026-01-10\"}" },
+    "expected": "Include dateModified (ISO 8601)",
+    "recommendation": "Add dateModified to the BlogPosting JSON-LD.", "fixable": "auto",
+    "verification": { "method": "schema_validator", "assertion": "BlogPosting.dateModified present", "reproduce": "node scripts/validate-jsonld.mjs --file tests/fixtures/blog-post.html --type BlogPosting" },
+    "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "medium", "rationale": "dateModified is a documented freshness signal." }
+  },
+  {
+    "id": "M9.alt.missing", "module": "M9", "title": "Content image without alt",
+    "status": "fail", "severity": 3, "scope": "page",
+    "evidence": { "observed": "<img src=\"hero.jpg\"> has no alt attribute" },
+    "expected": "Every content image has descriptive alt text",
+    "recommendation": "Add contextual alt text.", "fixable": "proposed",
+    "verification": { "method": "dom_assert", "assertion": "img[src=hero.jpg] has non-empty alt", "reproduce": "node scripts/parse-html.mjs --file tests/fixtures/blog-post.html" },
+    "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "low", "rationale": "Alt aids a11y and image/AI understanding." }
+  },
+  {
+    "id": "M11.heading.no_direct_answer", "module": "M11", "title": "Question heading without a direct answer",
+    "status": "fail", "severity": 5, "scope": "page",
+    "evidence": { "observed": "H3 'How do I add JSON-LD?' is followed by a windup, not an answer" },
+    "expected": "A ~40-60 word direct answer follows each question heading",
+    "recommendation": "Rewrite the lead paragraph as a direct answer.", "fixable": "proposed",
+    "verification": { "method": "manual_review", "assertion": "first paragraph after the heading answers it directly", "reproduce": "node scripts/check-answerblocks.mjs --file tests/fixtures/blog-post.html" },
+    "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "high", "rationale": "Self-contained answers are the strongest AI-citation correlate." }
+  },
+  {
+    "id": "M15.lcp.field", "module": "M15", "title": "LCP field data unavailable",
+    "status": "needs_api", "severity": 4, "scope": "page",
+    "evidence": { "observed": "No PSI API key configured; field CWV not measured" },
+    "expected": "LCP <= 2.5s at p75",
+    "recommendation": "Configure PSI_API_KEY to measure field CWV.", "fixable": "advisory",
+    "verification": { "method": "psi_api", "assertion": "loadingExperience LCP p75 <= 2500ms", "reproduce": "node scripts/psi-client.mjs --url https://example.com" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "CWV is a confirmed ranking signal." }
+  },
+  {
+    "id": "M14.retrieval.allowed", "module": "M14", "title": "AI retrieval bots allowed",
+    "status": "pass", "severity": 4, "scope": "site",
+    "evidence": { "observed": "OAI-SearchBot, Claude-SearchBot, PerplexityBot are not blocked" },
+    "expected": "Retrieval/citation bots are allowed",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "robots_parse", "assertion": "retrieval bots not Disallow: /", "reproduce": "node scripts/parse-robots-sitemap.mjs --url https://example.com" },
+    "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "high", "rationale": "Blocked retrieval bots cannot cite the page." }
+  },
+  {
+    "id": "M21.llmstxt.missing", "module": "M21", "title": "No llms.txt",
+    "status": "warn", "severity": 1, "scope": "site",
+    "evidence": { "observed": "No /llms.txt found" },
+    "expected": "Optional llms.txt present",
+    "recommendation": "Optionally add llms.txt (low/uncertain impact).", "fixable": "auto",
+    "verification": { "method": "manual_review", "assertion": "/llms.txt exists", "reproduce": "curl -sI https://example.com/llms.txt" },
+    "expected_impact": { "axis": "ai", "confidence": "speculative", "magnitude": "low", "rationale": "~10% adoption; no vendor commitment. Scored 0." }
+  }
+]

@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+scripts/node_modules/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# logs / tmp
+*.log
+.tmp/
+tmp/
+
+# claude-seo-ai fixer backups (runtime, never committed)
+backups/
