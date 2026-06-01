@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hero.png" alt="claude-seo-ai — SEO + AI-search toolkit for Claude Code, with the tododeia pixel mascot (a white bear with orange glasses)" width="840">
+  <img src="assets/hero.png" alt="claude-seo-ai — SEO + AI-search toolkit for Claude Code, with the Claude pixel mascot (an orange blocky creature)" width="840">
 </p>
 
 <h1 align="center">claude-seo-ai</h1>
@@ -61,7 +61,7 @@ The plugin works **fully offline** (Tier 0, no keys). See [Data tiers](#data-tie
 ## Two scores, never blended
 
 <p align="center">
-  <img src="assets/dual-score.png" alt="Two pixel-art scoreboards — SEARCH and AI — with the tododeia bear mascot between them" width="720">
+  <img src="assets/dual-score.png" alt="Two pixel-art scoreboards — SEARCH and AI — with the Claude mascot between them" width="720">
 </p>
 
 Every audit reports two **0–100** scores with letter bands (A–F) and a one-line interpretation ([details](references/scoring-model.md)):
@@ -74,7 +74,7 @@ Severity gating caps a score at **F** if something critical fails (e.g. site-wid
 ## How it works
 
 <p align="center">
-  <img src="assets/how-it-works.png" alt="Three-step pixel flow: the tododeia bear → magnifying glass over code → report with green checkmarks" width="760">
+  <img src="assets/how-it-works.png" alt="Three-step pixel flow: the Claude mascot → magnifying glass over code → report with green checkmarks" width="760">
 </p>
 
 A skill-first, three-layer design (Claude is the runtime; the Node helpers are optional):
@@ -100,7 +100,7 @@ A complete 2026 suite, grouped:
 ## Get cited by AI engines
 
 <p align="center">
-  <img src="assets/ai-citations.png" alt="The tododeia bear beside a webpage being cited by pixel AI chat bubbles and robots" width="760">
+  <img src="assets/ai-citations.png" alt="The Claude mascot beside a webpage being cited by pixel AI chat bubbles and robots" width="760">
 </p>
 
 The GEO/AEO modules score how *citable* your content is: self-contained answer blocks, fact density, original data, entity linking, and whether retrieval bots (`OAI-SearchBot`, `Claude-SearchBot`, `PerplexityBot`) can actually reach and render your page. See [`references/ai-crawlers.md`](references/ai-crawlers.md).
@@ -108,7 +108,7 @@ The GEO/AEO modules score how *citable* your content is: self-contained answer b
 ## The opt-in fixer
 
 <p align="center">
-  <img src="assets/fixer.png" alt="The tododeia bear with a pixel wrench fixing a code window showing a green-plus diff line" width="760">
+  <img src="assets/fixer.png" alt="The Claude mascot with a pixel wrench fixing a code window showing a green-plus diff line" width="760">
 </p>
 
 The fixer ([`skills/fix`](skills/fix/SKILL.md)) is `disable-model-invocation: true` — Claude can **never** trigger writes on its own. Only `/claude-seo-ai:fix` does, and only the one writer subagent (`seo-fixer-writer`) has Write/Edit; every auditor is read-only by tool allowlist.
@@ -172,7 +172,7 @@ tests/fixtures    sample sites for verification
 ## About
 
 <p align="center">
-  <img src="assets/about.png" alt="Pixel-art tododeia mascot — a white bear with orange glasses" width="300">
+  <img src="assets/about.png" alt="Pixel-art Claude mascot — an orange blocky creature" width="300">
 </p>
 
 Built by **Enrique Rocha** — I help teams ship AI: consulting, automations, and agents. This is a community, MIT-licensed project: use it, fork it, open issues and PRs (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
@@ -182,7 +182,7 @@ Built by **Enrique Rocha** — I help teams ship AI: consulting, automations, an
 
 ## License
 
-[MIT](LICENSE) · *tododeia mascot artwork generated for this project in pixel-art style.*
+[MIT](LICENSE) · *Claude mascot artwork generated for this project in pixel-art style.*
 
 ---
 
