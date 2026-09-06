@@ -34,7 +34,29 @@ export const VERDICT_UAS = Object.freeze(['Googlebot', 'Bingbot', 'claude-seo-ai
 const SITEMAP_FETCH_MAX_BYTES = 52428800 + 4096; // one byte over the 50 MB limit still lets over_50mb be reported
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
-const looksHtml = (s) => /^\s*(<!doctype\s+html|<html[\s>])/i.test(String(s || ''));
+const HTML_SNIFF_BYTES = 8192;
+
+/**
+ * Does this body start an HTML document? Leading whitespace, a UTF-8 BOM and HTML comments are
+ * skipped first: a soft 404 whose markup opens with a licence banner ("<!-- BRAND -->\n<!doctype html>")
+ * is still HTML, and mistaking it for a text endpoint loses the "HTML instead of the endpoint" hint.
+ * Only the first 8 KB is examined; a comment that does not close inside it counts as "not HTML".
+ */
+export function looksLikeHtml(body) {
+  let t = String(body || '').slice(0, HTML_SNIFF_BYTES).replace(/^\uFEFF/, '');
+  for (let guard = 0; guard < 16; guard++) {
+    const before = t;
+    t = t.replace(/^\s+/, '');
+    if (t.startsWith('<!--')) {
+      const end = t.indexOf('-->');
+      if (end === -1) return false; // comment does not close inside the sniff window
+      t = t.slice(end + 3);
+    }
+    if (t === before) break;
+  }
+  return /^(<!doctype\s+html|<html[\s>])/i.test(t);
+}
+const looksHtml = looksLikeHtml;
 
 /** Normalize the --artifacts flag: 'all' | 'none' | 'robots,sitemaps' | array | object → { robots, sitemaps, discovery, any }. */
 export function normalizeArtifacts(value) {
@@ -91,6 +113,15 @@ export function buildRobotsArtifact(url, fetched, rf, targetUrl = null, extra = 
 // ---------------------------------------------------------------------------
 // sitemaps
 
+/**
+ * A well-known sitemap path (`/sitemap_index.xml`, `/wp-sitemap.xml`, …) that answers 404/410 is the
+ * probe working, not a site error: those four paths are guesses, not declarations. They are counted
+ * in `probe_misses` and kept out of `errors_total`, so this file and parse-robots-sitemap.mjs agree.
+ */
+export function isExpectedProbeMiss(f) {
+  return !!f && f.source === 'well-known' && (f.status === 404 || f.status === 410);
+}
+
 /** Compact site/sitemaps.json: files + counts + a sample; the full URL list goes to sitemap-urls.txt. */
 export function summarizeSitemaps(disc, { sample = 50 } = {}) {
   const urls = Array.isArray(disc.urls) ? disc.urls : [];
@@ -101,7 +132,8 @@ export function summarizeSitemaps(disc, { sample = 50 } = {}) {
     files, url_count: urls.length, urls_file: SITE_FILES.sitemap_urls, sample: urls.slice(0, sample),
     lastmod: { count: withDate.length, min: withDate[0] || null, max: withDate[withDate.length - 1] || null },
     over_50k_any: files.some((f) => f.over_50k), over_50mb_any: files.some((f) => f.over_50mb),
-    errors_total: files.reduce((n, f) => n + (Array.isArray(f.errors) ? f.errors.length : 0) + (f.error ? 1 : 0), 0),
+    errors_total: files.reduce((n, f) => n + (Array.isArray(f.errors) ? f.errors.length : 0) + (f.error && !isExpectedProbeMiss(f) ? 1 : 0), 0),
+    probe_misses: files.filter(isExpectedProbeMiss).length,
     well_known_only: (disc.declared || []).length === 0 && (disc.found || 0) > 0,
     truncated: !!disc.truncated, truncated_files: !!disc.truncated_files, truncated_urls: !!disc.truncated_urls,
   };

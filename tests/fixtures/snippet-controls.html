@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Snippet controls — restricted fixture</title>
+  <meta name="robots" content="max-snippet:0, max-image-preview:none, noimageindex">
+  <meta name="googlebot" content="noindex, nosnippet">
+  <meta name="bingbot" content="index, follow">
+  <link rel="canonical" href="https://fixture.example/pricing">
+</head>
+<body>
+  <nav><a href="/">Home</a> <a href="/pricing">Pricing</a></nav>
+  <main>
+    <div data-nosnippet>
+      <h1>Pricing and availability</h1>
+      <p>Every plan on this fixture page is billed monthly and can be cancelled from the account
+         screen at any time, which is the lead paragraph a snippet would normally quote.
+         <span data-nosnippet>Nested annotation that must not be counted twice.</span></p>
+    </div>
+    <h2>What does the starter plan include?</h2>
+    <p>The starter plan includes two seats, ten projects and the shared audit queue. It is the
+       cheapest tier and it is the one most small teams pick when they begin using the product.</p>
+    <section data-nosnippet>
+      <p>Prices shown exclude tax. This block is annotated because the legal team asked for it and
+         it is not part of the answer a search engine should quote from this page.</p>
+    </section>
+    <h2>How do refunds work?</h2>
+    <p>Refunds are processed within ten business days of the request and are returned to the
+       original payment method, minus any transaction fee charged by the payment processor.</p>
+  </main>
+  <footer><p>Fixture footer.</p></footer>
+</body>
+</html>

@@ -29,17 +29,22 @@ Generated edits are a diff for `fix`, mapped to the schema `fixable` field:
 Never fabricate a sitemap URL or path: if the canonical sitemap location is unknown, emit a clearly-marked `TODO` placeholder for the user to fill, or ask.
 
 ## Verification
-- `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — fetches and parses `/robots.txt`, resolves the effective allow/deny for the named agent + URL, and checks for the `Sitemap:` directive (method `robots_parse`). <!-- reconcile-flags-v0.2 -->
+- `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --url <final_url> --path <audited path>` — fetches and parses `/robots.txt`, resolves the effective allow/deny for `Googlebot`/`Bingbot` **against the audited path** (not the root), and checks for the `Sitemap:` directive (method `robots_parse`). Use `--robots <robots_url>` or `--file <path>` for an offline robots file. <!-- reconcile-flags-v0.2 -->
 - When `/robots.txt` cannot be fetched (network/auth/edge block) the status is `needs_api`, never a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples:
-- `M1.robots.blocks_css_js` — a `Disallow` matches CSS/JS the rendered page loads (severity 5, fail, `fixable: auto`, axis `search`, confidence `established`).
-- `M1.robots.blocks_googlebot` — effective ruleset disallows the audited URL for `Googlebot` (severity 5, fail, `fixable: proposed`, axis `search`, confidence `established`).
-- `M1.sitemap.missing_directive` — no `Sitemap:` line in robots.txt (severity 5, warn, `fixable: auto`, axis `search`, confidence `directional`).
+Emit findings per `schema/finding.schema.json`; axis `search`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`).
+- `M1.robots.blocks_googlebot` — the effective ruleset disallows the audited URL for `Googlebot` (`fail`, severity **5**, `fixable: proposed`, confidence `established`). Site-wide, this is the single most destructive robots defect there is; it stays at 5.
+- `M1.robots.blocks_css_js` — a `Disallow` matches CSS/JS the rendered page loads, degrading how Google renders it (`fail`, severity **4**, `fixable: auto`, confidence `established`).
+- `M1.robots.unreachable` — `/robots.txt` returns 5xx, which suspends crawling until it recovers (`fail`, severity 5 at site scope, `fixable: advisory`, confidence `established`).
+- `M1.robots.syntax_error` — malformed directive, missing `User-agent` group header, or a BOM (`warn`, severity 3, `fixable: auto`, confidence `established`).
+- `M1.sitemap.missing_directive` — no `Sitemap:` line in robots.txt (`warn`, severity **2**, `fixable: auto`, confidence `directional` — sitemaps are also discovered from Search Console and `/sitemap.xml`, so a missing directive is a convenience gap, not an access failure).
+- `M1.crawl_delay.excessive` — a large `Crawl-delay` in the global group that starves honoring crawlers (`warn`, severity 2, `fixable: proposed`, confidence `directional`).
 Each finding: `evidence.observed` quotes the offending robots.txt line (or the resolved verdict) verbatim; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
-- `robots.txt` controls **crawling**, not **indexing**: a `Disallow`-ed page can still be indexed (URL-only) from external links. To keep a page out of the index use a `noindex` meta tag and do *not* also `Disallow` it, or the crawler can't see the `noindex`.
-- A missing or 404 `robots.txt` is *not* a defect — it means "crawl everything." Don't report it as a fail; flag only as informational.
-- `Crawl-delay` is ignored by Googlebot; recommending it as a Google ranking/crawl lever is a myth — scope advice to Bingbot and other honoring agents.
+- `robots.txt` controls **crawling**, not **indexing**: a `Disallow`-ed page can still be indexed (URL-only) from external links. To keep a page out of the index use a `noindex` meta tag and do *not* also `Disallow` it, or the crawler can never see the `noindex`.
+- A missing or 404 `robots.txt` is *not* a defect — it means "crawl everything". Don't report it as a fail; flag it as informational. A **5xx** is different: it is treated as a full disallow while it lasts.
+- `Crawl-delay` is ignored by Googlebot; recommending it as a Google crawl lever is a myth — scope the advice to Bingbot and other honoring agents.
+- Resolve every verdict against the **audited path**, not `/`. A site that allows the root and disallows `/blog/` is a common shape, and a root-only check reports the wrong answer.
+- On a preview or staging host a blanket `Disallow: /` is the expected configuration; the scorer suppresses `M1.robots.*` caps when `--environment preview|staging|local` is set (see `references/scoring-model.md`).

@@ -1,0 +1,14 @@
+{
+  "/wp-json/": {
+    "status": 200,
+    "json": {
+      "name": "Northwind Journal",
+      "namespaces": [
+        "oembed/1.0",
+        "wp/v2",
+        "wp-site-health/v1",
+        "yoast/v1"
+      ]
+    }
+  }
+}

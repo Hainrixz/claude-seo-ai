@@ -1,0 +1,8 @@
+{
+  "name": "northwind-changelog",
+  "private": true,
+  "devDependencies": {
+    "@sveltejs/kit": "2.16.1",
+    "svelte": "5.19.0"
+  }
+}

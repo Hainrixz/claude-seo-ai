@@ -1,0 +1,12 @@
+{
+  "/wp-json/": {
+    "status": 200,
+    "json": {
+      "namespaces": [
+        "oembed/1.0",
+        "wp/v2",
+        "aioseo/v1"
+      ]
+    }
+  }
+}

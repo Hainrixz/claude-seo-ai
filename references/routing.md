@@ -44,32 +44,64 @@ M21 is **AI discovery & agent endpoints** (`/llms.txt`, `/llms-full.txt`, `/agen
 
 Each agent receives a **dispatch envelope** (`plugin_root`, `run_dir`, `pages[]`, `site`, `vertical`, `platform` profile path + cards, `modules[]`, `deterministic_findings`, `return`) and returns a findings array conforming to `schema/finding.schema.json`. Agents never depend on `${...}` substitution: every script call is `node "<plugin_root>/scripts/<x>.mjs" --snapshot "<run_dir>/pages/<slug>.json"`. <!-- reconcile-flags-v0.2 --> The orchestrator saves each array to `<run_dir>/agents/<agent>.json`, then `report.mjs <run_dir> --merge "agents/*.json"` merges, dedupes by `id` + location (keeping the most severe), scores, and renders.
 
-## Platform layer (Phase 3 — `scripts/detect-platform.mjs` + `references/platforms/<id>.md`)
+## Platform layer (`scripts/detect-platform.mjs` + `references/platforms/<id>.md`)
 
-Orthogonal to the vertical: the same modules run, but the profile decides which platform-conditional check ids fire, what is `not_applicable` because the platform owns it, and which fix adapter `fix` selects by default. Stub table; each card is created in Phase 3b.
+Orthogonal to the vertical: the same modules run, but the profile decides which platform-conditional
+check ids fire, what is `not_applicable` because the platform owns it, and which fix adapter `fix`
+selects by default. Four layers are scored independently (platform · framework · cms plugins ·
+hosting), so a site can legitimately match a row from each of the three groups below at once — a
+headless WordPress behind Next.js, or a Hydrogen storefront on Shopify.
+
+### Platform layer (a CMS or hosted builder owns the pages)
 
 | Platform id | Knowledge card | Default `--target` | Adapters |
 |---|---|---|---|
-| `shopify` | `references/platforms/shopify.md` | `shopify-theme` (+ `shopify-admin` for per-resource SEO fields) | shopify-theme, shopify-admin, instructions |
-| `wordpress` (+ `woocommerce`, SEO plugin ids) | `references/platforms/wordpress.md`, `woocommerce.md` | `wordpress-rest` if credentials and the SEO plugin exposes REST writes, else `wordpress-wpcli` if `--ssh`, else `instructions` | wordpress-rest, wordpress-wpcli, local-files (classic theme + repo), instructions |
-| `wix` / `webflow` / `ghost` / `hubspot` / `bigcommerce` | `references/platforms/<id>.md` | `page-api` if credentials, else `instructions` | page-api (provider), instructions |
-| `squarespace` / `framer` | `references/platforms/<id>.md` | `instructions` (no SEO API) | instructions |
-| `magento` / `drupal` / `payload` | `references/platforms/<id>.md` | `instructions` (Payload: `page-api`, field names UNVERIFIED) | instructions, page-api |
-| `nextjs` / `nuxt` / `astro` / `sveltekit` / `remix` / `gatsby` / `hugo` / `jekyll` / `eleventy` / `docusaurus` / `static` | `references/platforms/<id>.md` | `local` when `--project` is given, else `instructions` (framework snippet) | local-files (route→file map), instructions |
+| `shopify` | `platforms/shopify.md` | `shopify-theme` (+ `shopify-admin` for per-resource SEO fields) | shopify-theme, shopify-admin, instructions |
+| `wordpress` | `platforms/wordpress.md` | `wordpress-rest` when credentials exist and the SEO plugin exposes REST writes, else `wordpress-wpcli` with `--ssh`, else `instructions` | wordpress-rest, wordpress-wpcli, local-files (classic theme + repo), instructions |
+| `woocommerce` (plugin layer) | `platforms/woocommerce.md` | as `wordpress` | wordpress-rest, wordpress-wpcli, instructions |
+| `wix` | `platforms/wix.md` | `page-api` with credentials, else `instructions` | page-api, instructions |
+| `squarespace` | `platforms/squarespace.md` | `instructions` (no SEO API) | instructions |
+| `webflow` | `platforms/webflow.md` | `page-api` with credentials, else `instructions` | page-api, instructions |
+| `framer` | `platforms/framer.md` | `instructions` (no SEO API) | instructions |
+| `ghost` | `platforms/ghost.md` | `page-api` with credentials, else `instructions` | page-api, local-files (self-hosted theme), instructions |
+| `hubspot` | `platforms/hubspot.md` | `page-api` with credentials, else `instructions` | page-api, instructions |
+| `bigcommerce` | `platforms/bigcommerce.md` | `page-api` with credentials, else `instructions` | page-api, local-files (Stencil theme), instructions |
+| `magento` | `platforms/magento.md` | `instructions` | instructions, local-files (theme repo) |
+| `drupal` | `platforms/drupal.md` | `instructions` | instructions, local-files (theme repo) |
+| `payload` | `platforms/payload.md` | `page-api` with credentials, else the Next.js rules (field names UNVERIFIED) | page-api, local-files, instructions |
+
+### Framework layer (code owns the `<head>`)
+
+| Framework id | Knowledge card | Default `--target` | Adapters |
+|---|---|---|---|
+| `nextjs` | `platforms/nextjs.md` | `local` with `--project`, else `instructions` | local-files (route→file map), instructions |
+| `nuxt` | `platforms/nuxt.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `astro` | `platforms/astro.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `sveltekit` | `platforms/sveltekit.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `react-router` (Remix / RR7 / Hydrogen) | `platforms/react-router.md` | `local` with `--project`, else `instructions` | local-files, instructions (+ shopify-admin on Hydrogen) |
+| `gatsby` | `platforms/gatsby.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `hugo` | `platforms/hugo.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `jekyll` | `platforms/jekyll.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `eleventy` | `platforms/eleventy.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `docusaurus` | `platforms/docusaurus.md` | `local` with `--project`, else `instructions` | local-files, instructions |
+| `static` | `platforms/static.md` | `local` with `--project`, else `instructions` | local-files, instructions |
 | unknown | — | `instructions` | instructions |
 
-URL-only targets never select `local`. Only `html-head`, `front-matter`, `config-file`, and `liquid` insertion strategies may be AUTO; every JSX/TS-object strategy is PROPOSED.
+URL-only targets never select `local`. Only `html-head`, `front-matter`, `config-file`, and `liquid`
+insertion strategies may be AUTO; every JSX/TS-object strategy is PROPOSED. When a platform card and
+a framework card disagree about the head, `capabilities.head_owner` settles it.
 
-### SiteProfile shape (produced by `scripts/detect-platform.mjs`, Phase 3; merged with `seo-vertical-detect` output into `<run_dir>/profile.json`)
+### SiteProfile shape (produced by `scripts/detect-platform.mjs`; merged with `seo-vertical-detect` output into `<run_dir>/profile.json`)
 
 ```json
 {
-  "version": 1,
+  "version": "detect-platform/1",
+  "target":    { "url": "https://example.com/", "host": "example.com", "project_root": null },
   "platform":  { "id": "shopify", "confidence": "high", "score": 14, "signals": [{ "kind": "header", "value": "x-shopid", "weight": 5 }] },
-  "framework": { "id": "nextjs", "flavor": "app-router", "router": "app", "confidence": "medium", "signals": [] },
-  "cms_plugins": [{ "id": "yoast", "confidence": "high" }],
-  "hosting": { "id": "vercel" },
-  "environment": { "kind": "production | preview | staging | local" },
+  "framework": { "id": "nextjs", "flavor": "app-router", "router": "app", "confidence": "medium", "score": 6, "signals": [] },
+  "cms_plugins": [{ "id": "yoast", "confidence": "high", "score": 13, "signals": [] }],
+  "hosting":   { "id": "vercel", "confidence": "high", "signals": [] },
+  "environment": { "kind": "production | preview | staging | local", "signals": [] },
   "capabilities": {
     "local_files": false, "theme_files": true, "rest_api": false, "wp_cli": false, "admin_api": true,
     "page_api": false, "instructions_only": false, "sitemap_editable": false,
@@ -77,13 +109,22 @@ URL-only targets never select `local`. Only `html-head`, `front-matter`, `config
     "redirects": "admin-api | plugin | file | none",
     "head_owner": "theme | seo-plugin | framework | builder"
   },
-  "write_targets": [{ "adapter": "shopify-theme", "for": ["head", "jsonld", "robots", "llms"], "ready": false, "needs": ["SHOPIFY_STORE", "SHOPIFY_THEME_TOKEN"], "tools": {} }],
+  "write_targets": [{ "adapter": "shopify-theme", "for": ["head", "jsonld", "robots", "llms"], "ready": false, "needs": ["SHOPIFY_STORE", "SHOPIFY_CLI_THEME_TOKEN"], "tools": { "shopify": false } }],
   "candidates": { "platform": [], "framework": [] },
-  "vertical_hints": ["ecommerce"]
+  "vertical_hints": ["ecommerce"],
+  "cards": ["references/platforms/shopify.md"],
+  "sources": { "html": true, "headers": true, "cookies": true, "probes": [], "repo": null, "repo_files": 0 },
+  "notes": ["repo signals not consulted: no --path given (repo/pkg rules were skipped)"]
 }
 ```
 
-`needs` lists credential **key names only**; presence is checked for `CLAUDE_PLUGIN_OPTION_<KEY>` / `<KEY>` without reading values. Confidence: high ≥ 8 with ≥ 2 signal kinds, medium ≥ 5, low ≥ 2, else omitted.
+Signals are `{ kind, value, weight }` with `kind` one of `header · cookie · generator · asset_host ·
+path · dom · link_rel · probe · repo · pkg`, weights 1-5. Confidence: high ≥ 8 with ≥ 2 signal kinds,
+medium ≥ 5, low ≥ 2, else the layer is `null` — an unresolved platform is a result, not a gap.
+`needs` lists credential **key names only**; presence is checked for `CLAUDE_PLUGIN_OPTION_<KEY>` /
+`<KEY>` without reading values, and CLI tools (`shopify`, `wp`, `ssh`) are checked for presence on
+PATH, never executed. `repo`/`pkg` signals require `--path`; `probe` signals require `--probe`;
+`notes[]` says when either was unavailable.
 
 ## Environment layer
 

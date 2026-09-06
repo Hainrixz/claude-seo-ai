@@ -1,0 +1,4 @@
+title: Northwind Notes
+url: "https://notes.northwind.example"
+plugins:
+  - jekyll-seo-tag

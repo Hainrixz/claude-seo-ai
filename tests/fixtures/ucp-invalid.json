@@ -1,0 +1,21 @@
+{
+  "ucp": { "version": "2026-2-1" },
+  "services": {
+    "catalog": [
+      {
+        "version": "2026-02-01",
+        "transport": "graphql",
+        "endpoint": "https://shop.fixture.example/api/catalog"
+      }
+    ],
+    "com.fixture.support": [
+      {
+        "version": "2026-02-01",
+        "spec": "https://shop.fixture.example/specs/support.json",
+        "transport": "rest",
+        "endpoint": "http://shop.fixture.example/api/support"
+      }
+    ]
+  },
+  "capabilities": ["com.fixture.checkout"]
+}

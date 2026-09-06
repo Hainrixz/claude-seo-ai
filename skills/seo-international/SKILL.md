@@ -31,13 +31,18 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - Reciprocity requires fetching each declared alternate; when those URLs (or a sitemap tier) are unavailable, status is `needs_api`, **never** a false `pass`.
 
 ## Findings
-Findings conform to `schema/finding.schema.json`. On a confirmed multilingual site severity is **4**; otherwise the check is `not_applicable` at severity 0. Examples:
-- `M20.hreflang.missing_reciprocal` — page declares `hreflang="de-DE"` for a URL that does not point back (`status: fail`, severity 4, `fixable: proposed`, axis `search`, confidence `established`). `evidence.observed` quotes the one-way `<link>`; `verification.reproduce` runs the hreflang-check command above.
-- `M20.hreflang.invalid_bcp47` — `hreflang="en-UK"` (`fail`, severity 4, `fixable: auto`, axis `search`, confidence `established`; recommend `en-GB`).
-- `M20.hreflang.missing_xdefault` — cluster has no `x-default` fallback (`warn`, severity 4, `fixable: auto`, axis `search`, confidence `directional`).
+Findings conform to `schema/finding.schema.json`; axis `search`. On a monolingual site every id is `not_applicable` at severity 0. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`).
+- `M20.hreflang.missing_reciprocal` — the page declares `hreflang="de-DE"` for a URL that does not point back; Google ignores one-way annotations, so the cluster does not form (`fail`, severity 4, `fixable: proposed`, confidence `established`). `evidence.observed` quotes the one-way `<link>`.
+- `M20.hreflang.invalid_bcp47` — e.g. `hreflang="en-UK"` (`fail`, severity **3**, `fixable: auto`, confidence `established`; recommend `en-GB`). One bad value invalidates that entry, not the whole set.
+- `M20.hreflang.missing_self` — the page is absent from its own alternate set (`fail`, severity 3, `fixable: auto`, confidence `established`).
+- `M20.hreflang.canonical_conflict` — an hreflang URL whose `rel=canonical` points at a different page, which neutralizes the cluster (`fail`, severity 4, `fixable: proposed`, confidence `established`; cross-check M2).
+- `M20.hreflang.missing_xdefault` — the cluster has no `x-default` fallback (`warn`, severity **2**, `fixable: auto`, confidence `directional` — `x-default` is recommended, not required, and its absence degrades selector routing rather than breaking the cluster).
+- `M20.lang.mismatch` — `<html lang>` disagrees with the locale this URL claims in its own hreflang entry (`warn`, severity 2, `fixable: auto`, confidence `directional`).
 - `M20.hreflang.not_applicable` — monolingual site (`not_applicable`, severity 0).
+Each finding: `verification.reproduce` runs the hreflang-check command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
 - hreflang is a **targeting/clustering** signal, not a ranking boost: it selects which existing URL to show in a locale, it does not raise rankings. Don't sell it as a ranking lever.
 - hreflang does **not** fix thin or machine-translated content, and it is not a substitute for `rel=canonical` — the two work together.
-- Bing/Yandex use it weakly to not-at-all; the documented beneficiary is Google. Don't claim cross-engine parity.
+- Bing and Yandex use it weakly to not at all; the documented beneficiary is Google. Don't claim cross-engine parity.
+- Reciprocity cannot be asserted from one page. If the alternates were not fetched within the crawl budget, the finding is `needs_api` — a one-sided view is not evidence of a one-way link.

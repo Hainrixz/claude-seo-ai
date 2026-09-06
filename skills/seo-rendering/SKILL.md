@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 # seo-rendering (M4)
 
-Most AI crawlers do not execute JavaScript, so content that only exists after hydration is invisible to them — CSR-only is a hard AI gate. JS dependency also delays first paint; see `references/cwv-thresholds.md` for how this feeds LCP/INP.
+Content that only exists after hydration is invisible to any consumer that does not run JavaScript. Google renders JS (documented); most third-party AI crawlers are **reported** not to (directional — see Honesty), so a CSR-only shell is primarily an AI-visibility and crawl-efficiency problem. JS dependency also delays first paint; see `references/cwv-thresholds.md` for how this feeds LCP/INP.
 
 ## Inputs
 Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` and `parsed_rendered`, plus the `render{needed,signals,used,confidence,hint,delta}` block — the script already computed the raw-vs-rendered delta; `raw_html_path`/`rendered_html_path` name the files on disk; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
@@ -30,12 +30,15 @@ Rendering strategy is a framework/architecture decision with high breakage risk,
 - Rendering an accurate `rendered_html_path` requires a headless-browser data tier. When that tier is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples:
-- `M4.render.csr_only_primary_content` — h1 and body text exist only in `rendered_html_path`, raw HTML is an empty shell (status `fail`, severity 5, axis `both`, `fixable: advisory`, confidence `established`).
-- `M4.render.jsonld_js_injected` — JSON-LD blocks present only after hydration, so non-JS crawlers see no structured data (status `warn`, severity 4, axis `ai`, `fixable: advisory`, confidence `established`).
-- `M4.render.lazy_main_content` — primary content loads only on scroll/interaction (status `warn`, severity 4, axis `both`, `fixable: advisory`, confidence `directional`).
-Each finding: `evidence.observed` quotes the raw vs rendered delta on the page; `verification.reproduce` is a runnable `render_diff` assertion; `expected_impact` is banded + confidence-tagged (no naked %).
+Emit findings per `schema/finding.schema.json`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Examples:
+- `M4.render.csr_only_primary_content` — the H1 and body text exist only in `rendered_html_path`; the raw HTML is an empty shell (`fail`, severity 5, axis `both`, `fixable: advisory`, confidence `established`). This is the module's only capping finding, and only at template/site scope.
+- `M4.render.jsonld_js_injected` — JSON-LD blocks appear only after hydration, so a non-JS consumer sees no structured data (`warn`, severity **3**, axis `ai`, `fixable: advisory`, confidence `established`).
+- `M4.render.lazy_main_content` — primary content loads only on scroll or interaction (`warn`, severity **3**, axis `both`, `fixable: advisory`, confidence `directional`).
+- `M4.render.needs_renderer` — the page shows CSR signals and no renderer was available, so the delta could not be measured (`needs_api`, severity 3, axis `both`).
+Each finding: `evidence.observed` quotes the raw-vs-rendered delta on the page; `verification.reproduce` is a runnable `render_diff` assertion; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
-- Googlebot **does** render JavaScript (second-wave, queued), so a well-built CSR app can still rank in classic Search — frame CSR-only as an AI-visibility and crawl-efficiency problem, not an automatic Google-ranking failure.
-- Don't claim "SSR ranks higher than CSR" as a ranking factor; the documented effect is content **availability** to non-JS consumers and faster paint, not a rendering-mode boost. Keep CSR if the page is interactive-by-nature and primary content is still server-delivered.
+- **Googlebot renders JavaScript** — documented by Google (second-wave, queued rendering), so a well-built CSR app can still be indexed and rank. That part is `established`; treat CSR-only as a risk to *AI consumers* and to crawl efficiency, not as an automatic Google failure.
+- **"Most AI crawlers do not execute JavaScript" is `directional`, not documented.** Vendors publish user-agent tokens, not rendering capabilities. Word it as "we could not confirm that these crawlers execute JS, and their published behaviour suggests they do not" — never as a vendor statement.
+- Don't claim "SSR ranks higher than CSR" as a ranking factor. What is real is content **availability** to non-JS consumers and faster first paint, not a rendering-mode boost. Keep CSR where the page is interactive by nature and the primary content is still server-delivered.
+- A render delta measured without a real headless browser is not a measurement — if the renderer tier was unavailable, say `needs_api` rather than inferring the delta from framework markers alone.

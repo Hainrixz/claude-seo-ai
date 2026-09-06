@@ -1,0 +1,10 @@
+Fixture Shop without a title marker
+
+> A summary is present but the H1 is missing, so the file does not follow llmstxt.org.
+
+## Docs
+
+- Product catalogue: https://fixture.example/catalog
+- [Shipping policy](/shipping): delivery times per region
+
+## Empty section

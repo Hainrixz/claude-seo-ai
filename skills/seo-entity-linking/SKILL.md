@@ -29,12 +29,15 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - When the live lookup tier is unavailable, status is `needs_api`, never a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples:
-- `M6.organization.missing_sameas` — `Organization` has no `sameAs[]` (status `fail`, severity 4, `fixable: proposed`, axis `ai`, confidence `directional`).
-- `M6.person.no_wikidata_link` — author `Person` lacks a Wikidata/LinkedIn identity link (status `warn`, severity 2, `fixable: proposed`, axis `ai`, confidence `directional`).
-- `M6.page.no_primary_entity` — no single defined primary entity (`@id`/`mainEntity`) on the page (status `warn`, severity 4, `fixable: advisory`, axis `ai`, confidence `directional`).
+Emit findings per `schema/finding.schema.json`; axis `ai`; confidence `directional` throughout — none of these is documented by a vendor. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`).
+- `M6.organization.missing_sameas` — `Organization` with no `sameAs[]` (`fail`, severity **3**, `fixable: proposed`).
+- `M6.page.no_primary_entity` — no single defined primary entity (`@id` / `mainEntity`) on the page (`warn`, severity **3**, `fixable: advisory`).
+- `M6.entity.thin_density` — no resolvable entity reference anywhere in the markup on a page that names real organizations, people, or products (`warn`, severity **3**, `fixable: advisory`).
+- `M6.person.no_wikidata_link` — an author `Person` with no Wikidata/LinkedIn identity link (`warn`, severity 2, `fixable: proposed`).
+- `M6.sameas.unresolvable` — a declared `sameAs` URL that 404s or points at a different entity (`fail`, severity 3, `fixable: proposed`).
 Each finding: `evidence.observed` quotes the page (the entity block or its absence); `verification.reproduce` is a runnable assertion/lookup; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
-- A `sameAs` link does **not** force entry into the Knowledge Graph and produces no guaranteed ranking lift — it is a disambiguation signal, so impact is `directional`/`ai`, not `established`.
-- Never fabricate, guess, or "best-effort" an identity URL to inflate entity density — a wrong `sameAs` actively misleads engines. Confirmed-only, or leave it as a TODO.
+- A `sameAs` link does **not** force entry into the Knowledge Graph and produces no guaranteed ranking lift — it is a disambiguation signal, so impact stays `directional`, never `established`.
+- Never fabricate, guess, or "best-effort" an identity URL to inflate entity density — a wrong `sameAs` actively misleads engines and is worse than an empty array. Confirmed-only, or leave it as a `TODO`.
+- Entity density is a proxy for "this page is about something specific and resolvable", not a metric any engine publishes; do not chase the number for its own sake.

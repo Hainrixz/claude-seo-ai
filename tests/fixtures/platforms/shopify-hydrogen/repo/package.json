@@ -1,0 +1,15 @@
+{
+  "name": "northwind-outdoors",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "shopify hydrogen dev"
+  },
+  "dependencies": {
+    "@shopify/hydrogen": "2026.1.0",
+    "@shopify/remix-oxygen": "2.0.0",
+    "@remix-run/react": "2.15.0",
+    "react": "18.3.1",
+    "react-router": "6.28.0"
+  }
+}

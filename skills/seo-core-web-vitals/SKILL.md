@@ -28,7 +28,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - When the required data tier is unavailable, status is `needs_api` — **never** a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples:
+Emit findings per `schema/finding.schema.json`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Field CWV never reaches 5: it is a tie-breaker, not an eligibility gate. Examples:
 - `M15.lcp.exceeds_p75` — field LCP > 2.5 s at p75 (status `fail`, severity 4, `fixable: advisory`, axis `search`, confidence `established`). `evidence.observed` quotes the measured p75 value and the LCP element; `verification.reproduce` runs the psi-client command.
 - `M15.cls.unsized_image` — image with no `width`/`height` shifting layout (status `warn`, severity 4, `fixable: advisory`, axis `search`, confidence `directional`). `evidence.observed` quotes the `<img>` tag.
 - `M15.field.needs_api` — no PSI/CrUX key, field CWV unverifiable (status `needs_api`, severity 4, `fixable: advisory`, axis `search`, confidence `established`).

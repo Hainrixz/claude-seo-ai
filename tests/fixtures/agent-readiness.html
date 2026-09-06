@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Agent readiness fixture — product page</title>
+</head>
+<body>
+  <header>
+    <nav aria-label="Primary">
+      <a href="/">Fixture Shop</a>
+      <a href="/collections/all">All products</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Merino wool tee</h1>
+
+    <form action="/search" method="get">
+      <label for="q">Search products</label>
+      <input id="q" name="q" type="search">
+      <input type="email" name="newsletter" placeholder="Email for restock alerts">
+      <select name="size">
+        <option>Small</option>
+        <option>Medium</option>
+      </select>
+      <input type="hidden" name="collection" value="tees">
+      <div class="btn btn--primary" onclick="runSearch()">Search</div>
+    </form>
+
+    <p>A lightweight merino tee that regulates temperature in both directions, machine washable at
+       thirty degrees, and cut from a single-origin wool the mill traces back to the farm. The tee
+       ships from the warehouse the same day when the order is placed before three in the afternoon,
+       and returns are free within thirty days for any reason at all.</p>
+
+    <p>Sizing runs true to the chest measurement printed on the label. Customers between two sizes
+       usually keep the smaller one because the knit relaxes after the first wash, which the care
+       card in the box also explains in three short lines.</p>
+
+    <button type="button" data-action="add-to-cart">Add to cart</button>
+    <button type="button" class="icon-only" data-action="wishlist"><span aria-hidden="true">&#9825;</span></button>
+
+    <span role="button" tabindex="0" data-action="open-size-chart">Choose a size</span>
+    <div role="link" data-href="/pages/size-guide">Size guide</div>
+
+    <p>
+      <a href="/collections/deals"><img src="/img/deals-banner.png" alt=""></a>
+      <a href="javascript:void(0)">Filter by colour</a>
+      <a name="top">Back to top</a>
+      <a href="/pages/shipping">read more</a>
+    </p>
+
+    <img src="/img/merino-tee.jpg">
+    <img src="/img/merino-tee-detail.jpg" alt="Close-up of the merino knit">
+  </main>
+
+  <footer>
+    <iframe src="https://widgets.fixture.example/reviews" title="Customer reviews" loading="lazy"></iframe>
+    <p>Fixture Shop, a synthetic store used by the claude-seo-ai test suite.</p>
+  </footer>
+</body>
+</html>

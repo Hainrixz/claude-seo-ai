@@ -1,0 +1,3 @@
+baseURL = "https://notes.northwind.example/"
+languageCode = "en-us"
+title = "Northwind Notes"

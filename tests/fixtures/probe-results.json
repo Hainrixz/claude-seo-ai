@@ -1,0 +1,32 @@
+{
+  "host": "shop.fixture.example",
+  "engine": "WebSearch (Claude Code)",
+  "collected_at": "2026-09-01T10:00:00Z",
+  "queries": [
+    {
+      "query": "what is a merino wool tee",
+      "results": [
+        { "rank": 1, "url": "https://wool.fixture.example/guides/merino", "title": "Merino explained" },
+        { "rank": 2, "url": "https://reviews.fixture.example/merino-tees", "title": "Ten merino tees tested" },
+        { "rank": 3, "url": "https://shop.fixture.example/products/merino-tee", "title": "Merino wool tee" },
+        { "rank": 4, "url": "https://forum.fixture.example/t/merino-vs-cotton", "title": "Merino vs cotton" }
+      ]
+    },
+    {
+      "query": "best travel bag for a laptop",
+      "results": [
+        { "rank": 1, "url": "https://reviews.fixture.example/travel-bags", "title": "Best travel bags" },
+        { "rank": 2, "url": "https://bags.fixture.example/weekender", "title": "The weekender" },
+        { "rank": 3, "url": "https://forum.fixture.example/t/laptop-bags", "title": "Laptop bag thread" }
+      ]
+    },
+    {
+      "query": "how to wash merino wool",
+      "results": [
+        { "rank": 1, "url": "https://wool.fixture.example/care", "title": "Wool care" },
+        { "rank": 2, "url": "https://reviews.fixture.example/wool-care", "title": "Washing merino" },
+        { "rank": 14, "url": "https://shop.fixture.example/pages/care", "title": "Care instructions" }
+      ]
+    }
+  ]
+}

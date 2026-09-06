@@ -1,0 +1,36 @@
+{
+  "ucp": {
+    "version": "2026-02-01",
+    "supported_versions": ["2026-02-01", "2025-11-20"]
+  },
+  "services": {
+    "dev.shopify.catalog": [
+      {
+        "version": "2026-02-01",
+        "spec": "https://shop.fixture.example/specs/catalog.json",
+        "transport": "rest",
+        "endpoint": "https://shop.fixture.example/api/catalog",
+        "schema": "https://shop.fixture.example/schemas/catalog.json"
+      }
+    ],
+    "com.fixture.support": [
+      {
+        "version": "2026-02-01",
+        "spec": "https://shop.fixture.example/specs/support.json",
+        "transport": "mcp",
+        "endpoint": "https://shop.fixture.example/api/ucp/mcp"
+      }
+    ]
+  },
+  "capabilities": {
+    "com.fixture.checkout": [
+      {
+        "version": "2026-02-01",
+        "spec": "https://shop.fixture.example/specs/checkout.json",
+        "transport": "embedded",
+        "schema": "https://shop.fixture.example/schemas/checkout.json"
+      }
+    ]
+  },
+  "payment_handlers": ["https://pay.fixture.example/handler"]
+}

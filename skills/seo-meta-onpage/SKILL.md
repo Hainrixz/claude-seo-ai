@@ -1,6 +1,6 @@
 ---
 name: seo-meta-onpage
-description: Audit and generate the document head — title (50-60 chars), meta description (150-160 chars), viewport, charset, <html lang>, and robots-meta sanity — flagging missing/duplicate/over-long values and producing length-bounded, keyword-aware replacements. Module M7. Feeds the Search SEO score.
+description: Audit and generate the document head — title and meta description length against the shared bands (title pass 30-60 chars, recommended 50-60; description pass 70-160, recommended 150-160), viewport, charset, <html lang>, and robots-meta sanity — flagging missing/duplicate/out-of-band values and producing length-bounded, keyword-aware replacements. Module M7. Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
 
@@ -13,8 +13,8 @@ Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
-1. **Title** — exactly one `<title>`; length 50-60 chars (warn outside the band, **fail** if missing or empty, **fail** if duplicated site-wide across distinct URLs). Not all caps; not pure keyword list.
-2. **Meta description** — present, 150-160 chars (warn outside, not fail — Google may rewrite it); not duplicated site-wide; describes the page, not boilerplate.
+1. **Title** — exactly one `<title>`. Length is judged against the **shared bands** in `scripts/lib/bands.mjs` (the single source; `parse-html.mjs`, the on-page checks and this skill all read it): **pass 30-60 characters**, **recommended 50-60**. Inside 50-60 the verdict is `recommended`; inside 30-60 but outside that, `pass`; below 30 `short`, above 60 `long` — both are `warn`, never `fail`. **Fail** only when the title is missing or empty, or duplicated site-wide across distinct URLs. Not all caps; not a pure keyword list.
+2. **Meta description** — present, judged against the same shared bands: **pass 70-160 characters**, **recommended 150-160**. Outside the pass band is `warn`, never `fail` — Google rewrites descriptions freely. Not duplicated site-wide; describes this page, not boilerplate.
 3. **Viewport** — `<meta name="viewport" content="width=device-width, initial-scale=1">` present (fail if missing — mobile rendering/indexing depends on it).
 4. **Charset** — `<meta charset="utf-8">` present and in the first 1024 bytes of `<head>`.
 5. **Language** — `<html lang="…">` present and a valid BCP-47 tag.
@@ -31,13 +31,14 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - Duplicate-title/description checks need the full crawl set; when only a single page is available the cross-URL assertion is reported `needs_api`, **never** a false `pass`.
 
 ## Findings
-Findings conform to `schema/finding.schema.json`. Examples:
+Findings conform to `schema/finding.schema.json`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Head hygiene never reaches 5. Examples:
 - `M7.title.missing` — no `<title>` (fail, severity 3, `fixable: proposed`, axis `search`, confidence `established`).
-- `M7.title.length_out_of_band` — title 78 chars, truncates in SERP (warn, severity 3, `fixable: proposed`, axis `search`, confidence `directional`).
+- `M7.title.length_out_of_band` — title 78 chars, outside the 30-60 pass band and likely truncated in the SERP (warn, severity 3, `fixable: proposed`, axis `search`, confidence `directional`). Quote the length and the band that produced the verdict.
+- `M7.description.length_out_of_band` — description outside the 70-160 pass band (warn, severity 2, `fixable: proposed`, axis `search`, confidence `directional`).
 - `M7.viewport.missing` — no responsive viewport (fail, severity 3, `fixable: auto`, axis `search`, confidence `established`).
 Each finding: `evidence.observed` quotes the head verbatim (e.g. the exact title string + its length); `verification.reproduce` is the runnable `parse-html.mjs` command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
 - The "meta keywords" tag is dead — Google ignores it; do not add or recommend it.
-- Title/description length bands are SERP-display heuristics (pixel-width truncation), not ranking factors — over-band values are `warn`, not `fail`, and impact is `directional` at most.
+- Title/description length bands are SERP-display heuristics (Google truncates on pixel width, not characters), not ranking factors — out-of-band values are `warn`, never `fail`, and impact is `directional` at most. The **pass** band is deliberately wider than the **recommended** band so a 35-character title is not reported as a defect; both bands come from `scripts/lib/bands.mjs` so the script, the report, and this skill can never disagree.
 - Google frequently **rewrites** the displayed title/description from on-page content; a perfect tag is not guaranteed to appear, so never promise a SERP snippet as a ranking gain.

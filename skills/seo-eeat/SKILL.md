@@ -28,12 +28,14 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - When confirming an identity link or a live About/contact page requires a fetch that is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples:
-- `M16.author.missing_person_schema` — editorial page with a byline but no `Person` schema (status `fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`).
-- `M16.author.no_bio_page` — byline does not link to an author/bio page (status `warn`, severity 3, `fixable: proposed`, axis `both`, confidence `directional`).
-- `M16.org.no_contact_page` — no discoverable About/Contact or `contactPoint` (status `warn`, severity 3, `fixable: advisory`, axis `both`, confidence `directional`).
+Emit findings per `schema/finding.schema.json`; axis `both`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Examples:
+- `M16.author.missing_person_schema` — an editorial page with a byline but no `Person` schema (`fail`, severity **3**, `fixable: auto`, confidence `established` — the markup requirement is documented; the ranking effect is not, and belongs in `rationale` as `directional`).
+- `M16.author.no_bio_page` — the byline does not link to an author/bio page (`warn`, severity 3, `fixable: proposed`, confidence `directional`).
+- `M16.org.no_contact_page` — no discoverable About/Contact and no `contactPoint` (`warn`, severity 3, `fixable: advisory`, confidence `directional`).
+- `M16.transparency.no_disclosure` — affiliate, sponsored, or AI-assisted content with no visible disclosure (`warn`, severity 3, `fixable: advisory`, confidence `directional`).
 Each finding: `evidence.observed` quotes what is on the page; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
-- E-E-A-T is not a single measurable score Google exposes — it is a quality framing assessed via many signals. Adding a `Person` block or an "author bio" is not a direct ranking lever; mark such impact `directional`, never as a guaranteed gain.
-- A fabricated author, invented credentials, or fake review markup is worse than none — it is a trust risk for Search and AI. The tool only emits trust signals the user can substantiate.
+- **E-E-A-T is not a score Google exposes, and Google's own framing is "people-first content".** Its guidance asks who, how, and why: is there a real author with real experience, was the content made for readers rather than for engines. Everything this module measures is a *visible proxy* for that judgment, so every finding here is `directional` — adding a `Person` block or an author bio is not a ranking lever, and must never be presented as one.
+- Trust is the foundational element and now applies well beyond YMYL, but a page does not become trustworthy by acquiring markup. Report missing signals as "a reader (or an AI system) cannot tell who stands behind this", not as points lost.
+- A fabricated author, an invented credential, or fake review markup is worse than nothing — it is a trust risk in Search and in AI answers alike. The tool only emits trust signals the user can substantiate, and leaves a clearly-marked `TODO` where it cannot.

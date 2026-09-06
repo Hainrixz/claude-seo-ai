@@ -1,0 +1,16 @@
+# Fixture Shop
+
+> Synthetic llms.txt used by the claude-seo-ai test suite. It follows the llmstxt.org shape:
+> one H1 title, a blockquote summary, then H2 sections of markdown links.
+
+The paragraph below the summary is optional prose. It is neither a heading nor a list item, so a
+parser has to ignore it rather than treat it as a broken link line.
+
+## Docs
+
+- [Product catalogue](https://fixture.example/catalog): every product with price and availability
+- [Shipping policy](/shipping): delivery times per region
+
+## Optional
+
+- [Press kit](https://fixture.example/press): logos and brand assets

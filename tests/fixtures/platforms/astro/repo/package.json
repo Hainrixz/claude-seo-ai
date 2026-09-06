@@ -1,0 +1,8 @@
+{
+  "name": "northwind-handbook",
+  "private": true,
+  "dependencies": {
+    "astro": "5.2.5",
+    "@astrojs/sitemap": "3.2.1"
+  }
+}

@@ -31,7 +31,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - Tier 1: confirm rich-result eligibility with Google Rich Results Test / schema.org validator. When the data tier (or GBP) is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. On a non-local page these are `not_applicable` (severity 0); on local pages severity is 4, axis `both`. Examples:
+Emit findings per `schema/finding.schema.json`. On a non-local page these are `not_applicable` (severity 0); on local pages severity is 4, axis `both`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Examples:
 - `M19.localbusiness.missing` — local page with no LocalBusiness schema (status `fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`). `evidence.observed` quotes the visible address/phone with no matching `ld+json`; `verification.reproduce` runs the validator above.
 - `M19.nap.inconsistent` — footer phone differs from schema `telephone` (status `warn`, severity 4, `fixable: proposed`, axis `both`, confidence `directional`). `evidence.observed` quotes both strings; verified by `dom_assert`.
 - `M19.hours.missing` — no `openingHoursSpecification` despite visible hours (status `warn`, severity 4, `fixable: auto`, axis `both`, confidence `established`).

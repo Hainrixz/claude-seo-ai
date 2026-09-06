@@ -1,0 +1,5 @@
+item_id,title,description,url,brand,seller_name,image_url,availability,price,sale_price,gtin,is_eligible_search,is_eligible_checkout
+SKU-1001,Merino wool tee,"A lightweight merino tee, machine washable, in three colours.",https://shop.fixture.example/products/merino-tee,Fixture Wool,Fixture Shop,https://cdn.fixture.example/merino-tee.jpg,in_stock,79.99 USD,59.99 USD,4006381333931,true,true
+SKU-1002,Canvas weekender bag,"Waxed canvas, leather handles, fits a laptop, cabin sized.",https://shop.fixture.example/products/weekender,Fixture Canvas,Fixture Shop,https://cdn.fixture.example/weekender.jpg,in_stock,"79,99 EUR",,9780306406157,true,false
+SKU-1003,Recycled rain shell,"Fully taped seams, recycled face fabric, packs into its own pocket.",https://shop.fixture.example/products/rain-shell,,Fixture Shop,https://cdn.fixture.example/rain-shell.jpg,pre_order,129.00 USD,,012345678905,true,true
+SKU-1001,Merino wool tee (repeat row),"The same item id as the first row, which an agent cannot resolve.",https://shop.fixture.example/products/merino-tee-2,Fixture Wool,Fixture Shop,https://cdn.fixture.example/merino-tee-2.jpg,out_of_stock,24.50 USD,,12345670,false,false

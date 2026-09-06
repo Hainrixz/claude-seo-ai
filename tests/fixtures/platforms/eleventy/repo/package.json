@@ -1,0 +1,7 @@
+{
+  "name": "northwind-guides",
+  "private": true,
+  "devDependencies": {
+    "@11ty/eleventy": "3.0.0"
+  }
+}

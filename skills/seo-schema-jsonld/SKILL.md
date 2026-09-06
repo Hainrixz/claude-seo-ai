@@ -34,12 +34,16 @@ Use a single `@graph` with stable `@id`s. Inject missing `dateModified`/`@id`. T
 - Tier 1: confirm eligibility with Google Rich Results Test / schema.org validator. When unavailable, status is `needs_api`, not `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples:
-- `M5.article.missing` — no Article schema on an editorial page (severity 4, fail, `fixable: auto`, axis `both`, confidence `established`).
-- `M5.product.missing_offer_price` — Product without `Offer.price` on a product page (status `fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`).
-- `M5.faqpage.deprecated_richresult` — FAQPage present (status `warn`, severity 1, `fixable: advisory`, axis `ai`, confidence `established`; rationale cites Google FAQ rich-result removal; **not** counted as a win).
+Emit findings per `schema/finding.schema.json`. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Examples:
+- `M5.article.missing` — no Article schema on an editorial page (`fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`).
+- `M5.product.missing_offer_price` — Product without `Offer.price` on a product page (`fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`).
+- `M5.jsonld.invalid_json` — a `ld+json` block that does not parse, so every type inside it is invisible (`fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`).
+- `M5.jsonld.contradicts_page` — marked-up values (price, rating, date, author) disagree with what the page displays (`fail`, severity 4, `fixable: proposed`, axis `both`, confidence `established`).
+- `M5.faqpage.deprecated_richresult` — FAQPage present (`warn`, severity 1, `fixable: advisory`, axis `ai`, confidence `established`; rationale cites Google's FAQ rich-result removal; **not** counted as a win).
 Each finding: `evidence.observed` quotes what's on the page; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty
-- FAQPage/HowTo: parseable by AI, **no Google rich results** — keep if present, don't add expecting SERP features.
-- Don't mark up content not visible on the page; keep schema consistent with any product feed.
+- **Google documents no special schema.org type, property, or "AI schema" for its AI features.** Eligibility for AI Overviews / AI Mode comes from being indexed and snippet-eligible (M14), not from markup. What *is* documented, and therefore `established`, is that structured data must be **valid** and **consistent with the visible page** to be used at all — for rich results and for the merchant/business data Google ingests. Frame schema work as "make the page machine-readable and honest", not "unlock AI citations".
+- FAQPage/HowTo: still parseable, **no Google rich results** — keep them if present, do not add them expecting SERP features.
+- Don't mark up content that is not visible on the page, and keep schema consistent with any product feed; invented or mismatched values invite manual actions and disapprovals, not wins.
+- A valid block is a floor, not a ranking lever: report the presence of correct schema as eligibility, never as a predicted position change.

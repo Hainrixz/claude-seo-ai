@@ -31,11 +31,13 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - When the live tier (header fetch / validator) is unavailable, status is `needs_api`, never a false `pass`.
 
 ## Findings
-Findings conform to `schema/finding.schema.json`. Examples:
-- `M13.datemodified.missing` — Article schema with `datePublished` but no `dateModified` (status `fail`, severity 3, `fixable: auto`, axis `both`, confidence `directional`).
-- `M13.dates.visible_schema_mismatch` — visible "Updated May 2025" vs schema `dateModified: 2023-01-10` (status `warn`, severity 3, `fixable: proposed`, axis `both`, confidence `directional`).
-- `M13.content.stale_volatile` — "best X 2024" page unchanged for 2 years on a fast-moving topic (status `warn`, severity 2, `fixable: advisory`, axis `both`, confidence `directional`).
-Each finding: `evidence.observed` quotes the page (date string + selector); `verification.reproduce` is a runnable assertion (e.g. `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-freshness.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`)); `expected_impact` is banded + confidence-tagged, with any published number confined to `rationale` with a citation. <!-- reconcile-flags-v0.2 -->
+Findings conform to `schema/finding.schema.json`; axis `both`; confidence `directional` throughout. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Freshness never caps.
+- `M13.datemodified.missing` — Article schema with `datePublished` but no `dateModified` (`fail`, severity 3, `fixable: auto`).
+- `M13.dates.visible_schema_mismatch` — visible "Updated May 2025" against schema `dateModified: 2023-01-10` (`warn`, severity 3, `fixable: proposed`).
+- `M13.content.stale_volatile` — a "best X 2024" page unchanged for two years on a fast-moving topic (`warn`, severity 2, `fixable: advisory`).
+- `M13.schema.date_unparseable` — a date field that exists but does not parse as ISO 8601, or a page with several `dateModified` values (the latest wins, and the conflict is reported) (`warn`, severity 2, `fixable: proposed`). Emit this instead of a mismatch: an unreadable date is a parsing gap, not proof the dates disagree.
+Each finding: `evidence.observed` quotes the page (date string + selector); `verification.reproduce` is a runnable assertion (e.g. `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-freshness.mjs" --snapshot <pages/<slug>.json> [--lang en|es|auto]` (or `--url <u>`)); `expected_impact` is banded + confidence-tagged, with any published number confined to `rationale` with a citation. <!-- reconcile-flags-v0.2 -->
 
 ## Honesty
 - Freshness is a contextual signal, not a universal ranking boost — refreshing evergreen content rarely moves rankings, and a `dateModified` bump without a real content change is detectable and adds no durable value. Confidence here is **directional**, never `established`; never present a date edit as a guaranteed ranking gain or backdate to fake recency.
+- Date parsing is language-bound: Spanish month names and `article:published_time`/`article:modified_time` are read, but an unrecognized format produces `M13.schema.date_unparseable`, never a fabricated mismatch.

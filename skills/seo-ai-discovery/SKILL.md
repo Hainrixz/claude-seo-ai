@@ -14,7 +14,7 @@ Work from the PageSnapshot named in your dispatch envelope: `<run_dir>/site/disc
 ## Audits
 1. **llms.txt** — present (200, text); llmstxt.org structure: one H1 title, optional summary blockquote, H2 sections of `- [title](url): note` links; linked URLs resolve (`--deep`, ≤25 checked); the file is not disallowed in robots to the AI bots that would read it. `/llms-full.txt` is reported present/absent only.
 2. **agents.md** — present/absent; note when it is a platform default (Shopify ships one) — informational.
-3. **UCP profile** (`/.well-known/ucp`) — **only when `ecommerce` is not active** (M18 owns it otherwise): public (200, no auth), JSON, `ucp.version` as `YYYY-MM-DD`, `services`/`capabilities` objects keyed by reverse-DNS names → arrays of `{version, spec, transport?, endpoint?, schema}`.
+3. **UCP profile** (`/.well-known/ucp`) — **only when `ecommerce` is not active** (M18 owns it otherwise): public (200, no auth), JSON, `ucp.version` as `YYYY-MM-DD`, `services`/`capabilities` objects keyed by reverse-DNS names → arrays of `{version, spec, transport?, endpoint?, schema}`. Note a declared `dev.shopify.catalog` entry — it says the platform exposes a catalog service, which is a platform default, not a merchant decision.
 4. **ARD catalog** (`/.well-known/ai-catalog.json`) — present and parseable JSON. Report-only: v0.9 draft (2026-05-28), near-zero adoption.
 5. **Agentic sitemap** (`/sitemap_agentic_discovery.xml`) — present, well-formed XML, sampled `<loc>` entries resolve.
 
@@ -28,7 +28,7 @@ Work from the PageSnapshot named in your dispatch envelope: `<run_dir>/site/disc
 - When the discovery probes did not run (no network, local path), status is `needs_api` — never a false `pass`.
 
 ## Findings
-Conform to `schema/finding.schema.json`; axis `ai`; severity ≤2; confidence `speculative` unless noted. `evidence.observed` quotes the file/probe line verbatim; `verification.reproduce` is the command above; `expected_impact` is banded (no naked %). Ids:
+Conform to `schema/finding.schema.json`; axis `ai`; severity ≤2; confidence `speculative` unless noted. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). M21's category weight is **0**, so nothing here can move or cap either score whatever its severity. `evidence.observed` quotes the file/probe line verbatim; `verification.reproduce` is the command above; `expected_impact` is banded (no naked %). Ids:
 - `M21.llmstxt.missing` (warn 1, `fixable: auto`) · `M21.llmstxt.malformed` (warn 1, `fixable: auto`) · `M21.llmstxt.broken_links` (warn 2, `fixable: proposed`, `directional`) · `M21.llmstxt.blocked_for_ai_bots` (warn 2, `fixable: advisory`, `directional` — file exists but robots disallows it to the bots meant to read it).
 - `M21.agents_md.present` (pass 1) · `M21.agents_md.missing` (warn 1, `fixable: advisory`).
 - `M21.ucp.present_valid` (pass 2) · `M21.ucp.invalid` (warn 2, `fixable: advisory`) · `M21.ucp.not_public` (warn 2, `fixable: advisory`) — only when ecommerce is inactive; otherwise `not_applicable` naming M18 as owner.

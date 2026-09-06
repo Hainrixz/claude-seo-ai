@@ -507,7 +507,7 @@ export function parseDocument(html, baseUrl = null, opts = {}) {
         let inputs = 0, labeled = 0;
         for (let j = i + 1; j < t.end_idx; j++) {
           const c = tokens[j];
-          if (!c.name) continue;
+          if (!c.name || !c.attrs) continue; // close tokens carry a name but no attrs
           const isInput = (c.name === 'input' && !/^(hidden|submit|button|reset|image)$/i.test(c.attrs.type || 'text')) || c.name === 'select' || c.name === 'textarea';
           if (!isInput) continue;
           inputs++;

@@ -29,7 +29,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - When dimension checks need the intrinsic size of a remote asset and no fetch tier is available, status is `needs_api`, never a false `pass`.
 
 ## Findings
-Emit findings per `schema/finding.schema.json`. Examples (all severity 3, axis `both`):
+Emit findings per `schema/finding.schema.json`; axis `both`; severity 3 across the module. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Nothing in M9 reaches 4.
 - `M9.alt.missing` — content `<img>` with no `alt` attribute. status `fail`, `fixable: proposed`, confidence `established`. `evidence.observed` quotes the offending `<img>` tag.
 - `M9.img.no_dimensions` — `<img>` lacking `width`/`height`. status `warn`, `fixable: auto`, confidence `directional` (CLS link). 
 - `M9.video.missing_videoobject` — embedded video without VideoObject schema. status `warn`, `fixable: proposed`, confidence `established`.

@@ -32,7 +32,7 @@ Work from the PageSnapshot named in your dispatch envelope: read `parsed` (`anch
 - When the page is client-rendered and not rendered (`render.needed && render.used === "none"`), control checks run on the shell only: state that limit and keep `needs_api` where the shell is empty.
 
 ## Findings
-Conform to `schema/finding.schema.json`; axis `ai`; confidence **`directional`** for every id; severity **≤3**. `evidence.observed` quotes the element(s) verbatim (selector + outer tag), `verification.reproduce` is the command above, `expected_impact` is banded (no naked %).
+Conform to `schema/finding.schema.json`; axis `ai`; confidence **`directional`** for every id; severity **≤3**. **Severity policy**: 5 is reserved for catastrophic, eligibility-killing facts at site/template scope; 4 major · 3 moderate · 2 minor · 1 cosmetic · 0 informational — and only an `established` severity-5 `fail` in an active category can cap a score (`references/scoring-model.md`). Nothing in M22 is `established`, so nothing here ever caps. `evidence.observed` quotes the element(s) verbatim (selector + outer tag), `verification.reproduce` is the command above, `expected_impact` is banded (no naked %).
 - `M22.controls.non_semantic_interactive` — div/span click handlers act as controls (warn 3; fail 3 when they are the majority of controls or gate the primary action; `fixable: proposed`).
 - `M22.controls.button_without_name` (warn 2, `fixable: proposed`) · `M22.links.empty_name` (warn 2, `fixable: proposed`) · `M22.links.href_javascript` (warn 2, `fixable: proposed`).
 - `M22.forms.unlabeled_controls` (warn 3, `fixable: proposed`) · `M22.content.iframe_primary` (warn 2, `fixable: advisory`).

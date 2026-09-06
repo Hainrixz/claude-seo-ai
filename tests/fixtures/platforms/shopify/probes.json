@@ -1,0 +1,17 @@
+{
+  "/products.json": {
+    "status": 200,
+    "json": {
+      "products": [
+        {
+          "id": 1,
+          "handle": "merino-crew-tee"
+        }
+      ]
+    }
+  },
+  "/.well-known/ucp": {
+    "status": 404,
+    "text": ""
+  }
+}
