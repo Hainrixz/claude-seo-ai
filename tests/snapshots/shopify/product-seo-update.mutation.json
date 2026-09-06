@@ -1,0 +1,13 @@
+{
+  "operation": "productUpdate",
+  "query": "mutation claudeSeoAiProductUpdate($input: ProductInput!) {\n  productUpdate(input: $input) {\n    product { id handle seo { title description } }\n    userErrors { field message }\n  }\n}",
+  "variables": {
+    "input": {
+      "id": "gid://shopify/Product/1234567890",
+      "seo": {
+        "title": "Wool Runner — breathable everyday shoe | Ridgeline",
+        "description": "A merino upper, a machine-washable build and free returns for 30 days."
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "field": "description",
+    "plugin": "yoast",
+    "meta_key": "_yoast_wpseo_metadesc",
+    "status": "skipped_unready",
+    "strategy": "meta-shim-required",
+    "live_impact": "none",
+    "verify_method": "manual_review"
+  },
+  {
+    "field": "title",
+    "plugin": "yoast",
+    "meta_key": "_yoast_wpseo_title",
+    "status": "skipped_unready",
+    "strategy": "meta-shim-required",
+    "live_impact": "none",
+    "verify_method": "manual_review"
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "method": "PATCH",
+  "url": "https://api.hubapi.com/cms/v3/pages/site-pages/55/draft",
+  "body": {
+    "metaDescription": "Why the east side of the range stays dry."
+  },
+  "live_impact": "staged"
+}

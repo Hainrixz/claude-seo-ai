@@ -1,0 +1,24 @@
+{
+  "idempotency": {
+    "operation": "urlRedirects",
+    "query": "query claudeSeoAiUrlRedirects($query: String!) {\n  urlRedirects(first: 1, query: $query) {\n    edges { node { id path target } }\n  }\n}",
+    "variables": {
+      "query": "path:/products/old-handle"
+    }
+  },
+  "operation": "urlRedirectCreate",
+  "query": "mutation claudeSeoAiUrlRedirectCreate($urlRedirect: UrlRedirectInput!) {\n  urlRedirectCreate(urlRedirect: $urlRedirect) {\n    urlRedirect { id path target }\n    userErrors { field message }\n  }\n}",
+  "variables": {
+    "urlRedirect": {
+      "path": "/products/old-handle",
+      "target": "/products/wool-runner"
+    }
+  },
+  "rollback": {
+    "operation": "urlRedirectDelete",
+    "query": "mutation claudeSeoAiUrlRedirectDelete($id: ID!) {\n  urlRedirectDelete(id: $id) {\n    deletedUrlRedirectId\n    userErrors { field message }\n  }\n}",
+    "variables": {
+      "id": "gid://shopify/UrlRedirect/55"
+    }
+  }
+}

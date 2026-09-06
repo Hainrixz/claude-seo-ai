@@ -2,11 +2,22 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-write.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-write.mjs\" --data \"${CLAUDE_PLUGIN_DATA}\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-bash.mjs\" --data \"${CLAUDE_PLUGIN_DATA}\"",
+            "timeout": 10
           }
         ]
       }

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "theme_info",
+    "theme_name": "Ridgeline Test Theme",
+    "theme_version": "1.0.0",
+    "theme_author": "claude-seo-ai fixtures",
+    "theme_documentation_url": "https://example.invalid/docs",
+    "theme_support_url": "https://example.invalid/support"
+  },
+  {
+    "name": "Colors",
+    "settings": [
+      { "type": "color", "id": "color_text", "label": "Text", "default": "#111111" }
+    ]
+  }
+]

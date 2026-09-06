@@ -1,0 +1,16 @@
+{
+  "operation": "productByIdentifier",
+  "query": "query claudeSeoAiProductByIdentifier($identifier: ProductIdentifierInput!) {\n  productByIdentifier(identifier: $identifier) {\n    id\n    handle\n    title\n    onlineStoreUrl\n    seo { title description }\n    metafield(namespace: \"seo\", key: \"hidden\") { id value type }\n  }\n}",
+  "variables": {
+    "identifier": {
+      "handle": "wool-runner"
+    }
+  },
+  "fallback": {
+    "operation": "productByHandle",
+    "query": "query claudeSeoAiProductByHandle($handle: String!) {\n  productByHandle(handle: $handle) {\n    id\n    handle\n    title\n    onlineStoreUrl\n    seo { title description }\n    metafield(namespace: \"seo\", key: \"hidden\") { id value type }\n  }\n}",
+    "variables": {
+      "handle": "wool-runner"
+    }
+  }
+}

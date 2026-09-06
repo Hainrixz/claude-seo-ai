@@ -1,0 +1,13 @@
+{
+  "body": {
+    "meta_description": "The east side of the range stays dry because the air has already dropped its water on the way up, and what comes down the far slope is warm, thirsty and"
+  },
+  "truncated": [
+    {
+      "field": "meta_description",
+      "limit": 160,
+      "from": 212,
+      "to": 152
+    }
+  ]
+}

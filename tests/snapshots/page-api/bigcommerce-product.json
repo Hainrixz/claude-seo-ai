@@ -1,0 +1,8 @@
+{
+  "method": "PUT",
+  "url": "https://api.bigcommerce.com/stores/abc123/v3/catalog/products/12",
+  "body": {
+    "meta_description": "Why the east side of the range stays dry."
+  },
+  "live_impact": "live"
+}

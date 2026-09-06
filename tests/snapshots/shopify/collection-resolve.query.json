@@ -1,0 +1,7 @@
+{
+  "operation": "collectionByHandle",
+  "query": "query claudeSeoAiCollectionByHandle($handle: String!) {\n  collectionByHandle(handle: $handle) {\n    id\n    handle\n    title\n    onlineStoreUrl\n    seo { title description }\n    metafield(namespace: \"seo\", key: \"hidden\") { id value type }\n  }\n}",
+  "variables": {
+    "handle": "trail-shoes"
+  }
+}

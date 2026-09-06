@@ -1,0 +1,21 @@
+{
+  "strategy": "seopress",
+  "method": "PUT",
+  "path": "seopress/v1/posts/42/title-description-metas",
+  "body": {
+    "title": "Old SEOPress title",
+    "description": "Why the east side of the range stays dry."
+  },
+  "rollback": {
+    "kind": "restore-fields",
+    "data": {
+      "method": "PUT",
+      "path": "seopress/v1/posts/42/title-description-metas",
+      "url": "https://blog.example.test/wp-json/seopress/v1/posts/42/title-description-metas",
+      "body": {
+        "title": "Old SEOPress title",
+        "description": "Old SEOPress description"
+      }
+    }
+  }
+}

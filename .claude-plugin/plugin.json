@@ -29,5 +29,101 @@
     "nextjs",
     "geo-ai",
     "agentic-commerce"
-  ]
+  ],
+  "userConfig": {
+    "SHOPIFY_STORE": {
+      "type": "string",
+      "title": "Shopify store domain",
+      "description": "my-store.myshopify.com. Needed by the Shopify theme and Admin adapters; also exported to the CLI as SHOPIFY_FLAG_STORE."
+    },
+    "SHOPIFY_THEME_TOKEN": {
+      "type": "string",
+      "title": "Shopify Theme Access token",
+      "description": "Theme Access app token for the Shopify CLI. Passed to the child process env as SHOPIFY_CLI_THEME_TOKEN, never on a command line. Pushes go to an unpublished theme; publishing is a separate confirmed step.",
+      "sensitive": true
+    },
+    "SHOPIFY_ADMIN_TOKEN": {
+      "type": "string",
+      "title": "Shopify Admin API token",
+      "description": "Admin API access token, sent as the X-Shopify-Access-Token header for per-resource SEO fields (product/collection/page seo, redirects).",
+      "sensitive": true
+    },
+    "WP_URL": {
+      "type": "string",
+      "title": "WordPress site URL",
+      "description": "https:// only — Basic auth over http would put the application password on the wire in clear."
+    },
+    "WP_USER": {
+      "type": "string",
+      "title": "WordPress user name",
+      "description": "The user the application password belongs to."
+    },
+    "WP_APP_PASSWORD": {
+      "type": "string",
+      "title": "WordPress application password",
+      "description": "Users -> Profile -> Application Passwords. Spaces are preserved. Never a real account password.",
+      "sensitive": true
+    },
+    "WP_SSH": {
+      "type": "string",
+      "title": "WP-CLI SSH target",
+      "description": "user@host:/path/to/wordpress for the WP-CLI adapter. Used only when the REST path is unavailable."
+    },
+    "WEBFLOW_TOKEN": {
+      "type": "string",
+      "title": "Webflow API token",
+      "description": "Site API token (Bearer) for page SEO and Open Graph fields. Page writes are staged; publishing is a separate confirmed step.",
+      "sensitive": true
+    },
+    "WEBFLOW_SITE_ID": {
+      "type": "string",
+      "title": "Webflow site id",
+      "description": "Also readable from the page markup as data-wf-site."
+    },
+    "WIX_API_KEY": {
+      "type": "string",
+      "title": "Wix API key",
+      "description": "Sent as the Authorization header. Wix static-page SEO writes can publish immediately, so they are flagged as live impact.",
+      "sensitive": true
+    },
+    "WIX_SITE_ID": {
+      "type": "string",
+      "title": "Wix site id",
+      "description": "Sent as the wix-site-id header."
+    },
+    "GHOST_URL": {
+      "type": "string",
+      "title": "Ghost site URL",
+      "description": "https://blog.example.com — the Admin API lives under /ghost/api/admin/."
+    },
+    "GHOST_ADMIN_KEY": {
+      "type": "string",
+      "title": "Ghost Admin API key",
+      "description": "<id>:<secret> form; the secret signs a short-lived JWT locally. Never leaves the machine.",
+      "sensitive": true
+    },
+    "HUBSPOT_TOKEN": {
+      "type": "string",
+      "title": "HubSpot private app token",
+      "description": "Bearer token for CMS page SEO fields. Drafts are pushed live only on a second confirmation.",
+      "sensitive": true
+    },
+    "BIGCOMMERCE_STORE_HASH": {
+      "type": "string",
+      "title": "BigCommerce store hash",
+      "description": "The store hash in the API base path."
+    },
+    "BIGCOMMERCE_TOKEN": {
+      "type": "string",
+      "title": "BigCommerce API token",
+      "description": "Sent as X-Auth-Token for product and page meta fields.",
+      "sensitive": true
+    },
+    "PSI_API_KEY": {
+      "type": "string",
+      "title": "PageSpeed Insights API key",
+      "description": "Optional. Raises the PSI quota for Core Web Vitals; the audit runs without it at a lower rate limit.",
+      "sensitive": true
+    }
+  }
 }

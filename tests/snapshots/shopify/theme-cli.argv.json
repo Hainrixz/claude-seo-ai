@@ -1,0 +1,76 @@
+{
+  "note": "credentials never appear here: the store and the Theme Access token go in the child environment",
+  "env_var_names": [
+    "SHOPIFY_FLAG_STORE",
+    "SHOPIFY_CLI_THEME_TOKEN"
+  ],
+  "version": [
+    "shopify",
+    "version"
+  ],
+  "list": [
+    "shopify",
+    "theme",
+    "list",
+    "--json"
+  ],
+  "pull": [
+    "shopify",
+    "theme",
+    "pull",
+    "--live",
+    "--path",
+    "/work/shopify/ridgeline-demo.myshopify.com/101"
+  ],
+  "check": [
+    "shopify",
+    "theme",
+    "check",
+    "-o",
+    "json",
+    "--fail-level",
+    "error",
+    "--path",
+    "/work/shopify/ridgeline-demo.myshopify.com/101"
+  ],
+  "push_first": [
+    "shopify",
+    "theme",
+    "push",
+    "--unpublished",
+    "--theme",
+    "claude-seo-ai 2026-09-06",
+    "--json",
+    "--path",
+    "/work/shopify/ridgeline-demo.myshopify.com/101"
+  ],
+  "push_later": [
+    "shopify",
+    "theme",
+    "push",
+    "--theme",
+    "202",
+    "--nodelete",
+    "--json",
+    "--path",
+    "/work/shopify/ridgeline-demo.myshopify.com/101"
+  ],
+  "publish": [
+    "shopify",
+    "theme",
+    "publish",
+    "--theme",
+    "202",
+    "--force"
+  ],
+  "delete": [
+    "shopify",
+    "theme",
+    "delete",
+    "--theme",
+    "202",
+    "--force"
+  ],
+  "preview_url": "https://ridgeline-demo.myshopify.com/collections/trail/products/wool-runner?preview_theme_id=202",
+  "editor_url": "https://ridgeline-demo.myshopify.com/admin/themes/202/editor"
+}

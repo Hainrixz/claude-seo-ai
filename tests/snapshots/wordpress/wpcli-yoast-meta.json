@@ -1,0 +1,46 @@
+{
+  "strategy": "wp-post-meta",
+  "argv": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "deploy@host.example",
+    "cd /srv/www && wp post meta update 42 _yoast_wpseo_metadesc 'Why the east side of the range stays dry.'"
+  ],
+  "read_argv": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "deploy@host.example",
+    "cd /srv/www && wp post meta get 42 _yoast_wpseo_metadesc --format=json"
+  ],
+  "flush_argv": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "deploy@host.example",
+    "cd /srv/www && wp cache flush"
+  ],
+  "rollback": {
+    "kind": "restore-fields",
+    "data": {
+      "value": "Old SEO description",
+      "argv": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "deploy@host.example",
+        "cd /srv/www && wp post meta update 42 _yoast_wpseo_metadesc 'Old SEO description'"
+      ]
+    }
+  },
+  "live_impact": "live"
+}

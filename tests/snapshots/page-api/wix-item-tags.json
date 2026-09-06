@@ -1,0 +1,36 @@
+{
+  "method": "PUT",
+  "url": "https://www.wixapis.com/seo/v1/item-tags",
+  "body": {
+    "itemType": "STATIC_PAGE",
+    "itemId": "item-7",
+    "tags": [
+      {
+        "type": "title",
+        "children": "Old title"
+      },
+      {
+        "type": "meta",
+        "props": {
+          "name": "google-site-verification",
+          "content": "keep-me"
+        }
+      },
+      {
+        "type": "meta",
+        "props": {
+          "property": "og:image",
+          "content": "https://static.wixstatic.com/hero.jpg"
+        }
+      },
+      {
+        "type": "meta",
+        "props": {
+          "name": "description",
+          "content": "Why the east side of the range stays dry."
+        }
+      }
+    ],
+    "publish": true
+  }
+}

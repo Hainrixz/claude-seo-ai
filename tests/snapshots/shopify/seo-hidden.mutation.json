@@ -1,0 +1,28 @@
+{
+  "operation": "metafieldsSet",
+  "query": "mutation claudeSeoAiMetafieldsSet($metafields: [MetafieldsSetInput!]!) {\n  metafieldsSet(metafields: $metafields) {\n    metafields { id namespace key type value }\n    userErrors { field message code }\n  }\n}",
+  "variables": {
+    "metafields": [
+      {
+        "ownerId": "gid://shopify/Product/1234567890",
+        "namespace": "seo",
+        "key": "hidden",
+        "type": "number_integer",
+        "value": "1"
+      }
+    ]
+  },
+  "rollback": {
+    "operation": "metafieldsDelete",
+    "query": "mutation claudeSeoAiMetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {\n  metafieldsDelete(metafields: $metafields) {\n    deletedMetafields { key namespace ownerId }\n    userErrors { field message }\n  }\n}",
+    "variables": {
+      "metafields": [
+        {
+          "ownerId": "gid://shopify/Product/1234567890",
+          "namespace": "seo",
+          "key": "hidden"
+        }
+      ]
+    }
+  }
+}

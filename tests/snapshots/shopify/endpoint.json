@@ -1,0 +1,5 @@
+{
+  "store": "ridgeline-demo.myshopify.com",
+  "api_version": "2026-07",
+  "endpoint": "https://ridgeline-demo.myshopify.com/admin/api/2026-07/graphql.json"
+}

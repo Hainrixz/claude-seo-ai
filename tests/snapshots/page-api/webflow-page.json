@@ -1,0 +1,36 @@
+{
+  "method": "PUT",
+  "url": "https://api.webflow.com/v2/pages/page-9",
+  "body": {
+    "title": "Rain shadow",
+    "slug": "rain-shadow",
+    "seo": {
+      "title": "Old SEO title",
+      "description": "Why the east side of the range stays dry."
+    },
+    "openGraph": {
+      "title": "Old OG title",
+      "titleCopied": false
+    }
+  },
+  "live_impact": "staged",
+  "rollback": {
+    "kind": "restore-fields",
+    "data": {
+      "method": "PUT",
+      "url": "https://api.webflow.com/v2/pages/page-9",
+      "body": {
+        "title": "Rain shadow",
+        "slug": "rain-shadow",
+        "seo": {
+          "title": "Old SEO title",
+          "description": "Old SEO description"
+        },
+        "openGraph": {
+          "title": "Old OG title",
+          "titleCopied": false
+        }
+      }
+    }
+  }
+}

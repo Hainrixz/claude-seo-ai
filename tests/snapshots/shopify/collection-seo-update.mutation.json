@@ -1,0 +1,12 @@
+{
+  "operation": "collectionUpdate",
+  "query": "mutation claudeSeoAiCollectionUpdate($input: CollectionInput!) {\n  collectionUpdate(input: $input) {\n    collection { id handle seo { title description } }\n    userErrors { field message }\n  }\n}",
+  "variables": {
+    "input": {
+      "id": "gid://shopify/Collection/9876543210",
+      "seo": {
+        "title": "Trail shoes built for wet granite | Ridgeline"
+      }
+    }
+  }
+}

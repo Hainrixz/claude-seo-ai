@@ -1,0 +1,19 @@
+<!doctype html>
+<html class="no-js">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ page_description | escape }}">
+    <link rel="stylesheet" href="{{ 'base.css' | asset_url }}">
+    {{ content_for_header }}
+  </head>
+  <body class="template-{{ template.name }}">
+    <a class="skip" href="#main">Skip to content</a>
+    <header role="banner">{% section 'header' %}</header>
+    <main id="main" role="main">
+      {{ content_for_layout }}
+    </main>
+    <footer role="contentinfo">{% section 'footer' %}</footer>
+    {{ content_for_body }}
+  </body>
+</html>

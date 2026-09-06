@@ -1,0 +1,62 @@
+[
+  {
+    "option": "blog_public",
+    "argv": [
+      "ssh",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=10",
+      "deploy@host.example",
+      "cd /srv/www && wp option update blog_public 1"
+    ],
+    "before": "0",
+    "rollback": {
+      "kind": "restore-fields",
+      "data": {
+        "argv": [
+          "ssh",
+          "-o",
+          "BatchMode=yes",
+          "-o",
+          "ConnectTimeout=10",
+          "deploy@host.example",
+          "cd /srv/www && wp option update blog_public 0"
+        ],
+        "value": "0"
+      }
+    },
+    "unverified": []
+  },
+  {
+    "option": "wp_attachment_pages_enabled",
+    "argv": [
+      "ssh",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=10",
+      "deploy@host.example",
+      "cd /srv/www && wp option update wp_attachment_pages_enabled 0"
+    ],
+    "before": "1",
+    "rollback": {
+      "kind": "restore-fields",
+      "data": {
+        "argv": [
+          "ssh",
+          "-o",
+          "BatchMode=yes",
+          "-o",
+          "ConnectTimeout=10",
+          "deploy@host.example",
+          "cd /srv/www && wp option update wp_attachment_pages_enabled 1"
+        ],
+        "value": "1"
+      }
+    },
+    "unverified": [
+      "option name wp_attachment_pages_enabled"
+    ]
+  }
+]

@@ -1,0 +1,52 @@
+[
+  {
+    "strategy": "aioseo",
+    "method": "POST",
+    "path": "wp/v2/posts/42",
+    "body": {
+      "aioseo_meta_data": {
+        "description": "Why the east side of the range stays dry."
+      }
+    },
+    "before": "Old SEO description",
+    "live_impact": "live",
+    "rollback": {
+      "kind": "restore-fields",
+      "data": {
+        "method": "POST",
+        "path": "wp/v2/posts/42",
+        "url": "https://blog.example.test/wp-json/wp/v2/posts/42",
+        "body": {
+          "aioseo_meta_data": {
+            "description": "Old SEO description"
+          }
+        }
+      }
+    }
+  },
+  {
+    "strategy": "aioseo",
+    "method": "POST",
+    "path": "wp/v2/posts/42",
+    "body": {
+      "aioseo_meta_data": {
+        "title": "Rain shadow, explained"
+      }
+    },
+    "before": "Old SEO title",
+    "live_impact": "live",
+    "rollback": {
+      "kind": "restore-fields",
+      "data": {
+        "method": "POST",
+        "path": "wp/v2/posts/42",
+        "url": "https://blog.example.test/wp-json/wp/v2/posts/42",
+        "body": {
+          "aioseo_meta_data": {
+            "title": "Old SEO title"
+          }
+        }
+      }
+    }
+  }
+]

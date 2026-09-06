@@ -10,8 +10,10 @@ import { dirname, join, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPTS = join(ROOT, 'scripts');
-// guard-write.mjs is a PreToolUse hook: it reads stdin and calls process.exit by design.
-const EXCLUDE = new Set(['guard-write.mjs']);
+// The two PreToolUse hooks read stdin and call process.exit by design — the exit code IS their
+// contract with the hook runner, so they export pure helpers instead of main()/runCli().
+// tests/unit/guards.test.mjs covers them, including that importing one has no side effects.
+const EXCLUDE = new Set(['guard-write.mjs', 'guard-bash.mjs']);
 const scripts = readdirSync(SCRIPTS).filter((f) => f.endsWith('.mjs') && !EXCLUDE.has(f)).sort();
 
 test('discovers the CLI scripts', () => {

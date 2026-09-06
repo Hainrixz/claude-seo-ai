@@ -1,0 +1,31 @@
+{%- liquid
+  assign current_variant = product.selected_or_first_available_variant
+-%}
+<section class="product" id="shopify-section-{{ section.id }}">
+  <h1 class="product__title">{{ product.title }}</h1>
+  <p class="product__price">{{ current_variant.price | money }}</p>
+  <div class="product__description rte">{{ product.description }}</div>
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": {{ product.title | json }},
+      "description": {{ product.description | strip_html | truncate: 300 | json }},
+      "offers": {
+        "@type": "Offer",
+        "price": {{ current_variant.price | divided_by: 100.0 | json }},
+        "priceCurrency": {{ cart.currency.iso_code | json }}
+      }
+    }
+  </script>
+</section>
+
+{% schema %}
+{
+  "name": "Product",
+  "settings": [
+    { "type": "checkbox", "id": "show_price", "label": "Show price", "default": true }
+  ]
+}
+{% endschema %}
