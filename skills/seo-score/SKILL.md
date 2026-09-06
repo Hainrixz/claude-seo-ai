@@ -16,6 +16,7 @@ Turns findings (conforming to `schema/finding.schema.json`) into the two scores.
 4. **Score** = `Σ(category_value × weight) / Σ(active weight)` for each of Search SEO and AI Visibility.
 5. **Severity gating**: if any finding has `severity: 5` and `status: fail`, cap the affected score at 40 and set `capped: true`.
 6. Assign bands (A≥90, B≥80, C≥70, D≥60, F<60) and a one-line interpretation from the Search×AI quadrant.
+6b. **Coverage floor**: report `coverage` (the % of the axis's always-on weight that carried a scored finding). Below 50% the axis comes back `provisional: true` with `state: "partial"` — quote the band *and* the coverage figure together, never the letter on its own.
 7. M21 (AI discovery & agent endpoints — llms.txt, agents.md, UCP, agentic sitemap) weight is 0 — report it, never let it move the AI score.
 
 ## Determinism

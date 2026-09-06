@@ -2,10 +2,12 @@
 // Fetch Core Web Vitals via the Google PageSpeed Insights API. Backs M15.
 // Field (CrUX, p75) data is what Google ranks on; lab data is labeled separately.
 //
-// Usage: node psi-client.mjs --url https://example.com [--strategy mobile|desktop] [--key <PSI_API_KEY>] [--timeout 60000]
-//        (key optional but recommended; without network/key the result is status:"needs_api")
+// Usage: node psi-client.mjs --url https://example.com [--strategy mobile|desktop] [--timeout 60000]
+//        (a key is optional but recommended; without network/key the result is status:"needs_api")
 //
-// Reads PSI_API_KEY from env if --key is omitted.
+// The API key comes from the environment only — CLAUDE_PLUGIN_OPTION_PSI_API_KEY, else PSI_API_KEY.
+// There is deliberately no --key flag: a secret in argv lands in `ps`, in shell history and in any
+// command log, and this script's own output quotes the command to re-run.
 // Exit codes: 0 ok, or status "needs_api" with an `api_error` object when the API could not be
 //             used (documented: an unavailable measurement is a finding, not a crash) · 1 usage (no --url)
 // Callers MUST branch on `status`, never on the exit code alone.
@@ -14,7 +16,7 @@
 // itself has too little CrUX traffic) — `field.origin_fallback` + `field.scope` say so; a finding
 // must never present them as page-level. Absent metrics → `has_field_data: false`, never zeros.
 
-import { EXIT, isMain, runCli } from './lib/util.mjs';
+import { EXIT, isMain, runCli, credential } from './lib/util.mjs';
 import { fetchText } from './lib/fetch.mjs';
 
 export const THRESH = Object.freeze({ LCP: { good: 2500, poor: 4000 }, INP: { good: 200, poor: 500 }, CLS: { good: 0.1, poor: 0.25 } });
@@ -51,7 +53,7 @@ export async function main(args) {
     return { result: { status: 'needs_api', error: 'provide --url' }, code: EXIT.USAGE };
   }
   const strategy = args.strategy === 'desktop' ? 'desktop' : 'mobile';
-  const key = (typeof args.key === 'string' && args.key) || process.env.PSI_API_KEY || null;
+  const key = credential('PSI_API_KEY');
 
   const api = new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
   api.searchParams.set('url', args.url);
@@ -68,7 +70,7 @@ export async function main(args) {
         strategy,
         error: 'PageSpeed Insights unavailable (no network/key or quota). Field CWV cannot be measured — do not present a heuristic as a measured field value.',
         detail: r.error || ('HTTP ' + r.status),
-        hint: 'set PSI_API_KEY or pass --key; otherwise report status needs_api.',
+        hint: 'export CLAUDE_PLUGIN_OPTION_PSI_API_KEY or PSI_API_KEY; otherwise report status needs_api.',
         api_error: { kind: r.status ? 'http' : 'network', status: r.status || null, detail: r.error || ('HTTP ' + r.status) },
       },
       code: EXIT.OK,

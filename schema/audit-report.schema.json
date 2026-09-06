@@ -163,7 +163,7 @@
         "value": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
         "raw_value": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
         "band": { "$ref": "#/$defs/band" },
-        "state": { "type": "string", "enum": ["scored", "unscored", "capped"] },
+        "state": { "type": "string", "enum": ["scored", "unscored", "capped", "partial"] },
         "capped": { "type": "boolean" }
       }
     },
@@ -185,7 +185,11 @@
         "value": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Final score after gating. null when the axis is unscored (no active category with weight > 0)." },
         "raw_value": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Weighted value before the severity cap (equals value unless capped)." },
         "band": { "$ref": "#/$defs/band" },
-        "state": { "type": "string", "enum": ["scored", "unscored", "capped"] },
+        "state": { "type": "string", "enum": ["scored", "unscored", "capped", "partial"], "description": "partial = scored, but less than COVERAGE_FLOOR% of the axis's always-on weight carried a scored finding (see coverage); the value and band stay exactly as computed." },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 100, "description": "Share (%) of the axis's always-on weight that carried a scored finding — how much of the axis was actually measured." },
+        "coverage_weight": { "type": "number", "minimum": 0, "maximum": 100, "description": "Always-on weight that carried a scored finding, out of coverage_total." },
+        "coverage_total": { "type": "number", "minimum": 0, "maximum": 100, "description": "Sum of the axis's always-on category weights (100 in the shipped model)." },
+        "provisional": { "type": "boolean", "description": "true when coverage is below the documented floor: the band is reported with a caveat rather than as a confident grade." },
         "capped": { "type": "boolean", "description": "true when a severity-5 established FAIL in an active, weighted category gated the score to <= 40." },
         "cap_reasons": { "type": "array", "items": { "$ref": "#/$defs/cap_reason" } },
         "suppressed_caps": { "type": "array", "items": { "$ref": "#/$defs/cap_reason" }, "description": "Caps that would have applied but were suppressed because the environment is not production (expected noindex/robots on preview, staging, local)." },

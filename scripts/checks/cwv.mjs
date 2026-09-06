@@ -6,7 +6,8 @@
 // not this URL, and a finding must never present them as page-level.
 
 import { THRESH } from '../psi-client.mjs';
-import { mk, push, clip, listing, plural, contentPages, finalUrl, snapRepro, originOf, runState } from './_shared.mjs';
+import { credential } from '../lib/util.mjs';
+import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, snapRepro, originOf, runState } from './_shared.mjs';
 
 /** The URL PSI is asked about: the crawl target, else the homepage, else the first sampled page. */
 function subject(ctx) {
@@ -31,7 +32,10 @@ export const check = {
     if (!url) return out;
     const repro = { script: 'psi-client.mjs', args: { url } };
 
-    const key = (ctx.options && ctx.options.psi_key) || process.env.PSI_API_KEY || null;
+    // Environment only (CLAUDE_PLUGIN_OPTION_PSI_API_KEY, then PSI_API_KEY). ctx.options.psi_key is
+    // the programmatic seat for a library caller; psi-client.mjs re-reads the environment itself, so
+    // the key is a gate here and never travels through argv.
+    const key = (ctx.options && ctx.options.psi_key) || credential('PSI_API_KEY');
     const psi = (ctx.tools && ctx.tools.psi) || null;
     const state = runState(ctx);
     let field = null;
@@ -39,14 +43,14 @@ export const check = {
 
     if (key && psi) {
       let res = null;
-      try { res = await psi({ url, key, strategy: 'mobile' }); } catch (e) { res = { result: { status: 'needs_api', error: String((e && e.message) || e) } }; }
+      try { res = await psi({ url, strategy: 'mobile' }); } catch (e) { res = { result: { status: 'needs_api', error: String((e && e.message) || e) } }; }
       const r = (res && res.result) || {};
       if (r.status === 'needs_api') apiNote = clip(r.error || (r.api_error && r.api_error.detail) || 'PageSpeed Insights was unavailable', 160);
       else field = r.field || null;
       // Provenance for the report's data_sources block: the request went out, so say what came back.
       state.psi = r.status === 'needs_api' ? 'needs_api' : 'used';
     } else {
-      apiNote = key ? 'no PSI client was injected into this run' : 'no PSI/CrUX API key was supplied (--psi-key or PSI_API_KEY)';
+      apiNote = key ? 'no PSI client was injected into this run' : 'no PSI/CrUX API key was available in the environment (CLAUDE_PLUGIN_OPTION_PSI_API_KEY or PSI_API_KEY)';
       state.psi = 'needs_api';
     }
 
@@ -56,7 +60,7 @@ export const check = {
         location: { url },
         evidence: { observed: 'No field (CrUX) data for ' + url + ': ' + (apiNote || 'PageSpeed Insights returned no field metrics for this URL or its origin') + '.' },
         expected: 'p75 LCP, INP and CLS from the Chrome UX Report for this URL or its origin.',
-        recommendation: 'Set PSI_API_KEY (or pass --psi-key) and re-run. A page with too little traffic may still have no field data, in which case only lab measurements exist.',
+        recommendation: 'Export CLAUDE_PLUGIN_OPTION_PSI_API_KEY (or PSI_API_KEY) in the environment and re-run; the key is never passed on the command line. A page with too little traffic may still have no field data, in which case only lab measurements exist.',
         fixable: 'advisory',
         verification: { method: 'psi_api', assertion: 'psi-client.mjs returns status "ok" with field.has_field_data true.' },
         reproduce: repro,
@@ -90,7 +94,7 @@ export const check = {
       push(out, mk({
         id: 'M15.cls.unsized_image', title: 'Content images without width/height can shift the layout', status: 'warn', severity: 4, scope: 'site',
         location: { url: finalUrl(first.page) },
-        evidence: { observed: 'Static (lab-side) observation, not a measured CLS value: ' + plural(unsizedPages.length, 'sampled page') + ' carries content images with no numeric width/height, e.g. ' + finalUrl(first.page) + ' with ' + plural(first.unsized.length, 'image') + ' (' + listing(first.unsized.map((i) => clip(i.src || i.abs, 60)), 3) + ').' },
+        evidence: { observed: 'Static (lab-side) observation, not a measured CLS value: ' + plural(unsizedPages.length, 'sampled page') + ' ' + agree(unsizedPages.length, 'carries', 'carry') + ' content images with no numeric width/height, e.g. ' + finalUrl(first.page) + ' with ' + plural(first.unsized.length, 'image') + ' (' + listing(first.unsized.map((i) => clip(i.src || i.abs, 60)), 3) + ').' },
         expected: 'Every content image reserves its space through width/height attributes or a CSS aspect-ratio.',
         recommendation: 'Add intrinsic width and height to the images listed above, then confirm the effect with a real CLS measurement.',
         fixable: 'advisory',

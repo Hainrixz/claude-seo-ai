@@ -10,7 +10,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,6 +20,7 @@ import { parseRobots, isAllowed, aiPosture } from '../../scripts/lib/robots.mjs'
 import { pageSlug } from '../../scripts/lib/store.mjs';
 import { validateFinding } from '../../scripts/lib/validate-finding.mjs';
 import { imageSize, sniffFormat } from '../../scripts/lib/imgsize.mjs';
+import { analyzeDiscovery } from '../../scripts/ai-discovery.mjs';
 
 import { CHECKS, runChecks, loadRunContext, knownIds } from '../../scripts/checks/index.mjs';
 import { isContentPage, contentPages } from '../../scripts/checks/_shared.mjs';
@@ -568,7 +569,12 @@ test('M13 asks for dateModified and reports an unparseable date instead of a mis
     + '{"@context":"https://schema.org","@type":"Article","headline":"H","datePublished":"someday","dateModified":"whenever"}</script>',
     '<article><h1>H</h1><p>Body.</p></article>');
   const junkOut = await run(freshness, mkCtx({ pages: [mkPage(ORIGIN + '/b', junk)] }));
-  assert.match(one(junkOut, 'M13.schema.date_unparseable').evidence.observed, /does not parse/);
+  const unparseable = one(junkOut, 'M13.schema.date_unparseable').evidence.observed;
+  assert.match(unparseable, /2 schema dates do not parse/, 'the verb agrees with the count');
+  const oneBad = await run(freshness, mkCtx({ pages: [mkPage(ORIGIN + '/c', HTML('<title>Article with one unreadable date</title><script type="application/ld+json">'
+    + '{"@context":"https://schema.org","@type":"Article","headline":"H","datePublished":"2026-01-02","dateModified":"whenever"}</script>',
+    '<article><h1>H</h1><p>Body.</p></article>'))] }));
+  assert.match(one(oneBad, 'M13.schema.date_unparseable').evidence.observed, /1 schema date does not parse/);
 });
 
 /* ------------------------------------------------------------------ M4 */
@@ -950,4 +956,253 @@ test('loadRunContext reads a run directory, its site artifacts and the ua-diff s
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/* ------------------------------------------------------------------ discovery hydration */
+
+const PROBE_TEXT_HEAD = 4096;
+
+/** A site/discovery.json probe entry shaped exactly like lib/site.mjs writes one. */
+function probeEntry(path, body, { saved_as = null, json_valid = null } = {}) {
+  return {
+    url: ORIGIN + path, status: 200, ok: true, final_url: ORIGIN + path, redirected: false,
+    content_type: json_valid === null ? 'text/plain; charset=utf-8' : 'application/json',
+    bytes: Buffer.byteLength(body), truncated: false, sha256: null,
+    text_head: body.slice(0, PROBE_TEXT_HEAD), looks_like_html: false,
+    json_valid, parsed_keys: null, saved_as, error: null,
+  };
+}
+
+/** A run directory holding only crawl.json + the site/ artifacts a discovery test needs. */
+function discoveryRun(root, probes, files) {
+  const runDir = join(root, 'run');
+  mkdirSync(join(runDir, 'pages'), { recursive: true });
+  mkdirSync(join(runDir, 'site'), { recursive: true });
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(runDir, 'site', name), body);
+  writeFileSync(join(runDir, 'site', 'discovery.json'), JSON.stringify({
+    origin: ORIGIN, source: 'http', fetched_at: '2026-01-01T00:00:00.000Z', probes,
+  }));
+  writeFileSync(join(runDir, 'crawl.json'), JSON.stringify({
+    crawl_version: 1, origin: ORIGIN, target: ORIGIN + '/', pages: [],
+  }));
+  return runDir;
+}
+
+const ECOMMERCE = { primary: 'ecommerce', also: [], multilingual: false };
+
+test('a discovery body past the text_head preview is read from the saved artifact, not from the prefix', async () => {
+  // The regression this guards: site/discovery.json only stores the first 4096 chars of each probe.
+  // Validating that prefix turns a valid 5 KB UCP profile into "the store publishes no UCP profile",
+  // with the probe's own HTTP 200 sitting in the same evidence string.
+  const root = mkdtempSync(join(tmpdir(), 'cseo-discovery-'));
+  try {
+    const ucpBody = JSON.stringify({
+      ucp: { version: '2026-01-01' },
+      services: { 'dev.shopify.catalog': [{ version: '2026-01-01', spec: 'https://spec.example/catalog', transport: 'rest', endpoint: ORIGIN + '/api/catalog' }] },
+      capabilities: { 'dev.example.checkout': [{ version: '2026-01-01', spec: 'https://spec.example/checkout' }] },
+      notes: 'p'.repeat(5000),
+    });
+    assert.ok(ucpBody.length > PROBE_TEXT_HEAD, 'the fixture must exceed the preview cap to exercise the bug');
+    // The only link sits AFTER the cap, so a prefix parse reports "no_links" and a full parse does not.
+    const llmsBody = ['# Fixture store', '', '> A shop that documents itself.', '', '## Docs', '',
+      'x'.repeat(4200), '', '- [Catalogue](' + ORIGIN + '/catalog): every product', ''].join('\n');
+
+    const runDir = discoveryRun(root, {
+      '/llms.txt': probeEntry('/llms.txt', llmsBody, { saved_as: 'llms.txt' }),
+      '/.well-known/ucp': probeEntry('/.well-known/ucp', ucpBody, { saved_as: 'ucp.json', json_valid: true }),
+    }, { 'llms.txt': llmsBody, 'ucp.json': ucpBody });
+
+    const raw = JSON.parse(readFileSync(join(runDir, 'site', 'discovery.json'), 'utf8'));
+    assert.equal(analyzeDiscovery(raw).ucp.present, false, 'guard: the un-hydrated preview really is unparseable');
+    assert.equal(analyzeDiscovery(raw).llms_txt.ok, false, 'guard: the un-hydrated preview really does lose the link');
+
+    const ctx = loadRunContext(runDir, { vertical: ECOMMERCE, profile: null });
+    const hydrated = analyzeDiscovery(ctx.site.discovery);
+    assert.equal(hydrated.ucp.present, true, 'loadRunContext must hydrate the saved body');
+    assert.equal(hydrated.ucp.ok, true);
+    assert.equal(hydrated.llms_txt.ok, true, 'the link past the cap is seen');
+    assert.equal(hydrated.llms_txt.links_total, 1);
+    assert.equal(hydrated.llms_txt.truncated_source, false, 'a hydrated probe is not a truncated one');
+
+    const m18 = await run(agenticCommerce, ctx);
+    assert.ok(!m18.some((f) => f.id === 'M18.agentic.ucp_profile_missing'),
+      'a published profile must never be reported missing: ' + JSON.stringify(m18.map((f) => [f.id, f.evidence.observed])));
+    assert.equal(one(m18, 'M18.agentic.shopify_catalog_declared').status, 'pass');
+
+    const m21 = await run(aiDiscovery, ctx);
+    assert.ok(!m21.some((f) => f.id === 'M21.llmstxt.malformed'),
+      'a well-formed llms.txt must not be called malformed because of the preview cap');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('when only the head of a discovery body survives, the finding says so instead of claiming absence', async () => {
+  // No saved_as: an --artifacts-limited run, or a body past the save limit. Hydration cannot help,
+  // so the honest states are a disclosed partial parse (llms.txt) and needs_api (UCP).
+  const root = mkdtempSync(join(tmpdir(), 'cseo-discovery-truncated-'));
+  try {
+    const ucpBody = JSON.stringify({ ucp: { version: '2026-01-01' }, services: {}, notes: 'p'.repeat(5000) });
+    const llmsBody = ['# Fixture store', '', '## Docs', '', '- Product catalogue: ' + ORIGIN + '/catalog', '',
+      'x'.repeat(4200), '', '- [Catalogue](' + ORIGIN + '/catalog): every product', ''].join('\n');
+    const runDir = discoveryRun(root, {
+      '/llms.txt': probeEntry('/llms.txt', llmsBody),
+      '/.well-known/ucp': probeEntry('/.well-known/ucp', ucpBody, { json_valid: true }),
+    }, {});
+
+    const ctx = loadRunContext(runDir, { vertical: ECOMMERCE, profile: null });
+    const d = analyzeDiscovery(ctx.site.discovery);
+    assert.equal(d.llms_txt.truncated_source, true, 'guard: nothing was saved, so only text_head exists');
+    assert.equal(d.ucp.body_unread, true, 'a UCP body we only read the head of is unknown, not absent');
+
+    const m21 = await run(aiDiscovery, ctx);
+    const malformed = one(m21, 'M21.llmstxt.malformed');
+    assert.match(malformed.evidence.observed, /line 5: malformed_list_item/, 'the defect is still reported');
+    assert.match(malformed.evidence.observed, /Parsed from the first \d+ of \d+ bytes/,
+      'a line-precise claim built from a prefix must disclose the prefix: ' + malformed.evidence.observed);
+
+    const m18 = await run(agenticCommerce, ctx);
+    const ucp = one(m18, 'M18.agentic.ucp_profile_missing');
+    assert.equal(ucp.status, 'needs_api', 'an unread body is needs_api, never a "no profile" claim');
+    assert.match(ucp.evidence.observed, /not fully captured/);
+    assert.match(ucp.evidence.observed, /Parsed from/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------------------------------------ evidence rendering (round-2 fixes) */
+
+test('M22 evidence quotes the offending markup instead of stringifying the example objects', async () => {
+  const messy = mkPage(ORIGIN + '/a', HTML('<title>A page full of improvised controls</title>', [
+    '<main><div class="cta primary" onclick="go()">Continue</div>',
+    '<button class="icon-only" id="cart"></button>',
+    '<a href="/x"><img src="/i.png"></a>',
+    '<a href="javascript:void(0)">Menu</a>',
+    '<form><input type="email" name="signup_email" placeholder="you@example.com"></form></main>',
+  ].join('')));
+  const out = await run(agentReadiness, mkCtx({ pages: [messy] }));
+
+  for (const f of out) {
+    assert.ok(!/\[object Object\]/.test(JSON.stringify(f)), f.id + ' must never ship [object Object]: ' + f.evidence.observed);
+  }
+  assert.match(one(out, 'M22.controls.non_semantic_interactive').evidence.observed, /<div class="cta primary" onclick>/);
+  assert.match(one(out, 'M22.controls.button_without_name').evidence.observed, /<button id="cart" class="icon-only">/);
+  assert.match(one(out, 'M22.links.empty_name').evidence.observed, /<a href="\/x">.*no text/);
+  assert.match(one(out, 'M22.links.href_javascript').evidence.observed, /<a href="javascript:void\(0\)"> "Menu"/);
+  assert.match(one(out, 'M22.forms.unlabeled_controls').evidence.observed, /<input type="email" name="signup_email" placeholder="you@example.com">/);
+});
+
+test('M21 broken agentic sitemap names each parse error, and an HTML soft-404 is reported as absent', async () => {
+  const withXml = (body) => ({
+    origin: ORIGIN,
+    probes: {
+      '/sitemap_agentic_discovery.xml': { url: ORIGIN + '/sitemap_agentic_discovery.xml', status: 200, ok: true, content_type: 'application/xml', looks_like_html: false, text: body },
+    },
+    summary: { statuses: {}, found: [] },
+  });
+  const broken = await run(aiDiscovery, mkCtx({ site: { discovery: withXml('<?xml version="1.0"?><sitemapindex><sitemap><loc>' + ORIGIN + '/s.xml</loc></sitemap></sitemapindex>') }, crawl: { origin: ORIGIN, target: ORIGIN + '/' } }));
+  const f = one(broken, 'M21.agentic_sitemap.broken_locs');
+  assert.ok(!/\[object Object\]/.test(f.evidence.observed), f.evidence.observed);
+  assert.match(f.evidence.observed, /xml: sitemapindex_not_urlset/);
+
+  // A Next.js style catch-all page served at that path means the file does not exist: reporting it
+  // as a published-but-broken sitemap would invent a defect.
+  const soft404 = withXml('<!doctype html><html><body>Page not found</body></html>');
+  soft404.probes['/sitemap_agentic_discovery.xml'].content_type = 'text/html; charset=utf-8';
+  soft404.probes['/sitemap_agentic_discovery.xml'].looks_like_html = true;
+  const out = await run(aiDiscovery, mkCtx({ site: { discovery: soft404 }, crawl: { origin: ORIGIN, target: ORIGIN + '/' } }));
+  assert.equal(byId(out, 'M21.agentic_sitemap.broken_locs').length, 0, 'a soft 404 is not a broken sitemap');
+  assert.equal(byId(out, 'M21.agentic_sitemap.present').length, 0, 'and it is not a published one either');
+});
+
+test('M18 keeps one finding per feed error class (distinct locations) and counts rows, not the sampled flag', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cseo-feed-classes-'));
+  const feedPath = join(dir, 'feed.jsonl');
+  writeFileSync(feedPath, [
+    JSON.stringify({ item_id: 'A', title: 'T', description: 'D', url: 'not-a-url', brand: 'B', seller_name: 'S', image_url: ORIGIN + '/i.png', availability: 'in_stock', price: '10.00 USD' }),
+    JSON.stringify({ item_id: 'A', title: 'T2', description: 'D', url: ORIGIN + '/p', brand: 'B', seller_name: 'S', image_url: ORIGIN + '/i.png', availability: 'maybe', price: 'ten dollars' }),
+  ].join('\n'));
+  try {
+    const out = await run(agenticCommerce, mkCtx({
+      site: { discovery: { origin: ORIGIN, probes: {}, summary: { statuses: {}, found: [] } } },
+      crawl: { origin: ORIGIN, target: ORIGIN + '/' },
+      vertical: { primary: 'ecommerce' },
+      options: { feed_path: feedPath },
+    }));
+    const errors = byId(out, 'M18.agentic.acp_feed_errors').filter((f) => f.status === 'fail');
+    const classes = errors.map((f) => f.location.selector).sort();
+    assert.deepEqual(classes, ['availability_not_in_enum', 'duplicate_item_id', 'price_format', 'url_not_absolute_http']);
+    // report.mjs dedupes on id + scope + url + file + resource + selector: without the selector all
+    // four collapse into one and three of the four defects are never reported.
+    assert.equal(new Set(errors.map((f) => [f.id, f.scope, f.location.file, f.location.selector].join('|'))).size, 4);
+    for (const f of errors) {
+      assert.match(f.evidence.observed, /of 2 rows linted \(the whole jsonl feed\)/, 'the row count must be a number, not the truncation flag');
+      assert.ok(!/ of (true|false) /.test(f.evidence.observed), f.evidence.observed);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('M5 reports Product-without-Offer once per page and leaves variant reference stubs to M18', async () => {
+  const group = mkPage(ORIGIN + '/p/group', HTML('<title>A product group with variant stubs</title>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProductGroup","name":"Runner",'
+    + '"hasVariant":[{"@type":"Product","url":"' + ORIGIN + '/p/1"},{"@type":"Product","url":"' + ORIGIN + '/p/2"},{"@type":"Product","url":"' + ORIGIN + '/p/3"}]}</script>'));
+  const stubsOnly = await run(schema, mkCtx({ pages: [group] }));
+  assert.equal(byId(stubsOnly, 'M5.product.missing_offer_price').length, 0,
+    'a hasVariant entry that carries only a url is a reference, not a Product missing its price');
+
+  const twoReal = mkPage(ORIGIN + '/p/two', HTML('<title>Two real products, neither priced</title>'
+    + '<script type="application/ld+json">[{"@context":"https://schema.org","@type":"Product","name":"Alpha","image":"/a.png"},'
+    + '{"@type":"Product","name":"Beta","image":"/b.png","url":"' + ORIGIN + '/p/beta"}]</script>'));
+  const out = await run(schema, mkCtx({ pages: [twoReal] }));
+  const f = one(out, 'M5.product.missing_offer_price');
+  assert.equal(f.status, 'fail');
+  assert.match(f.evidence.observed, /2 Product nodes on .* declare no `offers` property/);
+  assert.match(f.evidence.observed, /Alpha/);
+  assert.match(f.evidence.observed, /Beta/);
+});
+
+test('a schema-invalid finding is counted in stats.dropped and named, instead of vanishing', async () => {
+  const shared = await import('../../scripts/checks/_shared.mjs');
+  // mk() throws inside node:test on purpose; production returns null. Drop the marker for one
+  // synchronous call so the production path is the one under test.
+  const marker = process.env.NODE_TEST_CONTEXT;
+  delete process.env.NODE_TEST_CONTEXT;
+  let result;
+  try {
+    shared.takeDropped();
+    result = shared.mk({ id: 'M7.title.missing', title: 'Missing everything else' });
+  } finally {
+    if (marker !== undefined) process.env.NODE_TEST_CONTEXT = marker;
+  }
+  assert.equal(result, null, 'an invalid finding is still not returned');
+  const drops = shared.takeDropped();
+  assert.equal(drops.entries.length, 1);
+  assert.equal(drops.total, 1, 'the count and the entries agree below the cap');
+  assert.deepEqual([drops.entries[0].id, drops.entries[0].module], ['M7.title.missing', 'M7']);
+  assert.ok(drops.entries[0].errors.length > 0, 'the validation errors are kept so the regression is diagnosable');
+  assert.deepEqual(shared.takeDropped(), { entries: [], total: 0 }, 'draining the log clears it');
+
+  // runChecks() drains the same log after every check, so the counter is wired to stats.
+  const { stats } = await runChecks(mkCtx({ pages: [] }));
+  assert.equal(stats.dropped, 0, 'a clean run reports zero drops');
+  assert.deepEqual(stats.dropped_findings, [], 'and names none');
+});
+
+test('drops past the entry cap are still counted, so the total can never under-report', async () => {
+  const shared = await import('../../scripts/checks/_shared.mjs');
+  const marker = process.env.NODE_TEST_CONTEXT;
+  delete process.env.NODE_TEST_CONTEXT;
+  try {
+    shared.takeDropped();
+    for (let i = 0; i < 130; i++) shared.mk({ id: 'M7.title.missing', title: 'Missing everything else' });
+  } finally {
+    if (marker !== undefined) process.env.NODE_TEST_CONTEXT = marker;
+  }
+  const drops = shared.takeDropped();
+  assert.equal(drops.entries.length, 100, 'the named list stays bounded');
+  assert.equal(drops.total, 130, 'the count is exact — a silent under-report is the bug this log exists to prevent');
+  assert.deepEqual(shared.takeDropped(), { entries: [], total: 0 }, 'the counter is zeroed with the entries');
 });

@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { detectFormat, parseFeed, lintFeed } from '../acp-feed-lint.mjs';
 import { analyzeDiscovery } from '../ai-discovery.mjs';
+import { partialReadNote } from './ai-discovery.mjs';
 import { mk, push, clip, listing, plural, isEcommerce, originOf } from './_shared.mjs';
 
 /** Rows linted from the feed; the rest are reported as un-sampled rather than silently ignored. */
@@ -35,7 +36,21 @@ export const check = {
     if (ctx.site && ctx.site.discovery) {
       const d = analyzeDiscovery(ctx.site.discovery, (ctx.site && ctx.site.robots) || null);
       const ucp = d.ucp || {};
-      if (!ucp.present) {
+      if (ucp.body_unread) {
+        // The endpoint answered, but this run only holds the head of the body, so whether a profile
+        // is published is UNKNOWN. Saying "no UCP profile" next to the probe's own HTTP 200 would be
+        // a fabricated negative; needs_api is the honest state, and it is never a silent pass.
+        push(out, mk({
+          id: 'M18.agentic.ucp_profile_missing', title: 'The UCP profile could not be read in this run', status: 'needs_api', ...site,
+          evidence: { observed: 'GET ' + ucpUrl + ' -> HTTP ' + ucp.status + ', but the body was not fully captured, so it could not be parsed.' + partialReadNote(ucp) },
+          expected: 'The whole /.well-known/ucp body, so the profile can be validated instead of guessed at.',
+          recommendation: 'Re-run the crawl with discovery artifacts saved (the run writes site/ucp.json), then re-check.',
+          fixable: 'advisory',
+          verification: { method: 'header_check', assertion: 'ai-discovery.mjs --run-dir <run> reports ucp.present with no truncated_source.' },
+          reproduce: repro,
+          expected_impact: { axis: 'ai', confidence: 'directional', rationale: 'An unread profile is unknown, not absent; UCP is how an agent discovers a store\'s commerce endpoints, but no vendor publishes what share of agent traffic depends on it.' },
+        }));
+      } else if (!ucp.present) {
         push(out, mk({
           id: 'M18.agentic.ucp_profile_missing', title: 'The store publishes no UCP profile', status: 'warn', severity: 3, ...site,
           evidence: { observed: 'GET ' + ucpUrl + ' -> HTTP ' + (ucp.status == null ? 'no response' : ucp.status) + '.' },
@@ -49,7 +64,7 @@ export const check = {
       } else if (ucp.publicly_readable === false) {
         push(out, mk({
           id: 'M18.agentic.ucp_not_public', title: 'The UCP profile is not readable by an unauthenticated agent', status: 'fail', severity: 3, ...site,
-          evidence: { observed: 'GET ' + ucpUrl + ' -> HTTP ' + ucp.status + (ucp.json_valid === false ? ' with a non-JSON body' : '') + '.' },
+          evidence: { observed: 'GET ' + ucpUrl + ' -> HTTP ' + ucp.status + (ucp.json_valid === false ? ' with a non-JSON body' : '') + '.' + partialReadNote(ucp) },
           expected: 'The profile answers 200 with application/json to an anonymous request.',
           recommendation: 'Remove the auth gate or redirect in front of /.well-known/ucp; an agent reads it before it has any credentials.',
           fixable: 'advisory',
@@ -60,7 +75,7 @@ export const check = {
       } else if (!ucp.ok) {
         push(out, mk({
           id: 'M18.agentic.ucp_profile_invalid', title: 'The UCP profile does not validate', status: 'warn', severity: 3, ...site,
-          evidence: { observed: plural((ucp.errors || []).length, 'error') + ' in ' + ucpUrl + ': ' + listing((ucp.errors || []).map((e) => e.path + ': ' + e.reason), 4) + (ucp.version ? ' (version "' + clip(ucp.version, 30) + '")' : '') + '.' },
+          evidence: { observed: plural((ucp.errors || []).length, 'error') + ' in ' + ucpUrl + ': ' + listing((ucp.errors || []).map((e) => e.path + ': ' + e.reason), 4) + (ucp.version ? ' (version "' + clip(ucp.version, 30) + '")' : '') + '.' + partialReadNote(ucp) },
           expected: 'A valid version plus services/capabilities entries with https spec, endpoint and schema URLs.',
           recommendation: 'Fix the fields listed above and re-publish the profile.',
           fixable: 'advisory',
@@ -144,8 +159,13 @@ export const check = {
       for (const [reason, errs] of byReason) {
         push(out, mk({
           id: 'M18.agentic.acp_feed_errors', title: 'Product feed rows fail validation: ' + reason, status: 'fail', severity: 3, scope: 'site', fixable: 'proposed',
-          location: { file: feedPath },
-          evidence: { observed: plural(errs.length, 'row') + ' of ' + lint.sampled + ' sampled (' + lint.rows_total + ' in the ' + format + ' feed) fail with "' + reason + '": ' + listing(errs.map((e) => 'row ' + e.row + ' field ' + e.field + (e.detail ? ' (' + clip(e.detail, 50) + ')' : '')), 4) + '.' },
+          // `selector` carries the error class: report.mjs dedupes on id + scope + url + file +
+          // resource + selector, so without it every error class of one feed collapses into a
+          // single surviving finding and the operator only ever sees one of the defects.
+          location: { file: feedPath, selector: reason },
+          evidence: { observed: plural(errs.length, 'row') + ' of ' + plural(lint.rows, 'row') + ' linted'
+            + (lint.sampled ? ' (sampled from ' + lint.rows_total + ' in the ' + format + ' feed)' : ' (the whole ' + format + ' feed)')
+            + ' fail with "' + reason + '": ' + listing(errs.map((e) => 'row ' + e.row + ' field ' + e.field + (e.detail ? ' (' + clip(e.detail, 50) + ')' : '')), 4) + '.' },
           expected: 'Every feed row carries the required fields in the documented shape.',
           recommendation: 'Fix the rows listed above at the source that generates the feed; an agent drops the item rather than guessing the missing value.',
           fixable: 'proposed',

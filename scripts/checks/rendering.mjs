@@ -8,7 +8,7 @@
 //      shows the same shell. A single page stays at page scope, so it cannot cap a score.
 
 import { RENDER_WORD_THRESHOLD } from '../lib/renderers.mjs';
-import { mk, push, listing, plural, contentPages, finalUrl, snapRepro } from './_shared.mjs';
+import { mk, push, listing, plural, agree, contentPages, finalUrl, snapRepro } from './_shared.mjs';
 
 /** Rendered words must exceed the raw count by this factor before "the raw HTML is a shell" holds. */
 export const SHELL_WORD_RATIO = 2;
@@ -73,7 +73,8 @@ export const check = {
           id: 'M4.render.csr_only_primary_content', title: 'Primary content exists only after JavaScript runs', status: 'fail', severity: 5,
           scope: wholeTemplate ? 'template' : 'page',
           location: { url: finalUrl(first) },
-          evidence: { observed: (wholeTemplate ? 'All ' + plural(group.length, 'sampled page') + ' of template "' + template + '"' : finalUrl(first)) + ' serves ' + ((first.parsed && first.parsed.word_count) || 0) + ' words of raw HTML; rendering adds ' + (d.words || 0) + ' words, ' + (d.h1_added || 0) + ' H1(s), ' + (d.headings || 0) + ' heading(s) and ' + (d.anchors || 0) + ' link(s).' },
+          evidence: { observed: (wholeTemplate ? 'All ' + plural(group.length, 'sampled page') + ' of template "' + template + '"' : finalUrl(first))
+            + (wholeTemplate ? ' ' + agree(group.length, 'serves', 'serve') + ' ' : ' serves ') + ((first.parsed && first.parsed.word_count) || 0) + ' words of raw HTML; rendering adds ' + (d.words || 0) + ' words, ' + (d.h1_added || 0) + ' H1(s), ' + (d.headings || 0) + ' heading(s) and ' + (d.anchors || 0) + ' link(s).' },
           expected: 'The H1 and the body text are present in the HTML the server returns.',
           recommendation: 'Server-render (or pre-render) the primary content for this template. Every consumer that does not execute JavaScript — including AI crawlers that fetch without rendering — sees only the shell.',
           fixable: 'advisory',

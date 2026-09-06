@@ -12,7 +12,7 @@
 import { flattenNodes, typesOf } from '../lib/jsonld.mjs';
 import { contentMask, visibleText, classifyNumbers } from '../lib/passages.mjs';
 import { detectLang } from '../lib/lang.mjs';
-import { mk, push, clip, listing, plural, finalUrl, isContentPage, snapRepro, tokensFor, numericPrice } from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, finalUrl, isContentPage, snapRepro, tokensFor, numericPrice } from './_shared.mjs';
 
 export const ARTICLE_TYPES = ['Article', 'NewsArticle', 'BlogPosting', 'TechArticle', 'ScholarlyArticle', 'Report', 'LiveBlogPosting'];
 export const DEPRECATED_RICHRESULT = ['FAQPage', 'HowTo'];
@@ -31,6 +31,17 @@ function isEditorial(page) {
   if (ARTICLE_TYPES.includes(templateType(page))) return true;
   const parsed = page.parsed || {};
   return !!(parsed.landmarks && parsed.landmarks.article) && (parsed.word_count || 0) >= EDITORIAL_MIN_WORDS;
+}
+
+/**
+ * True for a node that only points at a resource defined elsewhere — `{"@type":"Product","url":"…"}`
+ * inside `hasVariant`, or a bare `@id` reference. Such a node is a pointer, not a declaration, so it
+ * cannot be "missing" the properties the real node carries.
+ */
+function isReferenceStub(node) {
+  if (!node || typeof node !== 'object') return true;
+  const own = Object.keys(node).filter((k) => !k.startsWith('@') && node[k] !== undefined && node[k] !== null && node[k] !== '');
+  return own.length === 0 || (own.length === 1 && own[0] === 'url');
 }
 
 /** Every typed node of every parseable block, with the block index it came from. */
@@ -95,14 +106,28 @@ export const check = {
     }
 
     /* ---- Product without any Offer ----------------------------------------------------------- */
+    // ONE finding per page, naming the offending nodes. Every Product node on a page shares the same
+    // location, so a finding per node would collapse to one in report.mjs's dedupe anyway — and the
+    // reader would be told "21 duplicates merged" instead of which nodes are short an Offer.
+    //
+    // A `hasVariant` entry that carries nothing but a url/@id is a REFERENCE to a variant defined
+    // elsewhere, not a Product missing its price: counting it here would contradict M18, which owns
+    // variant-level pricing (M18.offer.missing_price / M18.variants.no_productgroup).
     const products = nodes.filter((n) => n.types.includes('Product'));
+    const offerless = [], stubs = [];
     for (const p of products) {
       const offers = p.node && p.node.offers;
-      const hasOffer = Array.isArray(offers) ? offers.length > 0 : offers && typeof offers === 'object';
-      if (hasOffer) continue;
+      if (Array.isArray(offers) ? offers.length > 0 : offers && typeof offers === 'object') continue;
+      (isReferenceStub(p.node) ? stubs : offerless).push(p);
+    }
+    if (offerless.length) {
+      const first = offerless[0];
+      const names = offerless.map((p) => p.path + ' ("' + clip((p.node && p.node.name) || '(unnamed)', 40) + '")');
       push(out, mk({
         id: 'M5.product.missing_offer_price', title: 'Product markup carries no Offer', status: 'fail', severity: 4, scope: 'page', ...at,
-        evidence: { observed: 'JSON-LD node ' + p.path + ' on ' + url + ' is a Product named "' + clip((p.node && p.node.name) || '(unnamed)', 60) + '" with no `offers` property (properties present: ' + listing(Object.keys(p.node || {}).filter((k) => !k.startsWith('@')), 8) + ').' },
+        evidence: { observed: plural(offerless.length, 'Product node') + ' on ' + url + ' ' + agree(offerless.length, 'declares', 'declare') + ' no `offers` property: ' + listing(names, 4)
+          + '. Properties present on ' + first.path + ': ' + listing(Object.keys(first.node || {}).filter((k) => !k.startsWith('@')), 8)
+          + (stubs.length ? '. ' + plural(stubs.length, 'further reference stub') + ' (url/@id only) left to M18, which owns variant pricing' : '') + '.' },
         expected: 'Product carries an Offer (or AggregateOffer) with price and priceCurrency.',
         recommendation: 'Add an offers node with price, priceCurrency and availability, using schema/jsonld-templates/product-offer.json.',
         fixable: 'auto',

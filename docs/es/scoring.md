@@ -119,6 +119,26 @@ Hallazgos reasignados en v0.2.0: `M11.heading.no_direct_answer` 5→3, `M11.pass
 
 Cuando nada de un eje pudo puntuarse — sin hallazgos, solo `needs_api`/`manual_review`, solo condicionales inactivas o solo módulos de peso 0 — el eje queda **sin puntuar** (`unscored`): `value: null`, `raw_value: null`, `band: "unscored"`, `state: "unscored"`. Un conjunto de hallazgos vacío nunca se informa como F.
 
+## Cobertura y bandas provisionales
+
+Una ejecución de una sola página puede producir una letra que parece firme a partir de una porción mínima del modelo, así que cada eje informa además cuánto de sí mismo se midió:
+
+| Clave | Significado |
+|---|---|
+| `coverage` | % del peso **siempre activo** del eje que llevó al menos un hallazgo puntuado |
+| `coverage_weight` / `coverage_total` | la misma cifra en pesos crudos (el bloque siempre activo suma 100) |
+| `provisional` | `true` cuando `coverage` queda por debajo del piso (**50%**) |
+
+Por debajo del piso el eje informa `state: "partial"` y un aviso que nombra las categorías no medidas. **La puntuación y la banda no cambian**: siguen siendo exactamente lo que produjeron los hallazgos, y la salvedad viaja junto a ellas. `report.md` muestra una columna de Cobertura, marca la banda provisional con `*` y repite el aviso en **Avisos**.
+
+```
+"ai_visibility": { "value": 100, "band": "A", "state": "partial", "provisional": true,
+                   "coverage": 18, "coverage_weight": 18, "coverage_total": 100,
+                   "warnings": ["coverage 18%: only 18 of 100 always-on weight on the ai axis carried a scored finding, …"] }
+```
+
+Amplía la ejecución (más páginas, un rastreo completo, una clave de PSI, los módulos que juzga el modelo) para subir la cobertura. Un eje con tope conserva `state: "capped"` y aun así informa `provisional`; un eje `unscored` nunca es provisional.
+
 ## Limitación por severidad (topes)
 
 Una puntuación se topa en **40 (banda F)** solo cuando un hallazgo cumple **todas** estas condiciones:

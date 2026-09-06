@@ -33,6 +33,34 @@ export const DEEP_LINK_BUDGET = 25;
 const REVERSE_DNS = /^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+$/;
 const HTTPS_URL = /^https:\/\/[^\s]+$/i;
 const LOOPBACK_HOST = /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?|0\.0\.0\.0)$/i;
+/** Inline code spans: a URL inside backticks is an example being quoted, never a link. */
+const CODE_SPAN = /`[^`]*`/g;
+/** `- ` / `* ` bullet marker. */
+const BULLET = /^[-*][ \t]+/;
+/** A short leading label — bold or plain — closed by `:`, `—` or `–`, as in `- Docs: <url>`. */
+const LABEL = /^[^:—–]{0,60}[:—–][ \t]*/;
+/** What a link looks like once it sits in link position: a Markdown link, or a URL. */
+const LINK_HEAD = /^(?:\[|<https?:\/\/|https?:\/\/\S)/i;
+
+/**
+ * Did this bullet try to be a link and fail, or is it prose?
+ *
+ * llmstxt.org allows any Markdown except headings inside a section, so a sentence in a bullet is
+ * legal and must not be reported as a defect. Link intent has to sit in LINK POSITION to count:
+ *   - a broken `](` pair anywhere in the bullet, or
+ *   - a URL/`[` at the head of the bullet, or at the head of what follows a short `Label:` prefix
+ *     (`- Docs: https://…` is the classic un-bracketed link, not a sentence).
+ * A URL that merely appears inside a sentence — or inside a backticked code span, which is how
+ * documentation quotes an example request — is prose, and stays exempt.
+ */
+export function looksLikeBrokenLink(line) {
+  const bare = String(line == null ? '' : line).replace(CODE_SPAN, ' ');
+  if (bare.includes('](')) return true;
+  const rest = bare.replace(BULLET, '').trim();
+  // Before the label strip, because a bare URL carries a `:` of its own ("https:").
+  if (LINK_HEAD.test(rest)) return true;
+  return LINK_HEAD.test(rest.replace(LABEL, '').trim());
+}
 
 /**
  * `null` when the value is a valid https URL, 'local_http' for plain http on a loopback host
@@ -57,7 +85,7 @@ export function validateLlmsTxt(body, { origin = null } = {}) {
   const src = text(body);
   const out = {
     present: src.length > 0, bytes: Buffer.byteLength(src), looks_like_html: /^\s*(<!doctype\s+html|<html[\s>])/i.test(src),
-    title: null, summary: null, sections: [], links: [], links_total: 0, errors: [], warnings: [],
+    title: null, summary: null, sections: [], links: [], links_total: 0, prose_items: 0, errors: [], warnings: [],
   };
   if (!out.present) return out;
   if (out.looks_like_html) { out.errors.push({ line: 1, reason: 'html_instead_of_markdown' }); return out; }
@@ -75,12 +103,19 @@ export function validateLlmsTxt(body, { origin = null } = {}) {
       else out.errors.push({ line: no, reason: 'multiple_h1' });
       continue;
     }
-    if (/^##\s+/.test(line)) { section = { name: line.replace(/^##\s+/, '').trim(), links: 0, line: no }; out.sections.push(section); continue; }
+    if (/^##\s+/.test(line)) { section = { name: line.replace(/^##\s+/, '').trim(), links: 0, prose: 0, line: no }; out.sections.push(section); continue; }
     if (/^#{3,}\s+/.test(line)) { out.warnings.push({ line: no, reason: 'heading_deeper_than_h2' }); continue; }
     if (/^>\s?/.test(line)) { if (out.summary === null) out.summary = line.replace(/^>\s?/, '').trim(); continue; }
     if (/^[-*]\s+/.test(line)) {
       const m = /^[-*]\s+\[([^\]]*)\]\(([^)\s]+)\)\s*(?::\s*(.*))?$/.exec(line);
-      if (!m) { out.errors.push({ line: no, reason: 'malformed_list_item' }); continue; }
+      if (!m) {
+        // llmstxt.org allows "zero or more markdown sections … of any type except headings", so a
+        // prose bullet is legal, not a defect. Only a bullet whose link position holds a link that
+        // did not parse is a structural problem — see looksLikeBrokenLink().
+        if (looksLikeBrokenLink(line)) out.errors.push({ line: no, reason: 'malformed_list_item' });
+        else { out.prose_items++; if (section) section.prose++; }
+        continue;
+      }
       let abs = null;
       try { abs = origin ? new URL(m[2], origin).href : new URL(m[2]).href; } catch { abs = null; }
       if (!abs) out.warnings.push({ line: no, reason: 'unresolvable_link' });
@@ -93,7 +128,7 @@ export function validateLlmsTxt(body, { origin = null } = {}) {
   if (h1 === 0) out.errors.push({ line: 1, reason: 'missing_h1_title' });
   if (!out.sections.length) out.errors.push({ line: 1, reason: 'no_h2_sections' });
   if (!out.links_total) out.errors.push({ line: 1, reason: 'no_links' });
-  for (const s of out.sections) if (s.links === 0) out.warnings.push({ line: s.line, reason: 'section_without_links' });
+  for (const s of out.sections) if (s.links === 0 && !s.prose) out.warnings.push({ line: s.line, reason: 'section_without_links' });
   out.ok = out.errors.length === 0;
   return out;
 }
@@ -219,9 +254,20 @@ export function validateAiCatalog(doc, { status = null } = {}) {
 // ---------------------------------------------------------------------------
 // /sitemap_agentic_discovery.xml
 
-export function validateAgenticSitemap(xml) {
+/**
+ * @param {string} xml  the probe body
+ * @param {{looks_like_html?: boolean, content_type?: string|null}} [probe]  what the probe recorded.
+ *   A catch-all HTML page served at this path is a soft 404: the file is NOT published, so it is
+ *   reported as absent rather than as a published-but-broken sitemap (the llms.txt branch above
+ *   makes the same distinction).
+ */
+export function validateAgenticSitemap(xml, { looks_like_html = false, content_type = null } = {}) {
   const src = text(xml);
-  const out = { present: src.length > 0, kind: null, url_count: 0, locs: [], errors: [], warnings: [] };
+  const html = looks_like_html === true
+    || /^\s*(<!doctype\s+html|<html[\s>])/i.test(src)
+    || (typeof content_type === 'string' && /\btext\/html\b/i.test(content_type));
+  const out = { present: src.length > 0 && !html, kind: null, url_count: 0, locs: [], looks_like_html: html, errors: [], warnings: [] };
+  if (html) { out.warnings.push({ path: 'http', reason: 'html_response_not_xml' }); return out; }
   if (!out.present) return out;
   const parsed = parseSitemap(src);
   out.kind = parsed.kind;
@@ -260,6 +306,38 @@ const bodyOf = (probe) => (probe && typeof probe.text === 'string' ? probe.text 
 const parseJsonBody = (probe) => { try { return JSON.parse(bodyOf(probe)); } catch { return undefined; } };
 
 /**
+ * Fill every probe's `text` from the body `lib/site.mjs` saved under `<run>/site/<saved_as>`.
+ *
+ * site/discovery.json only carries `text_head`, a 4096-char preview. Validating that preview instead
+ * of the file produces a fabricated negative — a 4121-byte UCP profile stops being JSON at the cut,
+ * so `JSON.parse` fails and the store looks like it publishes no profile. Every reader of a run
+ * directory must hydrate first so the two paths (this CLI and the checks registry) cannot disagree.
+ * Mutates and returns `discovery`; a probe whose body was not saved keeps its `text_head`.
+ *
+ * @param {object|null} discovery  parsed site/discovery.json
+ * @param {string} runDir
+ */
+export function hydrateDiscovery(discovery, runDir) {
+  if (!discovery || !discovery.probes || !runDir) return discovery;
+  for (const p of DISCOVERY_PROBES) {
+    const entry = discovery.probes[p.path];
+    if (!entry || !entry.saved_as) continue;
+    try { entry.text = readFileSync(join(runDir, 'site', entry.saved_as), 'utf8'); } catch { /* keep text_head */ }
+  }
+  return discovery;
+}
+
+/**
+ * Read `<runDir>/site/discovery.json` with the saved bodies hydrated. `null` when the run has none.
+ * @param {string} runDir
+ */
+export function loadDiscovery(runDir) {
+  if (!runDir) return null;
+  const discovery = readJson(join(runDir, 'site', 'discovery.json'), null);
+  return discovery ? hydrateDiscovery(discovery, runDir) : null;
+}
+
+/**
  * Pure analysis of a site/discovery.json artifact.
  * @param {object} discoveryJson  lib/site.mjs discovery shape ({ origin, probes, https_enforcement, summary }).
  *   Probe entries may carry a full `text` (hydrated from site/<saved_as>); otherwise `text_head` is used
@@ -279,10 +357,18 @@ export function analyzeDiscovery(discoveryJson, robots = null) {
     if (typeof e.text === 'string') return false;
     return !!e.truncated || (typeof e.bytes === 'number' && typeof e.text_head === 'string' && e.bytes > Buffer.byteLength(e.text_head));
   };
+  const sourceBytesOf = (p) => { const e = at(p); return e && typeof e.bytes === 'number' ? e.bytes : null; };
+  /** Stamp every validated block with how much of the response the parser actually read. */
+  const provenance = (block, p) => {
+    block.truncated_source = truncatedOf(p);
+    block.parsed_bytes = at(p) ? Buffer.byteLength(bodyOf(at(p))) : 0;
+    block.source_bytes = sourceBytesOf(p);
+    return block;
+  };
 
   const llms = validateLlmsTxt(okOf('/llms.txt') ? bodyOf(at('/llms.txt')) : '', { origin });
   llms.status = statusOf('/llms.txt');
-  llms.truncated_source = truncatedOf('/llms.txt');
+  provenance(llms, '/llms.txt');
   const llmsFull = {
     present: okOf('/llms-full.txt'), status: statusOf('/llms-full.txt'),
     bytes: at('/llms-full.txt') ? at('/llms-full.txt').bytes : 0,
@@ -290,13 +376,25 @@ export function analyzeDiscovery(discoveryJson, robots = null) {
   };
   const agentsMd = validateAgentsMd(okOf('/agents.md') ? bodyOf(at('/agents.md')) : '');
   agentsMd.status = statusOf('/agents.md');
+  provenance(agentsMd, '/agents.md');
   const ucpProbe = at('/.well-known/ucp');
-  const ucp = validateUcp(okOf('/.well-known/ucp') ? parseJsonBody(ucpProbe) : null, {
+  const ucpDoc = okOf('/.well-known/ucp') ? parseJsonBody(ucpProbe) : null;
+  const ucp = validateUcp(ucpDoc, {
     origin, status: statusOf('/.well-known/ucp'), public_ok: ucpProbe ? ucpProbe.ok === true : null,
   });
-  if (ucpProbe && ucpProbe.ok && ucpProbe.json_valid === false) ucp.errors.push({ path: '$', reason: 'invalid_json' });
+  provenance(ucp, '/.well-known/ucp');
+  // A body we only read the head of is UNKNOWN, not absent. Without this flag a profile larger than
+  // the saved-body limit parses to `undefined` and the store looks like it publishes none — a
+  // fabricated negative with the probe's own "HTTP 200" sitting next to it in the evidence.
+  ucp.body_unread = !!(ucpProbe && ucpProbe.ok && ucpDoc === undefined && ucp.truncated_source);
+  // Same soft-404 rule: a catch-all HTML page at /.well-known/ucp means no profile is published,
+  // not a broken one. Only a body that was meant to be JSON earns an invalid_json error.
+  if (ucpProbe && ucpProbe.ok && ucpProbe.json_valid === false && !ucpProbe.looks_like_html) ucp.errors.push({ path: '$', reason: 'invalid_json' });
   const catalog = validateAiCatalog(okOf('/.well-known/ai-catalog.json') ? parseJsonBody(at('/.well-known/ai-catalog.json')) : null, { status: statusOf('/.well-known/ai-catalog.json') });
-  const agenticSitemap = validateAgenticSitemap(okOf('/sitemap_agentic_discovery.xml') ? bodyOf(at('/sitemap_agentic_discovery.xml')) : '');
+  const agenticProbe = at('/sitemap_agentic_discovery.xml');
+  const agenticSitemap = validateAgenticSitemap(okOf('/sitemap_agentic_discovery.xml') ? bodyOf(agenticProbe) : '', {
+    looks_like_html: !!(agenticProbe && agenticProbe.looks_like_html), content_type: agenticProbe ? agenticProbe.content_type : null,
+  });
   agenticSitemap.status = statusOf('/sitemap_agentic_discovery.xml');
 
   const found = DISCOVERY_PATHS.filter((p) => okOf(p));
@@ -326,16 +424,6 @@ export function analyzeDiscovery(discoveryJson, robots = null) {
 // CLI
 
 const flagValue = (v) => (Array.isArray(v) ? v[v.length - 1] : v);
-
-function hydrate(discovery, runDir) {
-  if (!discovery || !discovery.probes || !runDir) return discovery;
-  for (const p of DISCOVERY_PROBES) {
-    const entry = discovery.probes[p.path];
-    if (!entry || !entry.saved_as) continue;
-    try { entry.text = readFileSync(join(runDir, 'site', entry.saved_as), 'utf8'); } catch { /* keep text_head */ }
-  }
-  return discovery;
-}
 
 function injectFile(discovery, path, file, kind) {
   const abs = resolve(file);
@@ -384,10 +472,9 @@ export async function main(args, deps = {}) {
     source = 'run-dir';
   }
   if (runDir) {
-    discovery = readJson(join(runDir, 'site', 'discovery.json'));
+    discovery = loadDiscovery(runDir);
     robots = readJson(join(runDir, 'site', 'robots.json'));
     if (!discovery) return { result: { error: 'no site/discovery.json in ' + runDir, hint: 'run snapshot.mjs against the site first, or pass --url' }, code: EXIT.USAGE };
-    hydrate(discovery, runDir);
   } else if (typeof urlFlag === 'string' && urlFlag.trim()) {
     let origin;
     try { origin = new URL(urlFlag.trim()).origin; }

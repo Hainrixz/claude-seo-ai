@@ -119,6 +119,26 @@ Findings re-assigned in v0.2.0: `M11.heading.no_direct_answer` 5→3, `M11.passa
 
 When nothing on an axis could be scored — no findings, only `needs_api`/`manual_review`, only inactive conditionals, or only weight-0 modules — the axis is **unscored**: `value: null`, `raw_value: null`, `band: "unscored"`, `state: "unscored"`. An empty findings set is never reported as an F.
 
+## Coverage and provisional bands
+
+A one-page run can produce a confident-looking letter from a sliver of the model, so every axis also reports how much of itself was measured:
+
+| Key | Meaning |
+|---|---|
+| `coverage` | % of the axis's **always-on** weight that carried at least one scored finding |
+| `coverage_weight` / `coverage_total` | the same figure as raw weights (the always-on block sums to 100) |
+| `provisional` | `true` when `coverage` is below the floor (**50%**) |
+
+Below the floor the axis reports `state: "partial"` and a warning naming the unmeasured categories. **The score and the band do not change** — they are still exactly what the findings produced; the caveat rides beside them. `report.md` shows a Coverage column, marks a provisional band with `*`, and repeats the warning under **Warnings**.
+
+```
+"ai_visibility": { "value": 100, "band": "A", "state": "partial", "provisional": true,
+                   "coverage": 18, "coverage_weight": 18, "coverage_total": 100,
+                   "warnings": ["coverage 18%: only 18 of 100 always-on weight on the ai axis carried a scored finding, …"] }
+```
+
+Widen the run (more pages, a full crawl, a PSI key, the model-judged modules) to raise coverage. A capped axis keeps `state: "capped"` and still reports `provisional`; an `unscored` axis is never provisional.
+
 ## Severity gating (caps)
 
 A score is capped at **40 (band F)** only when a finding meets **all** of these conditions:

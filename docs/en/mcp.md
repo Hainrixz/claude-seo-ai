@@ -51,21 +51,25 @@ When a render is needed **and** a render MCP is available, the crawler discovers
 
 Field CWV (the CrUX p75 data Google actually ranks on) comes from `scripts/psi-client.mjs`, which calls the Google PageSpeed Insights API. The key is **optional but recommended** — without a key or network, the client returns `status: "needs_api"` rather than guessing.
 
-Set the key once in your environment:
+Set the key once in your environment. The client reads it from
+`CLAUDE_PLUGIN_OPTION_PSI_API_KEY` first (what a plugin `userConfig` prompt
+exports), then `PSI_API_KEY`:
 
 ```bash
 export PSI_API_KEY="<your-free-pagespeed-key>"
 ```
 
-Then run the client (it reads `PSI_API_KEY` from env if `--key` is omitted):
+There is deliberately **no `--key` flag**, here or on `audit.mjs`: a secret on the
+command line lands in `ps`, in shell history and in any command log, and these
+scripts print the command to re-run. For a one-off key, prefix the invocation:
 
 ```bash
 node scripts/psi-client.mjs --url https://example.com
 node scripts/psi-client.mjs --url https://example.com --strategy desktop
-node scripts/psi-client.mjs --url https://example.com --key "$PSI_API_KEY"
+PSI_API_KEY="<key>" node scripts/psi-client.mjs --url https://example.com
 ```
 
-Flags: `--url` (required), `--strategy mobile|desktop` (default `mobile`), `--key` (overrides the env var). It reports field metrics rated against p75 thresholds, with lab data returned separately and explicitly marked **"NOT what Google ranks on."**
+Flags: `--url` (required), `--strategy mobile|desktop` (default `mobile`). It reports field metrics rated against p75 thresholds, with lab data returned separately and explicitly marked **"NOT what Google ranks on."**
 
 Field p75 thresholds (`references/cwv-thresholds.md`):
 

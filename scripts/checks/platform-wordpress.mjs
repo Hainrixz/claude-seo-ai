@@ -9,9 +9,7 @@
 
 import { isAllowed } from '../lib/robots.mjs';
 import { flattenNodes } from '../lib/jsonld.mjs';
-import {
-  mk, push, clip, listing, plural, contentPages, finalUrl, platformId, originOf, jsonldBlocks,
-} from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, platformId, originOf, jsonldBlocks } from './_shared.mjs';
 
 /** Archive URL shapes WordPress publishes by default and that are usually thin. */
 export const THIN_ARCHIVE_RE = /^\/(?:category|tag|author|page)\/|^\/\d{4}\/\d{2}(?:\/|$)/;
@@ -61,7 +59,7 @@ export const check = {
         id: 'M2.wordpress.blog_public_off', title: 'The site is set to discourage search engines (blog_public = 0)',
         status: 'fail', severity: 5, scope: 'site',
         location: { url: origin || undefined, resource: 'option blog_public' },
-        evidence: { observed: 'All ' + plural(pages.length, 'sampled page') + ' serves noindex and robots.txt disallows Googlebot at the root — the exact pair WordPress emits when Settings > Reading > "Discourage search engines" is on.' },
+        evidence: { observed: 'All ' + plural(pages.length, 'sampled page') + ' ' + agree(pages.length, 'serves', 'serve') + ' noindex and robots.txt disallows Googlebot at the root — the exact pair WordPress emits when Settings > Reading > "Discourage search engines" is on.' },
         expected: 'blog_public = 1 on a site that should be indexed.',
         recommendation: 'Turn off "Discourage search engines from indexing this site" in Settings > Reading (or run `wp option update blog_public 1`), then request re-indexing.',
         fixable: 'proposed',
@@ -81,7 +79,7 @@ export const check = {
       push(out, mk({
         id: 'M2.wordpress.attachment_pages_indexable', title: 'Attachment pages are indexable', status: 'warn', severity: 2, scope: 'site',
         location: { url: finalUrl(attachments[0]) },
-        evidence: { observed: plural(attachments.length, 'attachment URL') + ' is crawlable and carries no noindex: ' + listing(attachments.map((p) => finalUrl(p)), 4) + '.' },
+        evidence: { observed: plural(attachments.length, 'attachment URL') + ' ' + agree(attachments.length, 'is crawlable and carries', 'are crawlable and carry') + ' no noindex: ' + listing(attachments.map((p) => finalUrl(p)), 4) + '.' },
         expected: 'Attachment pages redirect to the file or the parent post, or carry noindex.',
         recommendation: 'Disable attachment pages (most SEO plugins expose the setting; core has wp_attachment_pages_enabled) so an image does not get its own thin URL.',
         fixable: 'proposed',
@@ -101,7 +99,7 @@ export const check = {
       push(out, mk({
         id: 'M2.wordpress.thin_archives_indexable', title: 'Date, author, tag or search archives are indexable', status: 'warn', severity: 2, scope: 'site',
         location: { url: finalUrl(thin[0]) },
-        evidence: { observed: plural(thin.length, 'archive/search URL') + ' is indexable: ' + listing(thin.map((p) => finalUrl(p)), 4) + '.' },
+        evidence: { observed: plural(thin.length, 'archive/search URL') + ' ' + agree(thin.length, 'is', 'are') + ' indexable: ' + listing(thin.map((p) => finalUrl(p)), 4) + '.' },
         expected: 'Only the archives that have their own demand are indexable; search results never are.',
         recommendation: 'Set the date, author and search archives to noindex in the SEO plugin, and keep the category/tag archives that earn traffic.',
         fixable: 'advisory',

@@ -193,7 +193,13 @@ export function analyzeAgentReadiness(parsed, html, opts = {}) {
       if (fake) {
         interactive.fake++;
         if (interactive.fake_examples.length < 5) {
-          interactive.fake_examples.push({ tag: name, role: role || null, onclick: handler, tabindex: attr(t, 'tabindex') ?? null, text: clip(t.kind === 'open' ? innerText(tokens, i, { maxLen: 80 }) : '') });
+          // class/id travel with the example so a reader can find the element again: "<div onclick>"
+          // names a pattern, "<div class=\"cta primary\" onclick>" names the thing to fix.
+          interactive.fake_examples.push({
+            tag: name, role: role || null, onclick: handler, tabindex: attr(t, 'tabindex') ?? null,
+            class: attr(t, 'class') ?? null, id: attr(t, 'id') ?? null,
+            text: clip(t.kind === 'open' ? innerText(tokens, i, { maxLen: 80 }) : ''),
+          });
         }
       }
     }

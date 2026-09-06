@@ -39,6 +39,8 @@ Findings conform to `schema/finding.schema.json`; axis `search`. On a monolingua
 - `M20.hreflang.missing_xdefault` — the cluster has no `x-default` fallback (`warn`, severity **2**, `fixable: auto`, confidence `directional` — `x-default` is recommended, not required, and its absence degrades selector routing rather than breaking the cluster).
 - `M20.lang.mismatch` — `<html lang>` disagrees with the locale this URL claims in its own hreflang entry (`warn`, severity 2, `fixable: auto`, confidence `directional`).
 - `M20.hreflang.not_applicable` — monolingual site (`not_applicable`, severity 0).
+**Platform-conditional ids.** This module also emits 1 id that fires only when `profile.json` names the platform (`shopify`). It is indexed in `references/routing.md` § Platform-conditional finding ids and specified in `references/platforms/<id>.md` §10.
+
 Each finding: `verification.reproduce` runs the hreflang-check command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

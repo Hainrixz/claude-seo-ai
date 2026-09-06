@@ -10,9 +10,27 @@
 // here are emitted as not_applicable naming M18 as the owner, so nothing is double-counted.
 
 import { analyzeDiscovery } from '../ai-discovery.mjs';
-import { mk, push, clip, listing, plural, isEcommerce, originOf } from './_shared.mjs';
+import { mk, push, clip, listing, describeExample, plural, isEcommerce, originOf } from './_shared.mjs';
 
 const SPECULATIVE = 'No search or answer engine documents that this file affects retrieval, ranking or citation; it is a convention some agent frameworks read.';
+
+/**
+ * Disclosure clause for a block whose validation only saw the head of the response.
+ *
+ * A run that skipped discovery artifacts (or a file past the saved-body limit) leaves only
+ * `text_head` in site/discovery.json. Line-precise defect claims derived from a prefix must say
+ * they came from a prefix; otherwise the reader takes them on faith about bytes we never read.
+ * Returns '' — nothing to disclose — whenever the parser saw the whole body.
+ */
+export function partialReadNote(block) {
+  if (!block || !block.truncated_source) return '';
+  const read = typeof block.parsed_bytes === 'number' ? block.parsed_bytes : null;
+  const total = typeof block.source_bytes === 'number' ? block.source_bytes : null;
+  const span = read != null && total != null && total > read
+    ? 'the first ' + read + ' of ' + total + ' bytes'
+    : read != null ? 'the first ' + read + ' bytes' : 'the head';
+  return ' Parsed from ' + span + ' of the response — re-run with discovery artifacts saved for a full parse.';
+}
 
 export const check = {
   id: 'ai-discovery',
@@ -69,9 +87,10 @@ export const check = {
         push(out, mk({
           id: 'M21.llmstxt.malformed', title: '/llms.txt does not follow the llms.txt shape', status: 'warn', severity: 1, ...site,
           location: { url: (origin || '') + '/llms.txt' },
-          evidence: { observed: llms.looks_like_html
+          evidence: { observed: (llms.looks_like_html
             ? 'GET /llms.txt returns HTML, not Markdown (' + llms.bytes + ' bytes).'
-            : plural((llms.errors || []).length, 'structural problem') + ': ' + listing((llms.errors || []).map((e) => 'line ' + e.line + ': ' + e.reason), 4) + '.' },
+            : plural((llms.errors || []).length, 'structural problem') + ': ' + listing((llms.errors || []).map((e) => 'line ' + e.line + ': ' + e.reason), 4) + '.')
+            + partialReadNote(llms) },
           expected: 'An H1 title, an optional `>` summary, then `## Section` headings with Markdown links.',
           recommendation: 'Fix the structure so a parser can read the sections and links.',
           fixable: 'auto',
@@ -99,7 +118,8 @@ export const check = {
         push(out, mk({
           id: 'M21.llmstxt.blocked_for_ai_bots', title: '/llms.txt exists but robots.txt blocks the bots meant to read it', status: 'warn', severity: 2, ...site,
           location: { url: (origin || '') + '/llms.txt' },
-          evidence: { observed: '/llms.txt returns HTTP ' + llms.status + ' and robots.txt disallows it for ' + listing(blocked.blocked_for, 5) + (blocked.detail ? ' (' + clip(blocked.detail, 80) + ')' : '') + '.' },
+          evidence: { observed: '/llms.txt returns HTTP ' + llms.status + ' and robots.txt disallows it for ' + listing(blocked.blocked_for, 5)
+            + ((blocked.detail || []).length ? ' (' + listing(blocked.detail.map((b) => b.bot + ' via ' + b.via + (b.rule ? ' "' + clip(b.rule, 40) + '"' : '')), 2) + ')' : '') + '.' },
           expected: 'A file published for AI agents is fetchable by them.',
           recommendation: 'Allow /llms.txt for the retrieval and user-triggered agent tokens, or remove the file.',
           fixable: 'advisory',
@@ -116,7 +136,7 @@ export const check = {
       ? mk({
         id: 'M21.agents_md.present', title: '/agents.md is published', status: 'pass', severity: 1, ...site,
         location: { url: (origin || '') + '/agents.md' },
-        evidence: { observed: 'GET /agents.md -> HTTP ' + agents.status + ', ' + agents.bytes + ' bytes, headings: ' + listing((agents.headings || []).map((h) => 'h' + h.level + ' "' + clip(h.text, 40) + '"'), 3) + '.' },
+        evidence: { observed: 'GET /agents.md -> HTTP ' + agents.status + ', ' + agents.bytes + ' bytes, headings: ' + listing((agents.headings || []).map((h) => 'h' + h.level + ' "' + clip(h.text, 40) + '"'), 3) + '.' + partialReadNote(agents) },
         expected: 'Informational: the file exists and parses.',
         recommendation: 'Keep it accurate — it states how agents should interact with the site.',
         fixable: 'advisory',
@@ -144,7 +164,7 @@ export const check = {
         id: ucp.present ? 'M21.ucp.present_valid' : 'M21.ucp.invalid', title: 'UCP profile is judged by M18 on an e-commerce site',
         status: 'not_applicable', ...site,
         location: { url: ucpUrl },
-        evidence: { observed: 'GET /.well-known/ucp -> HTTP ' + (ucp.status == null ? 'no response' : ucp.status) + '. The e-commerce vertical is active, so M18 (agentic commerce readiness) owns this endpoint.' },
+        evidence: { observed: 'GET /.well-known/ucp -> HTTP ' + (ucp.status == null ? 'no response' : ucp.status) + '. The e-commerce vertical is active, so M18 (agentic commerce readiness) owns this endpoint.' + partialReadNote(ucp) },
         expected: 'Reported once, by the module that owns it.',
         recommendation: 'See the M18.agentic.ucp_* findings for this endpoint.',
         fixable: 'advisory',
@@ -156,7 +176,7 @@ export const check = {
       push(out, mk({
         id: 'M21.ucp.not_public', title: 'The UCP profile is not publicly readable', status: 'warn', severity: 2, ...site,
         location: { url: ucpUrl },
-        evidence: { observed: 'GET /.well-known/ucp -> HTTP ' + ucp.status + (ucp.json_valid === false ? ' and the body is not JSON' : '') + '.' },
+        evidence: { observed: 'GET /.well-known/ucp -> HTTP ' + ucp.status + (ucp.json_valid === false ? ' and the body is not JSON' : '') + '.' + partialReadNote(ucp) },
         expected: 'The profile answers 200 with JSON to an unauthenticated request.',
         recommendation: 'Serve /.well-known/ucp publicly, or remove it.',
         fixable: 'advisory',
@@ -168,7 +188,7 @@ export const check = {
       push(out, mk({
         id: 'M21.ucp.invalid', title: 'The UCP profile does not validate', status: 'warn', severity: 2, ...site,
         location: { url: ucpUrl },
-        evidence: { observed: plural((ucp.errors || []).length, 'error') + ' in /.well-known/ucp: ' + listing((ucp.errors || []).map((e) => e.path + ': ' + e.reason), 4) + '.' },
+        evidence: { observed: plural((ucp.errors || []).length, 'error') + ' in /.well-known/ucp: ' + listing((ucp.errors || []).map((e) => e.path + ': ' + e.reason), 4) + '.' + partialReadNote(ucp) },
         expected: 'A parseable version, services and capabilities shape.',
         recommendation: 'Fix the fields listed above; a profile an agent cannot parse is the same as no profile.',
         fixable: 'advisory',
@@ -180,7 +200,7 @@ export const check = {
       push(out, mk({
         id: 'M21.ucp.present_valid', title: 'A valid UCP profile is published', status: 'pass', severity: 2, ...site,
         location: { url: ucpUrl },
-        evidence: { observed: '/.well-known/ucp -> HTTP ' + ucp.status + ', version ' + ucp.version + ', ' + plural(ucp.services ? ucp.services.count : 0, 'service') + ' and ' + plural(ucp.capabilities ? ucp.capabilities.count : 0, 'capability') + ' declared.' },
+        evidence: { observed: '/.well-known/ucp -> HTTP ' + ucp.status + ', version ' + ucp.version + ', ' + plural(ucp.services ? ucp.services.count : 0, 'service') + ' and ' + plural(ucp.capabilities ? ucp.capabilities.count : 0, 'capability') + ' declared.' + partialReadNote(ucp) },
         expected: 'Informational: the profile exists and validates.',
         recommendation: 'Keep the declared endpoints reachable and the version current.',
         fixable: 'advisory',
@@ -224,7 +244,7 @@ export const check = {
       push(out, mk({
         id: 'M21.agentic_sitemap.broken_locs', title: '/sitemap_agentic_discovery.xml has unusable entries', status: 'warn', severity: 2, ...site,
         location: { url: (origin || '') + '/sitemap_agentic_discovery.xml' },
-        evidence: { observed: 'kind "' + ags.kind + '", ' + plural(ags.url_count || 0, 'loc') + ', ' + plural((ags.errors || []).length, 'parse error') + ': ' + listing(ags.errors || [], 3) + '.' },
+        evidence: { observed: 'kind "' + ags.kind + '", ' + plural(ags.url_count || 0, 'loc') + ', ' + plural((ags.errors || []).length, 'parse error') + ': ' + listing((ags.errors || []).map((e) => describeExample(e, 90)), 3) + '.' },
         expected: 'A valid urlset whose <loc> entries are absolute URLs.',
         recommendation: 'Fix the XML, or remove the file if nothing generates it any more.',
         fixable: 'proposed',

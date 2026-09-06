@@ -25,9 +25,50 @@ export function mk(spec) {
   const { finding, errors } = makeFinding(spec);
   if (errors.length) {
     if (isTestMode()) throw new Error('invalid finding ' + (spec && spec.id) + ': ' + errors.join('; '));
+    recordDrop(spec, errors);
     return null;
   }
   return finding;
+}
+
+/**
+ * Schema-invalid findings dropped in production, so the drop is observable instead of silent.
+ *
+ * A module-level log rather than run state: `mk()` receives only the finding spec, and every check
+ * in a run executes in this one process, so runChecks() can drain the log after each check and
+ * attribute the drops to it. `takeDropped()` empties the log; a run that never drains it cannot
+ * grow unbounded either, because the log is capped.
+ */
+const MAX_DROPPED = 100;
+const dropped = [];
+/** Every drop since the last drain, INCLUDING the ones past MAX_DROPPED. */
+let droppedTotal = 0;
+
+function recordDrop(spec, errors) {
+  // Counted before the cap: the entry list is bounded so a runaway check cannot eat memory, but the
+  // count must stay exact. A silently under-reported count is the failure this log exists to prevent
+  // — past the cap, a schema regression would look like a clean site again.
+  droppedTotal++;
+  if (dropped.length >= MAX_DROPPED) return;
+  const id = spec && typeof spec.id === 'string' ? spec.id : null;
+  dropped.push({ id, module: id ? id.split('.')[0] : null, errors: errors.slice(0, 5) });
+}
+
+/**
+ * Drain the dropped-finding log.
+ * @returns {{entries: object[], total: number}} the entries recorded since the last call (capped at
+ *   MAX_DROPPED) and the exact number of drops they stand for, which can be larger.
+ */
+export function takeDropped() {
+  const entries = dropped.splice(0, dropped.length);
+  const total = droppedTotal;
+  droppedTotal = 0;
+  return { entries, total };
+}
+
+/** Read the log without clearing it (diagnostics and tests). */
+export function peekDropped() {
+  return dropped.slice();
 }
 
 /** Push non-null findings onto `out` (variadic; accepts arrays). */
@@ -168,15 +209,68 @@ export function clip(value, max = 240) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
-/** "a, b, c and 4 more" — keeps evidence honest about how much was elided. */
+/**
+ * Render one "example" object (the small shapes the analyzers collect) as a quotable string.
+ * Evidence must never ship `String({})`, so every branch here produces something a reader can act
+ * on: a start tag for element examples, an anchor for link examples, `where: reason` for the
+ * `{path|line, reason}` shape the validators use, and `key=value` pairs for anything else.
+ */
+export function describeExample(value, max = 80) {
+  if (value === null || value === undefined) return '';
+  if (typeof value !== 'object') return clip(value, max);
+  if (Array.isArray(value)) return clip(value.map((v) => describeExample(v, max)).join(', '), max);
+  const e = value;
+  if (typeof e.reason === 'string' && e.tag === undefined && e.href === undefined) {
+    const where = e.path != null ? e.path : (e.line != null ? 'line ' + e.line : (e.file != null ? e.file : (e.url != null ? e.url : null)));
+    return clip(where != null ? where + ': ' + e.reason : e.reason, max);
+  }
+  let head = null;
+  if (typeof e.tag === 'string' && e.tag) {
+    const attrs = [];
+    if (e.href != null && e.href !== '') attrs.push('href="' + clip(e.href, 60) + '"');
+    for (const [key, prop] of [['type', 'type'], ['role', 'role'], ['name', 'name_attr'], ['name', 'name'], ['id', 'id'], ['class', 'class'], ['placeholder', 'placeholder'], ['tabindex', 'tabindex']]) {
+      const v = e[prop];
+      if (v == null || v === '' || attrs.some((a) => a.startsWith(key + '='))) continue;
+      attrs.push(key + '="' + clip(v, 40) + '"');
+    }
+    if (e.onclick) attrs.push('onclick');
+    head = '<' + e.tag + (attrs.length ? ' ' + attrs.join(' ') : '') + '>';
+  } else if (e.href != null && e.href !== '') {
+    head = '<a href="' + clip(e.href, 60) + '">';
+  }
+  if (head) {
+    const label = e.text || e.anchor || e.name || '';
+    const why = e.reason || e.error || null;
+    return clip(head + (label ? ' "' + clip(label, 40) + '"' : '') + (why ? ' (' + clip(why, 60) + ')' : ''), max);
+  }
+  const parts = [];
+  for (const [k, v] of Object.entries(e)) {
+    if (v == null || v === '' || typeof v === 'object' || typeof v === 'function') continue;
+    parts.push(k + '=' + clip(v, 40));
+  }
+  if (parts.length) return clip(parts.join(' '), max);
+  try { return clip(JSON.stringify(e), max); } catch { return '(unprintable)'; }
+}
+
+/**
+ * "a, b, c and 4 more" — keeps evidence honest about how much was elided. Objects are rendered
+ * through describeExample(), so an example array can never reach a reader as `[object Object]`.
+ */
 export function listing(items, max = 5) {
-  const arr = (items || []).map((x) => String(x));
+  const arr = (items || []).map((x) => (x && typeof x === 'object' ? describeExample(x) : String(x)));
   if (!arr.length) return '(none)';
   if (arr.length <= max) return arr.join(', ');
   return arr.slice(0, max).join(', ') + ' and ' + (arr.length - max) + ' more';
 }
 
 export const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many || one + 's');
+
+/**
+ * Subject-verb agreement for a sentence whose subject is a count: `plural(n, 'page') + ' ' +
+ * agree(n, 'is', 'are')`. Evidence is read by a person; "3 sitemap URLs is noindex" undermines
+ * every number beside it.
+ */
+export const agree = (n, one, many) => (n === 1 ? one : many);
 
 /* ----------------------------------------------------------------- url helpers */
 

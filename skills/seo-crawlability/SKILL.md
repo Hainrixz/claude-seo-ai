@@ -40,6 +40,8 @@ Emit findings per `schema/finding.schema.json`; axis `search`. **Severity policy
 - `M1.robots.syntax_error` — malformed directive, missing `User-agent` group header, or a BOM (`warn`, severity 3, `fixable: auto`, confidence `established`).
 - `M1.sitemap.missing_directive` — no `Sitemap:` line in robots.txt (`warn`, severity **2**, `fixable: auto`, confidence `directional` — sitemaps are also discovered from Search Console and `/sitemap.xml`, so a missing directive is a convenience gap, not an access failure).
 - `M1.crawl_delay.excessive` — a large `Crawl-delay` in the global group that starves honoring crawlers (`warn`, severity 2, `fixable: proposed`, confidence `directional`).
+**Platform-conditional ids.** This module also emits 6 ids that fire only when `profile.json` names the platform (`shopify`, `wordpress`, `nextjs`). They are indexed in `references/routing.md` § Platform-conditional finding ids and specified in `references/platforms/<id>.md` §10.
+
 Each finding: `evidence.observed` quotes the offending robots.txt line (or the resolved verdict) verbatim; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

@@ -126,6 +126,33 @@ medium ≥ 5, low ≥ 2, else the layer is `null` — an unresolved platform is 
 PATH, never executed. `repo`/`pkg` signals require `--path`; `probe` signals require `--probe`;
 `notes[]` says when either was unavailable.
 
+### Platform-conditional finding ids
+
+These 31 ids are emitted **only** when `profile.json` names the matching platform or framework (a
+`low` confidence verdict does not count). They are not in any module skill's Findings table on
+purpose — a WordPress id would be noise on a Shopify audit — so this is their index. Each one is
+specified in full in `references/platforms/<id>.md` §10, which is the card the dispatched agent
+already receives.
+
+| Module (skill) | Emitted when | Ids |
+|---|---|---|
+| M1 (`seo-crawlability`) | `nextjs` | `M1.nextjs.robots_conflict` |
+| M1 (`seo-crawlability`) | `shopify` | `M1.shopify.filter_sort_urls_crawlable` · `M1.shopify.robots_liquid_drops_defaults` · `M1.shopify.tag_combo_urls_crawlable` |
+| M1 (`seo-crawlability`) | `wordpress` | `M1.wordpress.physical_robots_shadowing` · `M1.wordpress.replytocom_crawlable` |
+| M2 (`seo-indexability`) | `shopify` | `M2.shopify.collection_path_duplicate` · `M2.shopify.collections_all_indexable` · `M2.shopify.variant_param_canonical` |
+| M2 (`seo-indexability`) | `wordpress` | `M2.wordpress.attachment_pages_indexable` · `M2.wordpress.blog_public_off` · `M2.wordpress.thin_archives_indexable` |
+| M5 (`seo-schema-jsonld`) | `shopify` | `M5.shopify.duplicate_product_jsonld` · `M5.shopify.theme_jsonld_gaps` |
+| M5 (`seo-schema-jsonld`) | `wordpress` | `M5.wordpress.duplicate_schema_sources` · `M5.wordpress.plugin_schema_incomplete` |
+| M7 (`seo-meta-onpage`) | `gatsby` · `jekyll` · `nextjs` · `react-router` | `M7.gatsby.head_in_non_page` · `M7.jekyll.seo_tag_present` · `M7.nextjs.metadata_base_missing` · `M7.react_router.meta_replaces_parent` |
+| M7 (`seo-meta-onpage`) | `shopify` · `wordpress` | `M7.shopify.description_is_body_fallback` · `M7.wordpress.plugin_owned_head` |
+| M17 (`seo-sitemaps`) | `astro` · `gatsby` · `hugo` · `nextjs` · `nuxt` | `M17.astro.site_missing` · `M17.gatsby.site_url_missing` · `M17.hugo.baseurl_missing` · `M17.nextjs.sitemap_missing_source` · `M17.nuxt.site_url_missing` |
+| M17 (`seo-sitemaps`) | `shopify` · `wordpress` | `M17.shopify.sitemap_platform_owned` · `M17.wordpress.duplicate_sitemaps` · `M17.wordpress.no_sitemap_any` |
+| M20 (`seo-international`) | `shopify` | `M20.shopify.duplicate_hreflang` |
+
+Ids use the framework id with `-` replaced by `_` (`react-router` → `M7.react_router.*`). A
+platform-conditional check never fires on a site whose profile does not name that platform, so an
+audit of a static site emits none of them.
+
 ## Environment layer
 
 `environment.kind` comes from the profile (`noindex` + `*.vercel.app`, `*--*.netlify.app`, `*.myshopify.com?preview_theme_id`, `*.wpengine.com`, `staging.` → `preview`/`staging`; `localhost` → `local`). The orchestrator passes it to the scorer (`score.mjs --environment preview|staging|local`), which **suppresses noindex-type severity-5 caps** and reports them as "expected on a non-production host" instead of gating the Search score at F. The finding `M2.hosting.preview_environment_audited` (warn, severity 1) records that the run was not against production.

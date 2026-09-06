@@ -4,7 +4,7 @@
 // Only images in content regions are judged: an unlabelled icon in the nav is boilerplate, and
 // parseDocument already tells us which region every <img> sits in.
 
-import { mk, push, clip, listing, plural, finalUrl, isContentPage, snapRepro, jsonldBlocks } from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, finalUrl, isContentPage, snapRepro, jsonldBlocks } from './_shared.mjs';
 import { collectTypes } from '../lib/jsonld.mjs';
 
 /** Embed hosts that mean "this page carries a video" without a <video> element. */
@@ -39,7 +39,7 @@ export const check = {
     if (missingAlt.length) {
       push(out, mk({
         id: 'M9.alt.missing', title: 'Content images have no alt attribute', status: 'fail', severity: 3, scope: 'page', ...at,
-        evidence: { observed: plural(missingAlt.length, 'content <img>') + ' of ' + images.length + ' has no alt attribute: ' + listing(missingAlt.map(tag), 3) + '.' },
+        evidence: { observed: plural(missingAlt.length, 'content <img>') + ' of ' + images.length + ' ' + agree(missingAlt.length, 'has', 'have') + ' no alt attribute: ' + listing(missingAlt.map(tag), 3) + '.' },
         expected: 'Every content image carries an alt attribute — descriptive text, or alt="" when the image is purely decorative.',
         recommendation: 'Add alt text describing what each image shows. Decorative images take an explicit empty alt so assistive technology skips them.',
         fixable: 'proposed',
@@ -52,7 +52,7 @@ export const check = {
     if (unsized.length) {
       push(out, mk({
         id: 'M9.img.no_dimensions', title: 'Content images declare no width/height', status: 'warn', severity: 3, scope: 'page', ...at,
-        evidence: { observed: plural(unsized.length, 'content <img>') + ' of ' + images.length + ' lacks numeric width and height: ' + listing(unsized.map(tag), 3) + '.' },
+        evidence: { observed: plural(unsized.length, 'content <img>') + ' of ' + images.length + ' ' + agree(unsized.length, 'lacks', 'lack') + ' numeric width and height: ' + listing(unsized.map(tag), 3) + '.' },
         expected: 'Each <img> declares its intrinsic width and height in pixels so the browser can reserve the space.',
         recommendation: 'Add width and height attributes (or an aspect-ratio in CSS) matching the file\'s intrinsic size.',
         fixable: 'auto',

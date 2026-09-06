@@ -57,6 +57,13 @@ export const AI = [
 export const VERTICALS = Object.freeze(['saas', 'blog-publisher', 'local-business', 'ecommerce', 'docs', 'generic']);
 export const ENVIRONMENTS = Object.freeze(['production', 'preview', 'staging', 'local']);
 export const CAP_VALUE = 40;
+/**
+ * Minimum share (%) of an axis's always-on weight that must carry a scored finding before its band
+ * is reported without a caveat. Below it the numbers stay exactly as computed and the axis is
+ * marked `provisional` with state `partial` — a one-page run that only measured two categories must
+ * not read as a confident "A". See references/scoring-model.md § Coverage.
+ */
+export const COVERAGE_FLOOR = 50;
 /** Cap reasons whose id matches one of these are expected on non-production hosts and are suppressed there. */
 export const ENV_SUPPRESSED_CAP_PATTERNS = Object.freeze([/^M2\.[a-z0-9_.-]*noindex/, /^M1\.robots\./, /^M14\.ai_eligibility\.not_indexable$/]);
 /** Page weights for the site rollup (used when the manifest does not carry an explicit page weight). */
@@ -77,6 +84,29 @@ const EXCLUDED = new Set(['needs_api', 'manual_review', 'not_applicable']);
 // 'M7b' -> 'M7', 'M21' -> 'M21', 'M3' -> 'M3'
 const parentModule = (m) => String(m || '').replace(/[a-z]$/, '');
 const round1 = (v) => +Number(v).toFixed(1);
+
+/** "a, b and 3 more" — used by the coverage warning. */
+function nameList(names, max = 4) {
+  if (!names.length) return '(none)';
+  return names.length <= max ? names.join(', ') : names.slice(0, max).join(', ') + ' and ' + (names.length - max) + ' more';
+}
+
+/**
+ * How much of an axis was actually measured: the share (%) of its ALWAYS-ON weight that carried a
+ * scored finding. Conditional categories are left out of the denominator because their weight only
+ * exists when the vertical is declared, and the always-on block sums to 100 on both axes — so
+ * `pct` reads directly as "percent of this axis we looked at".
+ * @returns {{pct:number, measured:number, total:number, missing:string[]}}
+ */
+export function coverageOf(cats) {
+  const alwaysOn = (cats || []).filter((c) => c && !c.conditional && c.weight > 0);
+  const total = alwaysOn.reduce((s, c) => s + c.weight, 0);
+  const measured = alwaysOn.filter((c) => c.active).reduce((s, c) => s + c.weight, 0);
+  return { pct: total > 0 ? round1(100 * measured / total) : 0, measured, total, missing: alwaysOn.filter((c) => !c.active).map((c) => c.name) };
+}
+
+const coverageWarning = (cov, axis) => 'coverage ' + cov.pct + '%: only ' + cov.measured + ' of ' + cov.total
+  + ' always-on weight on the ' + axis + ' axis carried a scored finding, so the band is provisional — unmeasured: ' + nameList(cov.missing);
 
 function axisMatches(finding, axis) {
   const a = finding && finding.expected_impact && finding.expected_impact.axis;
@@ -238,6 +268,15 @@ function computeAxis(categories, entries, axis, ctx) {
   let value = rawValue, state = totalW > 0 ? 'scored' : 'unscored', capped = false;
   if (capReasons.length && rawValue !== null) { value = Math.min(rawValue, CAP_VALUE); capped = true; state = 'capped'; }
 
+  // Coverage floor: the value and the band are kept exactly as computed, but an axis built from a
+  // sliver of its weight says so instead of reading as a confident grade.
+  const coverage = coverageOf(cats);
+  const provisional = state !== 'unscored' && coverage.pct < COVERAGE_FLOOR;
+  if (provisional) {
+    warnings.push(coverageWarning(coverage, axis));
+    if (state === 'scored') state = 'partial';
+  }
+
   const scoredTotal = catFindings.reduce((s, x, idx) => s + (x.conditionMet && cats[idx].weight > 0 ? cats[idx].scored : 0), 0);
   const score = {
     value,
@@ -251,6 +290,10 @@ function computeAxis(categories, entries, axis, ctx) {
     manual_review_count: cats.reduce((s, c) => s + c.manual_review, 0),
     unscored_count: inAxis.length - scoredTotal,
     dropped_count: 0,
+    coverage: coverage.pct,
+    coverage_weight: coverage.measured,
+    coverage_total: coverage.total,
+    provisional,
     warnings,
     categories: cats,
   };
@@ -466,18 +509,26 @@ export function scoreSite(manifest, opts = {}) {
       const aw = Wc > 0 ? round1(activePages.reduce((s, p) => s + p.weight * p._full[axisKey].categories[idx].active_weight, 0) / Wc) : 0;
       return { ...fc, value: v, active: activePages.length > 0, active_weight: aw };
     });
+    const axisName = axisKey === 'search_seo' ? 'search' : 'ai';
+    const coverage = coverageOf(categories);
+    const provisional = value !== null && coverage.pct < COVERAGE_FLOOR;
     const axisWarnings = [...flatAxis.warnings];
-    if (cappedPages.length && !capped) axisWarnings.push(cappedPages.length + ' of ' + scored.length + ' scored pages are capped on the ' + (axisKey === 'search_seo' ? 'search' : 'ai') + ' axis (see pages[])');
+    if (cappedPages.length && !capped) axisWarnings.push(cappedPages.length + ' of ' + scored.length + ' scored pages are capped on the ' + axisName + ' axis (see pages[])');
+    if (provisional && !axisWarnings.some((w) => w.startsWith('coverage '))) axisWarnings.push(coverageWarning(coverage, axisName));
     return {
       value, band: bandOf(value), capped,
       needs_api_count: flatAxis.needs_api_count,
       raw_value: rawValue,
-      state: value === null ? 'unscored' : capped ? 'capped' : 'scored',
+      state: value === null ? 'unscored' : capped ? 'capped' : provisional ? 'partial' : 'scored',
       cap_reasons: capped ? capReasons : [],
       suppressed_caps: flatAxis.suppressed_caps,
       manual_review_count: flatAxis.manual_review_count,
       unscored_count: flatAxis.unscored_count,
       dropped_count: dropped.length,
+      coverage: coverage.pct,
+      coverage_weight: coverage.measured,
+      coverage_total: coverage.total,
+      provisional,
       warnings: axisWarnings,
       categories,
     };

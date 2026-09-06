@@ -4,7 +4,7 @@
 // Usage:
 //   node audit.mjs <url|path|run-dir> [--out <runs root>] [--pages 5] [--max 40] [--no-crawl]
 //        [--ua googlebot] [--render static|auto|js] [--renderer auto|chrome|playwright|none]
-//        [--checks deterministic|none] [--psi-key <key>] [--feed <file>] [--environment <kind>]
+//        [--checks deterministic|none] [--feed <file>] [--environment <kind>]
 //        [--vertical ecommerce] [--merge "agents/*.json"] [--lang en|es]
 //        [--fail-under search=70,ai=60] [--fail-on-gated] [--fail-on-severity 5]
 //        [--format json|ndjson|md] [--summary-md <path>] [--validate] [--quiet]
@@ -29,7 +29,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EXIT, isMain, runCli } from './lib/util.mjs';
+import { EXIT, isMain, runCli, credential } from './lib/util.mjs';
 import { pluginVersion, readJson, writeJson } from './lib/store.mjs';
 import { main as crawlMain, manifestFromSinglePage } from './crawl.mjs';
 import { main as snapshotMain } from './snapshot.mjs';
@@ -114,7 +114,9 @@ export function readOptions(args = {}) {
     render: oneOf('render', RENDER_MODES, 'static'),
     renderer: oneOf('renderer', RENDERERS, undefined),
     checks: oneOf('checks', CHECK_MODES, 'deterministic'),
-    psiKey: str('psi-key'),
+    // No --psi-key flag: a secret on the command line lands in `ps`, in shell history and in the
+    // command logs, so the PageSpeed key is read from the environment only.
+    psiKey: credential('PSI_API_KEY'),
     feed: str('feed'),
     environment,
     vertical: args.vertical === undefined ? undefined : args.vertical,

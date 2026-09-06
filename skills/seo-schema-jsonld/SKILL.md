@@ -40,6 +40,8 @@ Emit findings per `schema/finding.schema.json`. **Severity policy**: 5 is reserv
 - `M5.jsonld.invalid_json` — a `ld+json` block that does not parse, so every type inside it is invisible (`fail`, severity 4, `fixable: auto`, axis `both`, confidence `established`).
 - `M5.jsonld.contradicts_page` — marked-up values (price, rating, date, author) disagree with what the page displays (`fail`, severity 4, `fixable: proposed`, axis `both`, confidence `established`).
 - `M5.faqpage.deprecated_richresult` — FAQPage present (`warn`, severity 1, `fixable: advisory`, axis `ai`, confidence `established`; rationale cites Google's FAQ rich-result removal; **not** counted as a win).
+**Platform-conditional ids.** This module also emits 4 ids that fire only when `profile.json` names the platform (`shopify`, `wordpress`). They are indexed in `references/routing.md` § Platform-conditional finding ids and specified in `references/platforms/<id>.md` §10.
+
 Each finding: `evidence.observed` quotes what's on the page; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

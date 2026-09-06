@@ -224,3 +224,86 @@ test('buildReport is usable without writing anything', () => {
   assert.ok(built.markdown.includes('## Scores'));
   assert.ok(validateReport(built.report).ok);
 });
+
+test('four error classes of one product feed survive the dedupe as four findings', async () => {
+  // Every acp_feed_errors finding points at the same file, so without a discriminator in the
+  // location they share one findingKey and report.mjs keeps exactly one: the operator is told
+  // about a single broken field and never learns about the other three.
+  const feed = (reason) => finding({
+    id: 'M18.agentic.acp_feed_errors', module: 'M18', title: 'Product feed rows fail validation: ' + reason,
+    status: 'fail', severity: 3, scope: 'site', location: { file: '/tmp/feed.jsonl', selector: reason },
+    evidence: { observed: '1 row of 2 rows linted (the whole jsonl feed) fail with "' + reason + '".' },
+    expected_impact: { axis: 'both', confidence: 'directional', magnitude: 'medium', rationale: 'synthetic' },
+  });
+  const reasons = ['url_not_absolute_http', 'duplicate_item_id', 'availability_not_in_enum', 'price_format'];
+  const run = newRun({ agents: false, findings: reasons.map(feed) });
+  try {
+    assert.equal(new Set(reasons.map((r) => findingKey(feed(r)))).size, 4, 'the dedupe key separates the error classes');
+    const r = await reportMain({ _: [run] });
+    assert.equal(r.code, EXIT.OK, JSON.stringify(r.result).slice(0, 300));
+    assert.equal(r.result.duplicates_merged, 0, 'nothing to merge: these are four distinct defects');
+    const report = JSON.parse(readFileSync(join(run, 'report.json'), 'utf8'));
+    assert.deepEqual(report.findings.map((f) => f.location.selector).sort(), [...reasons].sort());
+  } finally { rmSync(run, { recursive: true, force: true }); }
+});
+
+test('report.md carries the coverage figure, the per-axis warnings and the two inactive states', async () => {
+  // One sampled page declares hreflang, so the multilingual flag is set and the International
+  // category's condition IS met — it simply has no M20 findings.
+  const multilingual = { ...MANIFEST, pages: MANIFEST.pages.map((p, i) => (i === 0 ? { ...p, hreflang_count: 2 } : p)) };
+  // An always-on category whose only finding is needs_api: the row must not read "no findings"
+  // while the needs_api column on the same row says 1.
+  const unmeasured = finding({
+    id: 'M15.field.needs_api', module: 'M15', title: 'Field Core Web Vitals could not be measured',
+    status: 'needs_api', severity: 4, scope: 'site', location: { url: HOME },
+    evidence: { observed: 'No field (CrUX) data for https://example.test/: no PSI/CrUX API key was available in the environment.' },
+    expected: 'p75 LCP, INP and CLS from the Chrome UX Report for this URL or its origin.',
+    verification: { method: 'psi_api', assertion: 'psi-client.mjs returns status "ok" with field.has_field_data true.', reproduce: 'node "/plugin/scripts/psi-client.mjs" --url https://example.test/' },
+    expected_impact: { axis: 'search', confidence: 'established', magnitude: 'high', rationale: 'Google documents that the Core Web Vitals it uses come from field data.' },
+  });
+  const run = newRun({ agents: false, manifest: multilingual, findings: [...DETERMINISTIC, unmeasured] });
+  try {
+    const r = await reportMain({ _: [run], lang: 'en' });
+    assert.equal(r.code, EXIT.OK, JSON.stringify(r.result).slice(0, 300));
+    const report = JSON.parse(readFileSync(join(run, 'report.json'), 'utf8'));
+    const md = readFileSync(join(run, 'report.md'), 'utf8');
+
+    // Coverage: a three-finding run cannot measure half of either axis, so the band is provisional.
+    assert.equal(report.scores.search_seo.provisional, true);
+    assert.equal(report.scores.search_seo.state, 'partial');
+    assert.match(md, /\| Axis \| Score \| Band \| Coverage \| Interpretation \|/);
+    assert.match(md, /provisional — below the coverage floor/);
+
+    // The per-axis warnings used to exist only in report.json.
+    const axisWarning = report.scores.search_seo.warnings.find((w) => /^coverage /.test(w));
+    assert.ok(axisWarning, JSON.stringify(report.scores.search_seo.warnings));
+    assert.ok(md.includes('- Search SEO: ' + axisWarning), 'the axis warning is rendered under Warnings');
+
+    // "declared active but nothing scored" is not the same statement as "the flag was not set".
+    const international = report.scores.search_seo.categories.find((c) => c.name === 'International');
+    assert.deepEqual([international.conditional, international.activation, international.active], [true, 'flag:multilingual', false]);
+    assert.match(md, /\| International \| 8 \| — \| active, no scored findings \(flag:multilingual\) \|/);
+    assert.match(md, /\| Local \| 10 \| — \| inactive \|/);
+    // Always-on, ran, produced only an unscored finding: "no findings" would contradict the row.
+    assert.match(md, /\| Core Web Vitals \/ Performance \| 16 \| — \| active, no scored findings \| 0 \| 1 \| 0 \|/);
+    assert.ok(!/\| Core Web Vitals \/ Performance \|[^\n]*no findings/.test(md), 'a needs_api row must never say "no findings"');
+  } finally { rmSync(run, { recursive: true, force: true }); }
+});
+
+test('a schema-invalid finding dropped inside the checks pass reaches the report as a warning', async () => {
+  const run = newRun({ agents: false });
+  try {
+    writeJson(join(run, 'checks.json'), {
+      stats: { checks_run: 25, per_module: {}, needs_api: 0, manual_review: 0, not_applicable: 0, psi: null, errors: [], dropped: 2,
+        dropped_findings: [{ check: 'onpage', id: 'M7.title.missing', module: 'M7', errors: ['expected_impact is required'] }] },
+    });
+    const r = await reportMain({ _: [run] });
+    assert.equal(r.code, EXIT.OK, JSON.stringify(r.result).slice(0, 300));
+    const report = JSON.parse(readFileSync(join(run, 'report.json'), 'utf8'));
+    const w = (report.warnings || []).find((x) => /failed schema validation and were dropped/.test(x));
+    assert.ok(w, JSON.stringify(report.warnings));
+    assert.match(w, /^2 finding\(s\) built by the checks pass/);
+    assert.match(w, /M7\.title\.missing/);
+    assert.match(readFileSync(join(run, 'report.md'), 'utf8'), /failed schema validation and were dropped/);
+  } finally { rmSync(run, { recursive: true, force: true }); }
+});

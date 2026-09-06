@@ -9,9 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { flattenNodes } from '../lib/jsonld.mjs';
 import { detectFormat, parseFeed, canonicalizeRow, parsePrice } from '../acp-feed-lint.mjs';
-import {
-  mk, push, clip, listing, plural, contentPages, finalUrl, isEcommerce, snapRepro, urlKey, numericPrice,
-} from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, isEcommerce, snapRepro, urlKey, numericPrice } from './_shared.mjs';
 
 /** Query keys that mark a faceted/sorted listing URL rather than a distinct page. */
 export const FACET_KEYS = ['filter', 'color', 'colour', 'size', 'sort', 'sort_by', 'orderby', 'order', 'price', 'brand', 'material', 'style', 'pa_color', 'pa_size', 'variant'];
@@ -198,7 +196,7 @@ export const check = {
       push(out, mk({
         id: 'M18.facets.uncanonicalized', title: 'Faceted URLs are indexable and self-canonical', status: 'warn', severity: 3, scope: 'site',
         location: { url: faceted[0].url },
-        evidence: { observed: plural(faceted.length, 'crawled URL') + ' carries facet/sort parameters, no noindex and no canonical to the clean URL: ' + listing(faceted.map((f) => f.url + ' (' + listing(f.keys, 3) + ')'), 4) + '.' },
+        evidence: { observed: plural(faceted.length, 'crawled URL') + ' ' + agree(faceted.length, 'carries', 'carry') + ' facet/sort parameters, no noindex and no canonical to the clean URL: ' + listing(faceted.map((f) => f.url + ' (' + listing(f.keys, 3) + ')'), 4) + '.' },
         expected: 'Facet and sort combinations either canonicalise to the unfiltered listing or carry noindex.',
         recommendation: 'Point the canonical at the unfiltered listing for parameter-only variants, and keep indexable facets to the small set that has its own demand.',
         fixable: 'proposed',

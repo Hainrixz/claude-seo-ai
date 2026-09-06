@@ -6,7 +6,7 @@
 // fast-moving is a judgement, not an observation, so it stays with the model-judged pass.
 
 import { analyzeFreshness } from '../check-freshness.mjs';
-import { mk, push, clip, listing, plural, finalUrl, isContentPage, snapRepro } from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, finalUrl, isContentPage, snapRepro } from './_shared.mjs';
 import { flattenNodes } from '../lib/jsonld.mjs';
 
 export const DATED_TYPES = ['Article', 'NewsArticle', 'BlogPosting', 'TechArticle', 'ScholarlyArticle', 'Report', 'LiveBlogPosting', 'WebPage', 'Recipe', 'HowTo'];
@@ -76,7 +76,7 @@ export const check = {
     const unparseable = f.schema_date_unparseable || [];
     if (unparseable.length || f.modified_dates_conflict || f.published_dates_conflict) {
       const parts = [];
-      if (unparseable.length) parts.push(plural(unparseable.length, 'schema date') + ' does not parse: ' + listing(unparseable.map((u) => u.field + '="' + clip(u.value, 40) + '"'), 3));
+      if (unparseable.length) parts.push(plural(unparseable.length, 'schema date') + ' ' + agree(unparseable.length, 'does', 'do') + ' not parse: ' + listing(unparseable.map((u) => u.field + '="' + clip(u.value, 40) + '"'), 3));
       if (f.modified_dates_conflict) parts.push('several dateModified values were found (' + listing(f.all_modified_dates || [], 4) + '); the latest was used');
       if (f.published_dates_conflict) parts.push('several datePublished values were found (' + listing(f.all_published_dates || [], 4) + '); the earliest was used');
       push(out, mk({

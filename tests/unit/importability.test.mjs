@@ -62,6 +62,41 @@ test('no CLI script calls process.exit (only the guard hook may)', () => {
   const util = readFileSync(join(SCRIPTS, 'lib', 'util.mjs'), 'utf8');
   assert.ok(!/process\.exit\s*\(/.test(util), 'lib/util.mjs must not call process.exit');
 });
+/** Every .mjs under scripts/, recursively. */
+function allScriptFiles(dir = SCRIPTS) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...allScriptFiles(path));
+    else if (entry.name.endsWith('.mjs')) out.push(path);
+  }
+  return out;
+}
+
+/** `psi-key`, `api_key`, `token`, `adminToken`… — a flag name that would carry a secret. */
+const CREDENTIAL_SHAPED = (name) =>
+  /(?:^|[-_])(?:key|token|secret|password|passwd|credential|credentials|auth)$/i.test(name) ||
+  /[a-z0-9](?:Key|Token|Secret|Password)$/.test(name);
+
+test('no script reads a credential from argv — secrets come from the environment only', () => {
+  // A secret passed as a flag lands in `ps`, in shell history and in every command log, and these
+  // scripts print the command to re-run. The documented path is CLAUDE_PLUGIN_OPTION_<KEY> then
+  // <KEY>, read through lib/util.mjs credential(). This asserts the door stays shut.
+  const reads = /args\s*(?:\.\s*([A-Za-z_$][\w$]*)|\[\s*['"]([^'"]+)['"]\s*\])|\b(?:str|int|oneOf)\(\s*['"]([^'"]+)['"]/g;
+  const offenders = [];
+  for (const file of allScriptFiles()) {
+    const src = readFileSync(file, 'utf8');
+    for (const m of src.matchAll(reads)) {
+      const name = m[1] || m[2] || m[3];
+      if (name && CREDENTIAL_SHAPED(name)) offenders.push(file.slice(ROOT.length + 1) + ': ' + name);
+    }
+  }
+  assert.deepEqual(offenders, [], 'credential-shaped CLI flags: ' + offenders.join(', '));
+  // Guard the guard: the matcher must actually recognise the shapes it is looking for.
+  assert.ok(['psi-key', 'api_key', 'token', 'adminToken', 'PSI_API_KEY'].every(CREDENTIAL_SHAPED));
+  assert.ok(!['keyword', 'tokens', 'monkey', 'render'].some(CREDENTIAL_SHAPED));
+});
+
 test('node scripts/score.mjs with no args exits non-zero with a JSON error on stdout', () => {
   const r = spawnSync(process.execPath, [join(SCRIPTS, 'score.mjs')], { encoding: 'utf8', input: '' });
   assert.notEqual(r.status, 0, 'exit code must be non-zero');

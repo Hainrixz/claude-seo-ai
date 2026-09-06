@@ -24,6 +24,27 @@ export const EXIT = Object.freeze({
 });
 
 /**
+ * Read a credential by key name, from the environment only.
+ *
+ * Precedence: `CLAUDE_PLUGIN_OPTION_<KEY>` (what a plugin `userConfig` prompt exports) then `<KEY>`.
+ * Secrets are NEVER accepted from argv: a value on the command line lands in `ps`, in the shell
+ * history and in every command log the run touches, and this repo's scripts print the command they
+ * would re-run. A caller that wants an override sets the variable for the one invocation
+ * (`PSI_API_KEY=… node scripts/audit.mjs …`).
+ *
+ * @param {string} name  key name, e.g. 'PSI_API_KEY'
+ * @param {object} [env] defaults to process.env
+ * @returns {string|null} the trimmed value, or null when unset/blank
+ */
+export function credential(name, env = process.env) {
+  for (const key of ['CLAUDE_PLUGIN_OPTION_' + name, name]) {
+    const v = env ? env[key] : undefined;
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+/**
  * Minimal arg parser. Supports `--flag value`, `--flag` (boolean true),
  * `--flag=value`, `--no-flag` (-> flag: false), repeated flags (-> array),
  * and `--` (everything after is positional). Positionals land in `_`.

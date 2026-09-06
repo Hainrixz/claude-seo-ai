@@ -5,7 +5,7 @@
 // and whether the frontier was truncated. Forced seeds (the origin, the requested target and
 // --seeds URLs) are excluded — they entered the crawl by instruction, not by being linked.
 
-import { mk, push, listing, plural, originOf, isHtmlResponse, urlKey } from './_shared.mjs';
+import { mk, push, listing, plural, agree, originOf, isHtmlResponse, urlKey } from './_shared.mjs';
 
 const SEED_ROLES = new Set(['homepage', 'target']);
 const SEED_SOURCES = new Set(['origin', 'target', 'seeds']);
@@ -80,7 +80,7 @@ export const check = {
       push(out, mk({
         id: 'M10.orphan.no_incoming_links', title: 'Sitemap URLs the crawl never reached through a link',
         status: 'needs_api', scope: 'site',
-        evidence: { observed: plural(unreached.length, 'sitemap URL') + ' was not sampled, so its inlink count is unknown: ' + listing(unreached, 4) + ' (' + frontier + ').' },
+        evidence: { observed: plural(unreached.length, 'sitemap URL') + ' ' + agree(unreached.length, 'was', 'were') + ' not sampled, so ' + agree(unreached.length, 'its inlink count is', 'their inlink counts are') + ' unknown: ' + listing(unreached, 4) + ' (' + frontier + ').' },
         expected: 'A crawl wide enough to sample every sitemap URL, or an explicit statement that the rest were not measured.',
         recommendation: 'Raise --pages / --max (or pass the URLs as --seeds) if the inlink status of these URLs matters for this audit.',
         fixable: 'advisory',

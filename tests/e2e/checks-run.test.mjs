@@ -78,6 +78,23 @@ test('every finding validates against the schema and carries a runnable reproduc
   assert.equal(unscored, stats.needs_api, 'stats.needs_api matches the findings');
 });
 
+test('no finding renders an object into its prose', () => {
+  // One assertion for the whole registry: any check that hands listing()/clip() an array of example
+  // objects would ship "[object Object]" to the reader, and the evidence — the entire point of a
+  // finding — would be unusable. This caught five M22 ids and one M21 id in round 2.
+  for (const f of findings) {
+    for (const field of [f.title, f.evidence.observed, f.evidence.snippet, f.expected, f.recommendation, f.verification.assertion]) {
+      if (typeof field !== 'string') continue;
+      assert.ok(!field.includes('[object Object]'), f.id + ' renders an object into its prose: ' + field);
+    }
+  }
+});
+
+test('schema-invalid findings would be counted, not silently dropped', () => {
+  assert.equal(stats.dropped, 0, 'this fixture run drops nothing: ' + JSON.stringify(stats.dropped_findings));
+  assert.ok(Array.isArray(stats.dropped_findings), 'runChecks reports which findings were dropped');
+});
+
 test('two URLs serving one title are reported as a duplicate', () => {
   const dupes = byId('M7.title.duplicate_across_urls');
   assert.equal(dupes.length, 1, 'the fixture has exactly one duplicated title (/blog/b and its ?ref= sitemap twin)');

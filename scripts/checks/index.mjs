@@ -27,10 +27,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { readJson, pageSlug } from '../lib/store.mjs';
-import { newRunState } from './_shared.mjs';
+import { newRunState, takeDropped } from './_shared.mjs';
 import { fetchRaw } from '../lib/fetch.mjs';
 import { manifestFromSinglePage } from '../crawl.mjs';
 import { main as psiMain } from '../psi-client.mjs';
+import { loadDiscovery } from '../ai-discovery.mjs';
 
 import { check as crawlability } from './crawlability.mjs';
 import { check as indexability } from './indexability.mjs';
@@ -157,7 +158,11 @@ export function loadRunContext(runDir, options = {}) {
   const site = {
     robots: readJson(join(dir, 'site', 'robots.json'), null),
     sitemaps: readJson(join(dir, 'site', 'sitemaps.json'), null),
-    discovery: readJson(join(dir, 'site', 'discovery.json'), null),
+    // loadDiscovery(), never a bare readJson: discovery.json stores a 4096-char `text_head` preview
+    // per probe, and validating the preview instead of the saved body invents defects (a UCP profile
+    // over the cap stops being parseable JSON at the cut). ai-discovery.mjs's CLI hydrates the same
+    // way, so both readers of a run see the same bytes.
+    discovery: loadDiscovery(dir),
   };
   const profile = options.profile !== undefined ? options.profile : readJson(join(dir, 'profile.json'), null);
 
@@ -211,7 +216,13 @@ const message = (e) => String((e && e.stack ? e.stack.split('\n').slice(0, 3).jo
  * Run every registered check against `ctx`.
  * @returns {Promise<{findings: object[], stats: {checks_run:number, per_module:object,
  *   needs_api:number, manual_review:number, not_applicable:number, dropped:number,
+ *   dropped_findings:{check:string,page?:string,id:string|null,module:string|null,errors:string[]}[],
  *   psi:('used'|'needs_api'|null), errors:{check:string,message:string,page?:string}[]}}>}
+ *
+ * `dropped` counts every finding that never reached the array: a check that returned a non-array,
+ * a malformed object, and — the common case in production — a finding `mk()` refused because it
+ * failed schema validation. `dropped_findings` names the first 20 so a schema regression is
+ * diagnosable instead of looking like a clean site.
  */
 export async function runChecks(ctx) {
   const findings = [];
@@ -222,12 +233,22 @@ export async function runChecks(ctx) {
     manual_review: 0,
     not_applicable: 0,
     dropped: 0,
+    dropped_findings: [],
     // What the PSI client actually did in this run (M15 sets it). Recorded here rather than
     // inferred from verification.method downstream, so no check can imply an API call it never made.
     psi: null,
     errors: [],
   };
   const context = ctx && typeof ctx === 'object' ? ctx : { pages: [], site: {}, options: {}, tools: {} };
+  takeDropped(); // discard anything left over from an earlier run in this process
+  /** Move the schema-invalid findings mk() refused into stats, attributed to the check that built them. */
+  const drainDrops = (checkId, page) => {
+    const { entries, total } = takeDropped();
+    stats.dropped += total; // exact: `entries` is capped, the count is not
+    for (const d of entries) {
+      if (stats.dropped_findings.length < 20) stats.dropped_findings.push({ check: checkId, page: page || undefined, ...d });
+    }
+  };
   if (!Array.isArray(context.pages)) context.pages = [];
   // Created here, not inside a check: every page-scoped check receives a `{...context, page}` copy,
   // and only a shared object reference lets the token cache and the probe budget survive the copy.
@@ -257,12 +278,14 @@ export async function runChecks(ctx) {
     let ran = false;
     if (check.scope === 'page') {
       for (const page of context.pages) {
+        const where = (page && page.url) || (page && page.slug) || null;
         try {
           collect(await check.run({ ...context, page }));
           ran = true;
         } catch (e) {
-          stats.errors.push({ check: check.id, page: (page && page.url) || (page && page.slug) || null, message: message(e) });
+          stats.errors.push({ check: check.id, page: where, message: message(e) });
         }
+        drainDrops(check.id, where);
       }
       if (!context.pages.length) ran = true; // nothing to iterate is not a failure
     } else {
@@ -272,6 +295,7 @@ export async function runChecks(ctx) {
       } catch (e) {
         stats.errors.push({ check: check.id, message: message(e) });
       }
+      drainDrops(check.id, null);
     }
     if (ran) stats.checks_run++;
   }

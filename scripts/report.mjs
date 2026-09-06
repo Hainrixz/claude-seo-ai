@@ -468,6 +468,13 @@ export function buildReport(runDir, opts = {}) {
   if (collected.dropped.length) report.dropped_findings = collected.dropped;
 
   for (const w of flat.warnings) if (!warnings.includes(w)) warnings.push(w);
+  if (checks && checks.stats && checks.stats.dropped) {
+    // A check that builds a schema-invalid finding drops it silently at the mk() boundary; the
+    // count is the only way an operator can tell that apart from a clean site.
+    const named = (checks.stats.dropped_findings || []).map((d) => d.id || d.check).filter(Boolean).slice(0, 5);
+    warnings.push(checks.stats.dropped + ' finding(s) built by the checks pass failed schema validation and were dropped'
+      + (named.length ? ' (' + named.join(', ') + ')' : '') + ' — see checks.json stats.dropped_findings');
+  }
   if (checks && checks.stats && Array.isArray(checks.stats.errors)) {
     for (const e of checks.stats.errors.slice(0, 10)) warnings.push('check "' + e.check + '"' + (e.page ? ' on ' + e.page : '') + ' failed: ' + e.message);
     if (checks.stats.errors.length > 10) warnings.push('and ' + (checks.stats.errors.length - 10) + ' more check error(s) — see checks.json');
@@ -502,7 +509,8 @@ export const STRINGS = Object.freeze({
     capped: 'Score capped at 40 by an established, severity-5 failure',
     suppressed: 'Caps suppressed (non-production environment)',
     categories: 'categories', category: 'Category', weight: 'Weight', value: 'Value', active: 'Active',
-    yes: 'yes', no_data: 'no findings', not_active: 'inactive',
+    yes: 'yes', no_data: 'no findings', not_active: 'inactive', active_no_findings: 'active, no scored findings',
+    coverage_col: 'Coverage', provisional: 'provisional — below the coverage floor, treat the band as indicative',
     scored_col: 'Scored', needs_api: 'needs_api', manual_review: 'manual_review',
     sampling: 'Sampling', template: 'Template', type: 'Type', discovered: 'Discovered', sampled: 'Sampled',
     roles: 'Pages by role', skipped: 'Skipped URLs', no_crawl: 'No crawl manifest in this run — sampling is not available.',
@@ -531,7 +539,8 @@ export const STRINGS = Object.freeze({
     capped: 'Puntuación limitada a 40 por un fallo establecido de severidad 5',
     suppressed: 'Límites suprimidos (entorno no productivo)',
     categories: 'categorías', category: 'Categoría', weight: 'Peso', value: 'Valor', active: 'Activa',
-    yes: 'sí', no_data: 'sin hallazgos', not_active: 'inactiva',
+    yes: 'sí', no_data: 'sin hallazgos', not_active: 'inactiva', active_no_findings: 'activa, sin hallazgos puntuados',
+    coverage_col: 'Cobertura', provisional: 'provisional — por debajo del piso de cobertura; la banda es indicativa',
     scored_col: 'Puntuadas', needs_api: 'needs_api', manual_review: 'manual_review',
     sampling: 'Muestreo', template: 'Plantilla', type: 'Tipo', discovered: 'Descubiertas', sampled: 'Muestreadas',
     roles: 'Páginas por rol', skipped: 'URLs omitidas', no_crawl: 'Esta ejecución no tiene manifiesto de rastreo — no hay muestreo disponible.',
@@ -592,7 +601,16 @@ function categoryTable(t, axisScore) {
     '|---|---:|---:|---|---:|---:|---:|',
   ];
   for (const c of axisScore.categories) {
-    const state = c.active ? t.yes : (c.conditional ? t.not_active + ' (' + c.activation + ')' : t.no_data);
+    // Four distinct states, which the old label collapsed into one: scored; condition met but no
+    // scored finding landed in it; condition not met at all; and — for an always-on category — it
+    // ran and produced only unscored findings. That last one must not read "no findings" while the
+    // needs_api column on the same row says 1.
+    const unscored = (Number(c.needs_api) || 0) + (Number(c.manual_review) || 0);
+    const state = c.active
+      ? t.yes
+      : c.conditional
+        ? (c.activation === 'inactive' ? t.not_active : t.active_no_findings + ' (' + c.activation + ')')
+        : unscored > 0 ? t.active_no_findings : t.no_data;
     rows.push('| ' + [cell(c.name), c.weight, c.active ? c.value : '—', state, c.scored, c.needs_api, c.manual_review].join(' | ') + ' |');
   }
   return rows;
@@ -626,14 +644,17 @@ export function renderMarkdown(report, opts = {}) {
 
   // Scores
   L.push('## ' + t.scores, '');
-  L.push('| ' + [t.axis, t.score, t.band, t.interpretation].join(' | ') + ' |', '|---|---:|---|---|');
+  L.push('| ' + [t.axis, t.score, t.band, t.coverage_col, t.interpretation].join(' | ') + ' |', '|---|---:|---|---:|---|');
   for (const [key, label] of [['search_seo', t.search], ['ai_visibility', t.ai]]) {
     const s = report.scores[key];
-    L.push('| ' + [label, s.value === null ? t.unscored : s.value, s.band, cell(s.interpretation)].join(' | ') + ' |');
+    const band = s.band + (s.provisional ? ' \\*' : '');
+    const cov = typeof s.coverage === 'number' ? s.coverage + '%' : '—';
+    L.push('| ' + [label, s.value === null ? t.unscored : s.value, band, cov, cell(s.interpretation)].join(' | ') + ' |');
   }
   L.push('');
   for (const [key, label] of [['search_seo', t.search], ['ai_visibility', t.ai]]) {
     const s = report.scores[key];
+    if (s.provisional) L.push('- **' + label + ':** \\* ' + t.provisional + ' (' + (s.coverage_weight || 0) + '/' + (s.coverage_total || 0) + ')');
     if (s.capped && s.cap_reasons.length) L.push('- **' + label + ':** ' + t.capped + ' — ' + s.cap_reasons.map((r) => r.id).join(', '));
     if (s.suppressed_caps && s.suppressed_caps.length) L.push('- **' + label + ':** ' + t.suppressed + ' — ' + s.suppressed_caps.map((r) => r.id).join(', '));
   }
@@ -715,9 +736,15 @@ export function renderMarkdown(report, opts = {}) {
     L.push('');
   }
 
-  if (report.warnings && report.warnings.length) {
+  const axisWarnings = [];
+  for (const [key, label] of [['search_seo', t.search], ['ai_visibility', t.ai]]) {
+    const s = report.scores[key];
+    for (const w of (s && s.warnings) || []) axisWarnings.push(label + ': ' + w);
+  }
+  if ((report.warnings && report.warnings.length) || axisWarnings.length) {
     L.push('## ' + t.warnings, '');
-    for (const w of report.warnings) L.push('- ' + w);
+    for (const w of report.warnings || []) L.push('- ' + w);
+    for (const w of axisWarnings) L.push('- ' + w);
     L.push('');
   }
 

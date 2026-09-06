@@ -39,6 +39,8 @@ Findings conform to `schema/finding.schema.json`. **Severity policy**: 5 is rese
 - `M7.title.duplicate_across_urls` — the same `<title>` is served from several sampled URLs (warn, severity 3, `fixable: proposed`, axis `search`, confidence `directional`). One finding per duplicate cluster, quoting the shared title and the URLs.
 - `M7.description.duplicate_across_urls` — the same meta description is served from several sampled URLs (warn, severity 2, `fixable: proposed`, axis `search`, confidence `directional`).
 Both duplicate checks are cross-URL: with fewer than two content pages in the run they are reported once as `M7.title.duplicate_across_urls` with status `needs_api` (severity 0, unscored), never as a pass.
+**Platform-conditional ids.** This module also emits 6 ids that fire only when `profile.json` names the platform (`shopify`, `wordpress`, `nextjs`, `gatsby`, `jekyll`, `react-router`). They are indexed in `references/routing.md` § Platform-conditional finding ids and specified in `references/platforms/<id>.md` §10.
+
 Each finding: `evidence.observed` quotes the head verbatim (e.g. the exact title string + its length); `verification.reproduce` is the runnable `parse-html.mjs` command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

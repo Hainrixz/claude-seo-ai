@@ -6,7 +6,7 @@
 // M1 owns "no Sitemap: directive and nothing discovered"; this module owns "a sitemap exists but
 // robots.txt does not point at it", so the two never double-count the same fact.
 
-import { mk, push, clip, listing, plural, urlKey, finalUrl, originOf, isContentPage } from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, urlKey, finalUrl, originOf, isContentPage } from './_shared.mjs';
 
 /** With fewer <loc> entries than this, identical lastmod values are unremarkable. */
 export const LASTMOD_SAMPLE_MIN = 3;
@@ -116,7 +116,7 @@ export const check = {
       push(out, mk({
         id: 'M17.sitemap.noindex_url', title: 'The sitemap lists URLs the site excludes from the index', status: 'fail', severity: 3, scope: 'site',
         location: { url: excluded[0].loc },
-        evidence: { observed: plural(excluded.length, 'sitemap URL') + ' is noindex or non-canonical: ' + listing(excluded.map((e) => e.loc + (e.noindex ? ' (noindex)' : '') + (e.canonical ? ' (canonical -> ' + e.canonical + ')' : '')), 4) + '.' },
+        evidence: { observed: plural(excluded.length, 'sitemap URL') + ' ' + agree(excluded.length, 'is', 'are') + ' noindex or non-canonical: ' + listing(excluded.map((e) => e.loc + (e.noindex ? ' (noindex)' : '') + (e.canonical ? ' (canonical -> ' + e.canonical + ')' : '')), 4) + '.' },
         expected: 'A sitemap lists only canonical, indexable URLs.',
         recommendation: 'Remove the excluded URLs from the sitemap, or list the canonical version instead. A sitemap entry asks the engine to index a URL the page itself declines.',
         fixable: 'proposed',
@@ -165,7 +165,7 @@ export const check = {
       push(out, mk({
         id: 'M17.sitemap.missing_indexable_url', title: 'Indexable pages the crawl found are absent from the sitemap', status: 'warn', severity: 3, scope: 'site',
         location: { url: finalUrl(missing[0]) },
-        evidence: { observed: plural(missing.length, 'crawled indexable URL') + ' is not listed in any sitemap (' + sm.url_count + ' URLs across ' + plural(sm.found, 'sitemap file') + '): ' + listing(missing.map((p) => finalUrl(p)), 4) + '.' },
+        evidence: { observed: plural(missing.length, 'crawled indexable URL') + ' ' + agree(missing.length, 'is', 'are') + ' not listed in any sitemap (' + sm.url_count + ' URLs across ' + plural(sm.found, 'sitemap file') + '): ' + listing(missing.map((p) => finalUrl(p)), 4) + '.' },
         expected: 'Every indexable URL appears in a sitemap.',
         recommendation: 'Regenerate the sitemap from the same source that generates the site\'s routes so new URLs cannot be forgotten.',
         fixable: 'proposed',

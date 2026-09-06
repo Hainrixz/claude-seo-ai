@@ -85,6 +85,20 @@ Re-assignments applied in v0.2.0: `M11.heading.no_direct_answer` 5→3 · `M11.p
 - Bands (`scripts/lib/bands.mjs`): **A** ≥ 90, **B** ≥ 80, **C** ≥ 70, **D** ≥ 60, **F** < 60.
 - When an axis has **no active category with weight > 0** (no findings, only `needs_api`/`manual_review`, only inactive conditionals or only weight-0 modules) the axis is **`unscored`**: `value: null`, `raw_value: null`, `band: "unscored"`, `state: "unscored"`. An empty findings set is never an F.
 
+## Coverage floor and the `partial` state
+
+A score built from two of thirteen categories is not the same claim as one built from all thirteen, and the axis object has to say so. Each axis therefore reports **coverage**: the share (%) of its **always-on** weight that carried at least one scored finding.
+
+- Denominator: the always-on categories only (they sum to 100 on both axes). A conditional category's weight exists only when its vertical is declared, so including it would make coverage depend on the vertical rather than on how much was measured.
+- Numerator: the weight of the always-on categories that ended up `active` (condition met **and** at least one scored finding).
+- Keys: `coverage` (%), `coverage_weight` (the measured weight), `coverage_total` (the denominator), `provisional` (boolean).
+
+When `coverage` falls below **`COVERAGE_FLOOR` = 50%**, the axis is **provisional**: `provisional: true`, `state: "partial"` (instead of `scored`), and a warning naming the unmeasured categories. **The numbers never change** — `value`, `raw_value` and `band` stay exactly as computed, because hiding a number is its own dishonesty; the caveat travels next to it instead. `report.md` prints the coverage column, marks the band with `*` and repeats the warning under **Warnings**.
+
+A `capped` axis keeps `state: "capped"` (the cap is the stronger, actionable fact) and still reports `provisional` and the coverage warning. An `unscored` axis is never provisional — there is nothing to qualify.
+
+Typical trigger: `--pages 1 --no-crawl`, a run where only robots and agent-readiness produced findings, or an axis whose remaining categories were all `needs_api`.
+
 ## Severity gating (caps)
 
 A finding **caps its axis at 40 (band F)** only when **all** of these hold:
@@ -131,8 +145,9 @@ When one axis is unscored, the other is interpreted on its own level (high → "
 
 ```
 value, band, capped, needs_api_count,                       ← legacy keys
-raw_value, state (scored|capped|unscored), cap_reasons[], suppressed_caps[],
+raw_value, state (scored|partial|capped|unscored), cap_reasons[], suppressed_caps[],
 manual_review_count, unscored_count, dropped_count, warnings[],
+coverage, coverage_weight, coverage_total, provisional,
 categories[] { name, weight, value, active, modules[], active_weight, activation, conditional, scored, needs_api, manual_review },
 interpretation
 ```

@@ -51,21 +51,26 @@ Cuando se necesita un renderizado **y** hay un MCP de renderizado disponible, el
 
 Los CWV de campo (los datos CrUX p75 por los que Google realmente posiciona) provienen de `scripts/psi-client.mjs`, que llama a la API de Google PageSpeed Insights. La clave es **opcional pero recomendada**: sin clave o sin red, el cliente devuelve `status: "needs_api"` en lugar de adivinar.
 
-Establece la clave una vez en tu entorno:
+Establece la clave una vez en tu entorno. El cliente la lee primero de
+`CLAUDE_PLUGIN_OPTION_PSI_API_KEY` (lo que exporta un `userConfig` del plugin) y
+después de `PSI_API_KEY`:
 
 ```bash
 export PSI_API_KEY="<your-free-pagespeed-key>"
 ```
 
-Después ejecuta el cliente (lee `PSI_API_KEY` del entorno si se omite `--key`):
+Deliberadamente **no existe una bandera `--key`**, ni aquí ni en `audit.mjs`: un
+secreto en la línea de comandos queda en `ps`, en el historial del shell y en
+cualquier registro de comandos, y estos scripts imprimen el comando para
+reproducir la ejecución. Para una clave puntual, antepónla a la invocación:
 
 ```bash
 node scripts/psi-client.mjs --url https://example.com
 node scripts/psi-client.mjs --url https://example.com --strategy desktop
-node scripts/psi-client.mjs --url https://example.com --key "$PSI_API_KEY"
+PSI_API_KEY="<key>" node scripts/psi-client.mjs --url https://example.com
 ```
 
-Banderas: `--url` (obligatoria), `--strategy mobile|desktop` (por defecto `mobile`), `--key` (sobrescribe la variable de entorno). Informa de las métricas de campo evaluadas frente a los umbrales p75, con los datos de laboratorio devueltos por separado y marcados explícitamente como **"NO es por lo que Google posiciona."**
+Banderas: `--url` (obligatoria), `--strategy mobile|desktop` (por defecto `mobile`). Informa de las métricas de campo evaluadas frente a los umbrales p75, con los datos de laboratorio devueltos por separado y marcados explícitamente como **"NO es por lo que Google posiciona."**
 
 Umbrales p75 de campo (`references/cwv-thresholds.md`):
 

@@ -41,6 +41,8 @@ Emit findings per `schema/finding.schema.json`. Examples:
 - `M17.sitemap.missing_indexable_url` — an indexable URL the crawl found is listed in no sitemap (status `warn`, severity 3, `fixable: proposed`, axis `search`, confidence `directional` — a well-linked page is discovered without a sitemap).
 - `M17.sitemap.lastmod_identical` — every `<loc>` carries the same `<lastmod>`, so the file cannot distinguish a changed page from an unchanged one (status `warn`, severity 2, `fixable: advisory`, axis `search`, confidence `directional`).
 Per-URL verdicts are only emitted for `<loc>` entries the crawl actually fetched; a URL that was never visited is left unreported rather than guessed. `M17.sitemap.missing` is also emitted as `needs_api` when sitemap discovery never ran in the run (`--artifacts none` / `--no-sitemaps`), which is a different fact from "no sitemap exists".
+**Platform-conditional ids.** This module also emits 8 ids that fire only when `profile.json` names the platform (`shopify`, `wordpress`, `nextjs`, `nuxt`, `astro`, `gatsby`, `hugo`). They are indexed in `references/routing.md` § Platform-conditional finding ids and specified in `references/platforms/<id>.md` §10.
+
 Each finding: `evidence.observed` quotes the page/sitemap verbatim; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

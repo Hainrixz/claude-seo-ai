@@ -6,7 +6,7 @@
 
 import { isBcp47 } from '../lib/util.mjs';
 import {
-  mk, push, clip, listing, plural, contentPages, finalUrl, hreflangEntries, isMultilingual,
+  mk, push, clip, listing, plural, agree, contentPages, finalUrl, hreflangEntries, isMultilingual,
   urlKey, snapRepro, originOf,
 } from './_shared.mjs';
 
@@ -209,7 +209,7 @@ export const check = {
       if (unmeasured.length && !oneWay.length) {
         push(out, mk({
           id: 'M20.hreflang.missing_reciprocal', title: 'Reciprocity of some alternates was not measured', status: 'needs_api', scope: 'page', ...at,
-          evidence: { observed: plural(unmeasured.length, 'alternate') + ' declared by ' + url + ' was not fetched in this run, so the return link could not be verified: ' + listing(unmeasured.map((e) => e.hreflang + ' -> ' + clip(e.abs, 70)), 4) + '.' },
+          evidence: { observed: plural(unmeasured.length, 'alternate') + ' declared by ' + url + ' ' + agree(unmeasured.length, 'was', 'were') + ' not fetched in this run, so the return link could not be verified: ' + listing(unmeasured.map((e) => e.hreflang + ' -> ' + clip(e.abs, 70)), 4) + '.' },
           expected: 'Every alternate is fetched and its return annotation confirmed.',
           recommendation: 'Run hreflang-check.mjs --deep on this URL (it fetches the alternates within a budget), or widen the crawl to include the other locales.',
           fixable: 'advisory',

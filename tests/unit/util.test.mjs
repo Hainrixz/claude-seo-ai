@@ -8,7 +8,7 @@ import { realpathSync } from 'node:fs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const util = await import(pathToFileURL(join(ROOT, 'scripts', 'lib', 'util.mjs')).href);
-const { parseArgs, emit, runCli, isMain, inputFailure, loadInput, EXIT } = util;
+const { parseArgs, emit, runCli, isMain, inputFailure, loadInput, credential, EXIT } = util;
 
 /** Run fn with stdout captured and process.exitCode restored afterwards. */
 async function captured(fn) {
@@ -75,6 +75,16 @@ test('isMain matches the process entry file exactly (symlink-safe) and never thr
   assert.equal(isMain(pathToFileURL(join(ROOT, 'scripts', 'lib', 'util.mjs')).href), false, 'an imported library is never main');
   assert.equal(isMain('file:///definitely/not/here.mjs'), false);
   assert.equal(isMain(undefined), false);
+});
+
+test('credential(): CLAUDE_PLUGIN_OPTION_<KEY> wins over <KEY>, and blanks are not values', () => {
+  assert.equal(credential('PSI_API_KEY', { PSI_API_KEY: 'plain' }), 'plain');
+  assert.equal(credential('PSI_API_KEY', { CLAUDE_PLUGIN_OPTION_PSI_API_KEY: 'from-plugin', PSI_API_KEY: 'plain' }), 'from-plugin');
+  assert.equal(credential('PSI_API_KEY', { CLAUDE_PLUGIN_OPTION_PSI_API_KEY: '   ', PSI_API_KEY: 'plain' }), 'plain',
+    'a blank plugin option falls through instead of masking the env var');
+  assert.equal(credential('PSI_API_KEY', { PSI_API_KEY: '  spaced  ' }), 'spaced');
+  assert.equal(credential('PSI_API_KEY', {}), null);
+  assert.equal(credential('PSI_API_KEY', { PSI_API_KEY: 42 }), null, 'a non-string is not a credential');
 });
 
 test('EXIT taxonomy is frozen', () => {

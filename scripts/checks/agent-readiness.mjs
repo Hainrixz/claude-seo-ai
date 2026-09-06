@@ -8,7 +8,7 @@
 // as not_applicable with the Tier-1 path that would answer them.
 
 import { analyzeAgentReadiness, NOT_CHECKABLE_STATIC } from '../agent-readiness.mjs';
-import { mk, push, clip, listing, plural, contentPages, finalUrl, snapRepro, tokensFor } from './_shared.mjs';
+import { mk, push, clip, listing, describeExample, plural, contentPages, finalUrl, snapRepro, tokensFor } from './_shared.mjs';
 
 const DIRECTIONAL = 'Browsing agents read the DOM the way assistive technology does, but no vendor publishes how a specific control pattern affects task completion.';
 
@@ -43,7 +43,7 @@ export const check = {
         push(out, mk({
           id: 'M22.controls.non_semantic_interactive', title: 'Controls are built from non-semantic elements',
           status: dominant ? 'fail' : 'warn', severity: 3, ...base,
-          evidence: { observed: a.interactive.fake + ' improvised control(s) against ' + a.interactive.semantic + ' native button-like element(s) on ' + url + ': ' + listing((a.interactive.fake_examples || []).map((e) => clip(e, 80)), 3) + '.' },
+          evidence: { observed: a.interactive.fake + ' improvised control(s) against ' + a.interactive.semantic + ' native button-like element(s) on ' + url + ': ' + listing((a.interactive.fake_examples || []).map((e) => describeExample(e, 80)), 3) + '.' },
           expected: 'Anything clickable is a <button>, an <a href>, or carries a valid interactive role plus keyboard handling.',
           recommendation: 'Replace the div/span handlers with <button type="button"> (or <a href> for navigation). An agent that cannot recognise a control cannot use it.',
           fixable: 'proposed',
@@ -57,7 +57,7 @@ export const check = {
         clean = false;
         push(out, mk({
           id: 'M22.controls.button_without_name', title: 'Buttons have no accessible name', status: 'warn', severity: 2, ...base,
-          evidence: { observed: a.buttons.without_name + ' of ' + a.buttons.total + ' button(s) on ' + url + ' expose no text, aria-label or labelled image: ' + listing((a.buttons.without_name_examples || []).map((e) => clip(e, 80)), 3) + '.' },
+          evidence: { observed: a.buttons.without_name + ' of ' + a.buttons.total + ' button(s) on ' + url + ' expose no text, aria-label or labelled image: ' + listing((a.buttons.without_name_examples || []).map((e) => describeExample(e, 80)), 3) + '.' },
           expected: 'Every button carries text, an aria-label, or an image with alt text.',
           recommendation: 'Add visible text or an aria-label naming the action the button performs.',
           fixable: 'proposed',
@@ -71,7 +71,7 @@ export const check = {
         clean = false;
         push(out, mk({
           id: 'M22.links.empty_name', title: 'Links have no accessible name', status: 'warn', severity: 2, ...base,
-          evidence: { observed: a.links.empty_name + ' of ' + a.links.total + ' link(s) on ' + url + ' have no text, alt or aria-label: ' + listing((a.links.empty_name_examples || []).map((e) => clip(e, 80)), 3) + '.' },
+          evidence: { observed: a.links.empty_name + ' of ' + a.links.total + ' link(s) on ' + url + ' have no text, alt or aria-label: ' + listing((a.links.empty_name_examples || []).map((e) => describeExample(e, 80)), 3) + '.' },
           expected: 'Every link names its destination.',
           recommendation: 'Give the link text, or an aria-label when it wraps an icon.',
           fixable: 'proposed',
@@ -85,7 +85,7 @@ export const check = {
         clean = false;
         push(out, mk({
           id: 'M22.links.href_javascript', title: 'Links navigate through javascript: hrefs', status: 'warn', severity: 2, ...base,
-          evidence: { observed: a.interactive.anchor_javascript_href + ' anchor(s) on ' + url + ' use a javascript: href: ' + listing((a.interactive.anchor_javascript_href_examples || []).map((e) => clip(e, 80)), 3) + '.' },
+          evidence: { observed: a.interactive.anchor_javascript_href + ' anchor(s) on ' + url + ' use a javascript: href: ' + listing((a.interactive.anchor_javascript_href_examples || []).map((e) => describeExample(e, 80)), 3) + '.' },
           expected: 'Links carry a real URL; script-only actions are buttons.',
           recommendation: 'Give the anchor the destination URL, or convert it to a <button> if it performs an action rather than navigating.',
           fixable: 'proposed',
@@ -99,7 +99,7 @@ export const check = {
         clean = false;
         push(out, mk({
           id: 'M22.forms.unlabeled_controls', title: 'Form controls have no label', status: 'warn', severity: 3, ...base,
-          evidence: { observed: a.forms.unlabeled + ' of ' + a.forms.controls_total + ' form control(s) on ' + url + ' have no <label for>, wrapping label, aria-label or aria-labelledby: ' + listing((a.forms.unlabeled_examples || []).map((e) => clip(e, 80)), 3) + '.' },
+          evidence: { observed: a.forms.unlabeled + ' of ' + a.forms.controls_total + ' form control(s) on ' + url + ' have no <label for>, wrapping label, aria-label or aria-labelledby: ' + listing((a.forms.unlabeled_examples || []).map((e) => describeExample(e, 80)), 3) + '.' },
           expected: 'Every form control is labelled.',
           recommendation: 'Add a <label for="…"> (or aria-label) naming what each field expects. A placeholder is not a label.',
           fixable: 'proposed',

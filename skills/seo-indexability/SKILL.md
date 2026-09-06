@@ -49,6 +49,8 @@ Findings conform to `schema/finding.schema.json`; axis `search`. Each carries `e
 - `M2.cloaking.ua_content_divergence` — the origin serves materially different content to `googlebot` than to a default browser UA (`warn`, severity 4, `fixable: advisory`, confidence `directional`).
 - `M2.hosting.preview_environment_audited` — the audited host is a preview/staging/local environment (`warn`, severity 1, `fixable: advisory`, `established`).
 
+**Platform-conditional ids.** This module also emits 6 ids that fire only when `profile.json` names the platform (`shopify`, `wordpress`). They are indexed in `references/routing.md` § Platform-conditional finding ids and specified in `references/platforms/<id>.md` §10.
+
 ## Honesty
 - A canonical is a *hint*, not a directive — Google may pick a different canonical; report it as strong consolidation, not a guarantee.
 - **Self-canonical + `noindex` is not a bug.** Reporting every noindexed page as a lethal contradiction is a well-known false positive; this module only calls the pair lethal when the canonical points elsewhere, and it never removes a `noindex` without the user's confirmation.

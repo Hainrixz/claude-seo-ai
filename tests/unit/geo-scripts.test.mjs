@@ -270,6 +270,47 @@ describe('ai-discovery (M21)', () => {
     assert.ok(r.errors.every((e) => Number.isInteger(e.line)));
   });
 
+  it('llms.txt: a prose bullet is legal markdown, not a structural defect', () => {
+    // llmstxt.org allows "zero or more markdown sections … of any type except headings", so a file
+    // that explains itself in bullets before listing its links is correct.
+    const body = [
+      '# Vendor', '', '> A frontend cloud.', '',
+      '## When to use it', '',
+      '- You are deploying a JavaScript app', '- You want a preview per pull request', '',
+      '## Docs', '', '- [Getting started](https://vendor.example/docs): the basics', '',
+    ].join('\n');
+    const r = validateLlmsTxt(body, { origin: 'https://vendor.example' });
+    assert.equal(r.ok, true, JSON.stringify(r.errors));
+    assert.deepEqual(r.errors, []);
+    assert.equal(r.prose_items, 2, 'the prose bullets are counted, not flagged');
+    assert.deepEqual(r.warnings, [], 'a section made of prose is not a "section without links"');
+    assert.equal(r.links_total, 1);
+  });
+
+  it('llms.txt: a prose bullet that quotes a URL in a code span is prose, not a malformed link', () => {
+    // The real-world shape this protects: a documentation bullet whose only URL is an example
+    // request in backticks. Flagging it produced a line-precise defect claim against a correct file.
+    const body = [
+      '# Fixture Shop', '', '> A store that documents its agent endpoints.', '',
+      '## How agents use this store', '',
+      '- **Discovery** — `GET https://fixture.example/.well-known/ucp` returns the merchant profile: versions, endpoints and payment handlers.',
+      '- Checkout is described at the endpoint above; see the profile for the supported versions.', '',
+      '## Links', '', '- [Catalogue](https://fixture.example/catalog): every product', '',
+    ].join('\n');
+    const r = validateLlmsTxt(body, { origin: 'https://fixture.example' });
+    assert.deepEqual(r.errors, [], JSON.stringify(r.errors));
+    assert.equal(r.ok, true);
+    assert.equal(r.prose_items, 2, 'both sentences are counted as prose');
+    assert.equal(r.links_total, 1);
+  });
+
+  it('llms.txt: a bullet that tried to be a link and failed is still an error', () => {
+    // A URL in LINK POSITION: bare, or straight after a short label. Both are un-bracketed links.
+    const r = validateLlmsTxt('# T\n\n## S\n\n- [Broken](\n- https://bare.example/x\n- **Privacy policy**: https://ok.example/p\n- [Fine](https://ok.example/y)\n');
+    assert.deepEqual(r.errors.map((e) => e.reason), ['malformed_list_item', 'malformed_list_item', 'malformed_list_item']);
+    assert.equal(r.prose_items, 0);
+  });
+
   it('llms.txt: HTML served instead of markdown is an error, not an empty pass', () => {
     const r = validateLlmsTxt('<!doctype html><html><body>404</body></html>');
     assert.equal(r.looks_like_html, true);
@@ -332,6 +373,28 @@ describe('ai-discovery (M21)', () => {
     const bad = validateAgenticSitemap('<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://a.example/s.xml</loc></sitemap></sitemapindex>');
     assert.equal(bad.ok, false);
     assert.ok(bad.errors.some((e) => e.reason === 'sitemapindex_not_urlset'), JSON.stringify(bad.errors));
+  });
+
+  it('agentic sitemap: an HTML catch-all page at that path is absent, not published-and-broken', () => {
+    const body = '<!doctype html><html><body>This page could not be found.</body></html>';
+    for (const probe of [{ looks_like_html: true }, { content_type: 'text/html; charset=utf-8' }, {}]) {
+      const r = validateAgenticSitemap(body, probe);
+      assert.equal(r.present, false, JSON.stringify(probe));
+      assert.equal(r.looks_like_html, true);
+      assert.deepEqual(r.errors, [], 'a file that does not exist has no defects to fix');
+      assert.deepEqual(r.warnings.map((w) => w.reason), ['html_response_not_xml']);
+    }
+  });
+
+  it('a soft-404 HTML body at /.well-known/ucp is not reported as an invalid profile', () => {
+    const discovery = {
+      origin: 'https://a.example',
+      probes: { '/.well-known/ucp': { url: 'https://a.example/.well-known/ucp', status: 200, ok: true, json_valid: false, looks_like_html: true, content_type: 'text/html', text: '<!doctype html><html></html>' } },
+      summary: { statuses: {}, found: [] },
+    };
+    const d = analyzeDiscovery(discovery, null);
+    assert.equal(d.ucp.present, false);
+    assert.deepEqual(d.ucp.errors, []);
   });
 
   it('robots cross-check flags a discovery file blocked for its own audience', () => {

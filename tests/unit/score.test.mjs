@@ -77,9 +77,11 @@ describe('legacy fixture after severity recalibration (plan 4f)', () => {
   it('M11.heading.no_direct_answer is severity 3 in the fixture', () => {
     assert.equal(fx.find((f) => f.id === 'M11.heading.no_direct_answer').severity, 3);
   });
-  it('search 56.4 F, ai 29.2 F — neither capped', () => {
-    assert.deepEqual([r.search_seo.value, r.search_seo.band, r.search_seo.capped, r.search_seo.state], [56.4, 'F', false, 'scored']);
-    assert.deepEqual([r.ai_visibility.value, r.ai_visibility.band, r.ai_visibility.capped, r.ai_visibility.state], [29.2, 'F', false, 'scored']);
+  it('search 56.4 F, ai 29.2 F — neither capped (both provisional: a 7-finding fixture measures under half of each axis)', () => {
+    assert.deepEqual([r.search_seo.value, r.search_seo.band, r.search_seo.capped, r.search_seo.state], [56.4, 'F', false, 'partial']);
+    assert.deepEqual([r.ai_visibility.value, r.ai_visibility.band, r.ai_visibility.capped, r.ai_visibility.state], [29.2, 'F', false, 'partial']);
+    assert.deepEqual([r.search_seo.coverage, r.search_seo.provisional], [39, true]);
+    assert.deepEqual([r.ai_visibility.coverage, r.ai_visibility.provisional], [48, true]);
     assert.equal(r.search_seo.raw_value, r.search_seo.value);
     assert.deepEqual(r.ai_visibility.cap_reasons, []);
   });
@@ -117,11 +119,11 @@ describe('severity gating (sev 5 + fail + established + active weighted category
   });
   it('a directional sev-5 FAIL (M11) and a weight-0 sev-5 FAIL (M21) never cap the AI axis', () => {
     const a = scoreFindings(gated).ai_visibility;
-    assert.deepEqual([a.value, a.raw_value, a.band, a.state, a.capped, a.cap_reasons], [60.9, 60.9, 'D', 'scored', false, []]);
+    assert.deepEqual([a.value, a.raw_value, a.band, a.state, a.capped, a.cap_reasons], [60.9, 60.9, 'D', 'partial', false, []]);
   });
   it('a speculative sev-5 FAIL does not cap', () => {
     const r = scoreFindings([F('M2.robots.noindex_sitewide', { status: 'fail', severity: 5, scope: 'site', expected_impact: imp('search', 'speculative') })]);
-    assert.deepEqual([r.search_seo.value, r.search_seo.capped, r.search_seo.state, r.search_seo.cap_reasons], [0, false, 'scored', []]);
+    assert.deepEqual([r.search_seo.value, r.search_seo.capped, r.search_seo.state, r.search_seo.cap_reasons], [0, false, 'partial', []]);
   });
   it('a sev-5 established FAIL in an inactive conditional category does not cap', () => {
     const r = scoreFindings([
@@ -138,12 +140,67 @@ describe('severity gating (sev 5 + fail + established + active weighted category
   });
 });
 
+describe('coverage floor and the provisional band', () => {
+  // Always-on search weights: M1/M2/M3 22 · M15 16 · M7 12 · M5 12 · M4 8 · M10 8 · M16 7 · M9 5 · M17 5 · M13 3 · M8 2.
+  const wide = () => ([
+    F('M1.robots.ok', { expected_impact: imp('search', 'established') }),          // 22
+    F('M15.lcp.ok', { module: 'M15', expected_impact: imp('search') }),            // 16
+    F('M7.title.ok', { expected_impact: imp('search') }),                          // 12
+    F('M5.product.ok', { expected_impact: imp('search') }),                        // 12
+  ]);
+
+  it('an axis that measured 62 of 100 always-on weight is scored, not provisional, and warns about nothing', () => {
+    const s = scoreFindings(wide()).search_seo;
+    assert.deepEqual([s.state, s.provisional, s.coverage, s.coverage_weight, s.coverage_total], ['scored', false, 62, 62, 100]);
+    assert.ok(!s.warnings.some((w) => /^coverage /.test(w)), JSON.stringify(s.warnings));
+  });
+
+  it('an axis built from one category keeps its exact value and band but says only 22% was measured', () => {
+    const s = scoreFindings([F('M1.robots.ok', { expected_impact: imp('search', 'established') })]).search_seo;
+    assert.deepEqual([s.value, s.raw_value, s.band], [100, 100, 'A'], 'the numbers are never hidden or discounted');
+    assert.deepEqual([s.state, s.provisional, s.coverage, s.coverage_weight], ['partial', true, 22, 22]);
+    const w = s.warnings.find((x) => /^coverage /.test(x));
+    assert.match(w, /only 22 of 100 always-on weight on the search axis/);
+    assert.match(w, /provisional/);
+    assert.match(w, /Core Web Vitals/, 'the warning names what was not measured');
+    validAxis(s);
+  });
+
+  it('conditional weight is outside the denominator: declaring a vertical does not inflate coverage', () => {
+    const fs = [F('M1.robots.ok', { expected_impact: imp('search', 'established') }), F('M18.offer.missing_price', { status: 'fail', expected_impact: imp('search') })];
+    const plain = scoreFindings(fs, { vertical: 'saas' }).search_seo;
+    const store = scoreFindings(fs, { vertical: 'ecommerce' }).search_seo;
+    assert.equal(plain.coverage, 22);
+    assert.equal(store.coverage, 22, 'E-commerce is conditional weight; it cannot raise how much of the always-on model was measured');
+    assert.ok(store.categories.find((c) => c.name === 'E-commerce').active, 'the conditional category is still scored');
+  });
+
+  it('a capped axis keeps state "capped" (the stronger fact) and still reports the coverage caveat', () => {
+    const s = scoreFindings([F('M2.robots.noindex_sitewide', { status: 'fail', severity: 5, scope: 'site', expected_impact: imp('search', 'established') })]).search_seo;
+    assert.deepEqual([s.state, s.capped, s.provisional], ['capped', true, true]);
+    assert.ok(s.warnings.some((w) => /^coverage /.test(w)));
+  });
+
+  it('an unscored axis is never provisional — there is nothing to qualify', () => {
+    const a = scoreFindings([F('M1.robots.ok', { expected_impact: imp('search') })]).ai_visibility;
+    assert.deepEqual([a.value, a.band, a.state, a.provisional, a.coverage], [null, 'unscored', 'unscored', false, 0]);
+    assert.ok(!a.warnings.some((w) => /^coverage /.test(w)));
+  });
+
+  it('the site rollup carries the same coverage keys', () => {
+    const manifest = { pages: [{ url: 'https://example.test/', role: 'homepage' }, { url: 'https://example.test/b', role: 'target' }] };
+    const r = scoreSite(manifest, { findings: [F('M1.robots.ok', { scope: 'site', expected_impact: imp('search', 'established') })] });
+    assert.deepEqual([r.search_seo.state, r.search_seo.provisional, r.search_seo.coverage], ['partial', true, 22]);
+    validAxis(r.search_seo);
+  });
+});
+
 describe('environment suppression of noindex/robots caps', () => {
   const gated = load('findings-gated.json');
   for (const env of ['preview', 'staging', 'local']) {
     it(`--environment ${env} suppresses the M2 noindex cap and warns`, () => {
       const s = scoreFindings(gated, { environment: env }).search_seo;
-      assert.deepEqual([s.value, s.band, s.capped, s.state, s.cap_reasons], [71.8, 'C', false, 'scored', []]);
+      assert.deepEqual([s.value, s.band, s.capped, s.state, s.cap_reasons], [71.8, 'C', false, 'partial', []]);
       assert.equal(s.suppressed_caps.length, 1);
       assert.equal(s.suppressed_caps[0].id, 'M2.robots.noindex_sitewide');
       assert.equal(s.suppressed_caps[0].environment, env);
