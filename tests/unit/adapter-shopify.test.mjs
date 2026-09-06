@@ -1340,3 +1340,75 @@ test('the fixture theme is the shape the adapters expect', () => {
   JSON.parse(readFileSync(join(FIXTURE_THEME, 'templates', 'product.json'), 'utf8'));
   JSON.parse(readFileSync(join(FIXTURE_THEME, 'config', 'settings_schema.json'), 'utf8'));
 });
+
+// ---------------------------------------------------------------------------
+// A thrown op must say why, and must not burn the change
+
+test('a thrown read-only op reports the reason and leaves the change retryable', async () => {
+  const { dataDir, cleanup } = sandbox();
+  const saved = { ...process.env };
+  try {
+    // Plan against a mock so the run holds two real shopify-admin changes…
+    const fetchImpl = mockFetch(adminRouter());
+    const { run, out } = await adminPlan(dataDir, fetchImpl, { findings: [adminFindings[0], adminFindings[1]] });
+    assert.ok(out.changes.length >= 2);
+    const id = out.changes[0].id;
+
+    // …then preview through the CLI with nothing injected and the network refused. `preview` reads
+    // the live values, so it throws — that is the transient failure this test is about.
+    Object.assign(process.env, adminEnv(), { CLAUDE_SEO_AI_OFFLINE: '1' });
+    const failed = await S.main({ _: ['preview'], run: run.dir, data: dataDir });
+    assert.equal(failed.code, 2);
+    for (const row of failed.result.results) {
+      assert.equal(row.ok, false);
+      assert.match(String(row.error || ''), /OFFLINE/i, 'the row carries the reason, not a bare "failed"');
+      assert.notEqual(row.status, 'failed', 'a read-only op never burns the change');
+    }
+
+    // The plan on disk is untouched, so the same change can be previewed once the network is back.
+    delete process.env.CLAUDE_SEO_AI_OFFLINE;
+    const plan = JSON.parse(readFileSync(join(run.dir, 'plan.json'), 'utf8'));
+    const stored = plan.changes.find((c) => c.id === id);
+    assert.equal(stored.status, 'planned');
+    assert.equal(A.canTransition(stored.status, 'previewed'), true);
+
+    const retried = await S.preview(stored, { run, dataDir, env: adminEnv(), fetchImpl, store: STORE });
+    assert.equal(retried.ok, true);
+    assert.equal(retried.change.status, 'previewed');
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+    cleanup();
+  }
+});
+
+test('CLAUDE_SEO_AI_OFFLINE refuses to spawn the Shopify CLI instead of reaching the store', async () => {
+  const { base, dataDir, cleanup } = sandbox();
+  try {
+    const bin = join(base, 'bin');
+    mkdirSync(bin, { recursive: true });
+    // A stub that leaves a mark: if the adapter spawns it, the marker file proves it.
+    const marker = join(base, 'spawned');
+    writeFileSync(join(bin, 'shopify'), '#!/bin/sh\necho ran > ' + JSON.stringify(marker) + '\n', { mode: 0o755 });
+    // No execImpl: with the flag set the adapter must answer without spawning anything.
+    const out = await T.capabilities({ dataDir, env: themeEnv({ PATH: bin, CLAUDE_SEO_AI_OFFLINE: '1' }), store: STORE });
+    assert.equal(existsSync(marker), false, 'the Shopify CLI was spawned despite CLAUDE_SEO_AI_OFFLINE=1');
+    assert.equal(out.tools.shopify.on_path, true, 'the PATH probe still answers offline');
+    assert.equal(out.tools.shopify.version, null);
+    assert.equal(out.themes, null, 'the theme list was never fetched');
+    assert.match(JSON.stringify(out.notes), /CLAUDE_SEO_AI_OFFLINE/);
+  } finally { cleanup(); }
+});
+
+test('capabilities names each missing credential exactly once', async () => {
+  const { dataDir, cleanup } = sandbox();
+  try {
+    const theme = await T.capabilities({ dataDir, env: { PATH: '' } });
+    assert.deepEqual(theme.needs, [...new Set(theme.needs)], 'no duplicate keys: ' + theme.needs.join(', '));
+    assert.equal(theme.needs.filter((n) => n === 'SHOPIFY_STORE').length, 1);
+
+    const admin = await S.capabilities({ dataDir, env: { PATH: '' } });
+    assert.deepEqual(admin.needs, [...new Set(admin.needs)], 'no duplicate keys: ' + admin.needs.join(', '));
+    assert.equal(admin.needs.filter((n) => n === 'SHOPIFY_STORE').length, 1);
+  } finally { cleanup(); }
+});

@@ -535,6 +535,8 @@ export function pruneTickets(dataDir, { now = Date.now() } = {}) {
 const SECRET_FLAGS = /(--?(?:[a-z0-9]+[-_])*(?:password|passwd|pass|token|api[-_]?key|secret|auth|access[-_]?token|bearer)[= ])(("[^"]*")|('[^']*')|(\S+))/gi;
 const SECRET_HEADERS = /((?:authorization|x-shopify-access-token|x-api-key|x-auth-token)\s*:\s*)([^"'\\\s][^"'\\]*)/gi;
 const BASIC_AUTH_URL = /(\bhttps?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi;
+// `curl -u user:app_password` / `--user`, the exact shape the WordPress REST docs use.
+const BASIC_AUTH_FLAG = /(^|\s)(-u|-U|--user|--proxy-user)([= ])((?:"[^"]*")|(?:'[^']*')|(?:\S+))/gi;
 const INLINE_ENV = /\b([A-Z][A-Z0-9_]{2,})=((?:"[^"]*")|(?:'[^']*')|(?:\S+))/g;
 
 /**
@@ -546,6 +548,14 @@ const INLINE_ENV = /\b([A-Z][A-Z0-9_]{2,})=((?:"[^"]*")|(?:'[^']*')|(?:\S+))/g;
 export function redactCommand(command, { env = process.env, extra = [] } = {}) {
   let s = redact(String(command == null ? '' : command), { env, extra });
   s = s.replace(BASIC_AUTH_URL, (_m, scheme, user) => scheme + user + ':[redacted]@');
+  s = s.replace(BASIC_AUTH_FLAG, (m, lead, flag, sep, value) => {
+    const q = /^["']/.test(value) ? value[0] : '';
+    const bare = q ? value.slice(1, -1) : value;
+    const at = bare.indexOf(':');
+    // No colon means no password on the command line (curl prompts for it) — nothing to hide.
+    if (at === -1) return m;
+    return lead + flag + sep + q + bare.slice(0, at) + ':[redacted]' + q;
+  });
   s = s.replace(SECRET_FLAGS, (_m, flag) => flag + '[redacted]');
   s = s.replace(SECRET_HEADERS, (_m, head) => head + '[redacted]');
   s = s.replace(INLINE_ENV, (m, key, value) => (/(TOKEN|SECRET|PASSWORD|PASSWD|KEY|AUTH|CREDENTIAL)/.test(key) ? key + '=[redacted]' : m));

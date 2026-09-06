@@ -10,16 +10,36 @@
 //   * the public-URL re-check with a cache-buster that turns "the API says yes, the HTML says no"
 //     into `pending_cache` instead of a false pass.
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   canTransition as canTransitionSafe,
   ensureConfirmed as ensureConfirmedChange,
+  redactCommand,
   transition as transitionChange,
 } from '../lib/adapter.mjs';
 import { decodeEntities } from '../lib/entities.mjs';
 import { makeHttp } from '../lib/http.mjs';
 import { redact, redactObject } from '../lib/credentials.mjs';
 import { readJson, writeJson, writeText } from '../lib/store.mjs';
+
+/**
+ * Is `name` an executable file on PATH? A filesystem probe, so a `capabilities` op can report a
+ * tool honestly without spawning it — a hard-coded `true` there is a fabricated capability claim.
+ * @returns {string|null} the full path, or null when the binary is not on PATH
+ */
+export function whichOnPath(name, env = process.env) {
+  const path = env && typeof env.PATH === 'string' ? env.PATH : '';
+  const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
+  for (const dir of path.split(process.platform === 'win32' ? ';' : ':')) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = join(dir, name + ext);
+      try { if (statSync(candidate).isFile()) return candidate; } catch { /* keep looking */ }
+    }
+  }
+  return null;
+}
 
 /** The SEO fields these adapters know how to carry from a finding to a platform field. */
 export const SEO_FIELDS = Object.freeze([
@@ -312,9 +332,14 @@ export function renderRequestPreview({ method, url, headers = {}, body = null, b
   return lines.join('\n');
 }
 
-/** A readable preview of a shell command plus what it reads back afterwards. */
+/**
+ * A readable preview of a shell command plus what it reads back afterwards.
+ * The command line goes through `redactCommand`, not the env-value-only `redact`: a preview is
+ * written to disk and read aloud in the transcript, so a `-u user:pass` or `--token=…` that never
+ * came from the environment must still be masked.
+ */
 export function renderCommandPreview({ command, before = null, notes = [], env = process.env }) {
-  const lines = ['$ ' + redact(String(command || ''), { env })];
+  const lines = ['$ ' + redactCommand(String(command || ''), { env })];
   if (before && Object.keys(before).length) {
     lines.push('');
     lines.push('before:');

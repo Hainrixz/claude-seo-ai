@@ -25,7 +25,7 @@
 // this tool prints.
 
 import { execFile } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
 import {
@@ -40,7 +40,11 @@ import { readJson, writeJson, writeText } from '../lib/store.mjs';
 import { parseRobots, isAllowed } from '../lib/robots.mjs';
 import { reproduceCommand } from '../lib/finding.mjs';
 import { fixableFindings, normalizeAnswers, parseFixPreview } from './local-files.mjs';
+import { whichOnPath } from './_shared.mjs';
 import { snapshotUrl } from '../snapshot.mjs';
+
+// re-exported so callers and tests keep one import site for the PATH probe
+export { whichOnPath };
 
 export const ADAPTER = 'shopify-theme';
 const OPS = ['capabilities', 'plan', 'preview', 'apply', 'verify', 'rollback', 'publish'];
@@ -153,20 +157,6 @@ export function childEnv(env = process.env, { store = null } = {}) {
   return out;
 }
 
-/** Is `shopify` on PATH? A cheap filesystem probe, so capabilities can answer without spawning. */
-export function whichOnPath(name, env = process.env) {
-  const path = env && typeof env.PATH === 'string' ? env.PATH : '';
-  const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
-  for (const dir of path.split(process.platform === 'win32' ? ';' : ':')) {
-    if (!dir) continue;
-    for (const ext of exts) {
-      const candidate = join(dir, name + ext);
-      try { if (statSync(candidate).isFile()) return candidate; } catch { /* keep looking */ }
-    }
-  }
-  return null;
-}
-
 function defaultExec(argv, opts = {}) {
   return new Promise((res) => {
     execFile(argv[0], argv.slice(1), {
@@ -181,11 +171,24 @@ function defaultExec(argv, opts = {}) {
   });
 }
 
-/** Run one `shopify …` argv through the injectable exec, logging a redacted command line. */
+/**
+ * Run one `shopify …` argv through the injectable exec, logging a redacted command line.
+ * With no injected exec, `CLAUDE_SEO_AI_OFFLINE` refuses rather than spawning: the flag's contract
+ * is that nothing reaches the network unless a test hands the adapter its own runner.
+ */
 async function runArgv(ctx, built, { timeoutMs = DEFAULT_EXEC_TIMEOUT_MS, label = '' } = {}) {
-  const exec = ctx.execImpl || defaultExec;
+  const exec = ctx.execImpl || null;
   const env = ctx.env || process.env;
-  const res = await exec(built.argv, { env: childEnv(env, { store: ctx.store }), timeoutMs });
+  if (!exec && env.CLAUDE_SEO_AI_OFFLINE) {
+    const command = redact(built.command, { env });
+    const out = {
+      argv: built.argv, command, code: 1, stdout: '', stderr: '',
+      error: 'refusing to run "' + command + '": CLAUDE_SEO_AI_OFFLINE=1',
+    };
+    if (ctx.run) ctx.run.log({ event: 'exec', adapter: ADAPTER, label: label || built.argv[2] || 'shopify', command, code: out.code, skipped: 'offline' });
+    return out;
+  }
+  const res = await (exec || defaultExec)(built.argv, { env: childEnv(env, { store: ctx.store }), timeoutMs });
   const out = {
     argv: built.argv,
     command: redact(built.command, { env }),
@@ -630,8 +633,12 @@ export async function capabilities(ctx = {}) {
   const notes = [];
   const tools = { shopify: { on_path: !!binary, path: binary, version: null } };
 
+  // With the offline flag set and no injected exec nothing may spawn, so the probes below would
+  // report "the CLI is not usable" when the truth is that we refused to ask.
+  const offline = !ctx.execImpl && !!env.CLAUDE_SEO_AI_OFFLINE;
+  if (offline) notes.push('CLAUDE_SEO_AI_OFFLINE=1: the CLI was not run, so its version and the store\'s theme list are unknown');
   if (!binary) notes.push('the Shopify CLI is not on PATH — install it (npm i -g @shopify/cli) so theme pull/push can run');
-  if (binary || ctx.execImpl) {
+  if (!offline && (binary || ctx.execImpl)) {
     const v = await runShopifyVersion({ ...ctx, store }).catch((e) => ({ code: 1, stdout: '', stderr: String(e && e.message || e) }));
     const line = String(v.stdout || v.stderr || '').trim().split('\n')[0] || null;
     tools.shopify.version = v.code === 0 ? line : null;
@@ -641,7 +648,7 @@ export async function capabilities(ctx = {}) {
   let themes = null;
   let slots = null;
   let staging = null;
-  if (!missing.length && (binary || ctx.execImpl)) {
+  if (!offline && !missing.length && (binary || ctx.execImpl)) {
     const listed = await runTheme({ ...ctx, store }, ['list', '--json'], { label: 'list' });
     themes = parseThemeList(listed.stdout);
     if (!themes) {
@@ -669,7 +676,7 @@ export async function capabilities(ctx = {}) {
   return {
     adapter: ADAPTER,
     ready,
-    needs: [...missing, ...(store ? [] : ['SHOPIFY_STORE']), ...(binary || ctx.execImpl ? [] : ['shopify CLI on PATH'])],
+    needs: [...new Set([...missing, ...(store ? [] : ['SHOPIFY_STORE']), ...(binary || ctx.execImpl ? [] : ['shopify CLI on PATH'])])],
     tools,
     store,
     credentials: keys.map((k) => ({ key: k.key, present: k.present, source: k.source })),
@@ -1373,7 +1380,7 @@ export async function main(args = {}) {
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change: { ...change, status: 'failed', error: String(e && e.message || e) }, ok: false }; }
+    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
     if (out.change) updated.push(out.change);
     results.push({
       change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok,

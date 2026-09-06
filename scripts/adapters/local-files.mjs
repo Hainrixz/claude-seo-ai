@@ -640,7 +640,7 @@ export async function main(args = {}) {
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change: { ...change, status: 'failed', error: String(e && e.message || e) }, ok: false }; }
+    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
     if (out.change) updated.push(out.change);
     results.push({ change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok, ...(out.error ? { error: out.error } : {}), ...(out.checks ? { checks: out.checks } : {}), ...(out.reason ? { reason: out.reason } : {}), ...(out.note ? { note: out.note } : {}), ...(out.drifted ? { drifted: true } : {}) });
   }

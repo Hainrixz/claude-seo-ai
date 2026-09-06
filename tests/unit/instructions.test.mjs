@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const I = await import(pathToFileURL(join(ROOT, 'scripts', 'adapters', 'instructions.mjs')).href);
 const A = await import(pathToFileURL(join(ROOT, 'scripts', 'lib', 'adapter.mjs')).href);
+const { detect } = await import(pathToFileURL(join(ROOT, 'scripts', 'detect-platform.mjs')).href);
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), 'cseo-ins-'));
@@ -47,6 +48,23 @@ const redirectFinding = {
 
 const profile = { platform: { id: 'shopify', confidence: 'high' }, cards: ['shopify'] };
 const report = { target: { kind: 'url', value: 'https://shop.example/' }, findings: [titleFinding, redirectFinding], platform: profile };
+
+test('a real detect() profile finds its cards: profile.cards holds paths, not bare ids', () => {
+  const fixture = join(ROOT, 'tests', 'fixtures', 'platforms', 'shopify');
+  const detected = detect({
+    url: 'https://northwind-supply.myshopify.com/products/merino-crew-tee',
+    html: readFileSync(join(fixture, 'page.html'), 'utf8'),
+    headers: JSON.parse(readFileSync(join(fixture, 'headers.json'), 'utf8')),
+  });
+  // This is the shape detect-platform actually writes — the bug was that only bare ids resolved.
+  assert.ok(detected.cards.some((c) => c.includes('/')), 'detect() stores cards as repo paths');
+  assert.deepEqual(I.cardIdsFor(detected), ['shopify']);
+  assert.ok(I.manualPathsFor(detected).length >= 4, 'the shopify card\'s §11 click paths were found');
+  // Both spellings and a stray path traversal all land on the same card id.
+  assert.equal(I.readCard('references/platforms/shopify.md').id, 'shopify');
+  assert.equal(I.readCard('shopify').id, 'shopify');
+  assert.equal(I.readCard('../../../etc/passwd'), null);
+});
 
 test('parseManualPaths reads section 11 of a real platform card, in both languages', () => {
   const card = I.readCard('shopify');

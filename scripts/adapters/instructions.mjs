@@ -26,9 +26,19 @@ const OPS = ['capabilities', 'plan', 'preview', 'apply', 'verify', 'rollback'];
 /** references/platforms/<id>.md */
 export const CARDS_DIR = resolve(PLUGIN_ROOT, 'references', 'platforms');
 
-/** Read a platform knowledge card by id. */
+/**
+ * Normalize a card reference to a bare id. `detect-platform` writes profile.cards as repo paths
+ * ("references/platforms/shopify.md"), while callers and fixtures pass bare ids ("shopify") — both
+ * have to land on the same file, so take the basename, drop a trailing `.md`, then filter.
+ */
+export function cardIdOf(ref) {
+  const base = String(ref == null ? '' : ref).trim().split(/[\\/]/).pop().replace(/\.md$/i, '');
+  return base.replace(/[^a-z0-9._-]/gi, '');
+}
+
+/** Read a platform knowledge card by id (or by the path shape a profile stores). */
 export function readCard(id) {
-  const safe = String(id || '').replace(/[^a-z0-9._-]/gi, '');
+  const safe = cardIdOf(id);
   if (!safe) return null;
   const path = join(CARDS_DIR, safe + '.md');
   try { return existsSync(path) ? { id: safe, path, text: readFileSync(path, 'utf8') } : null; }
@@ -74,15 +84,19 @@ export function parseManualPaths(cardText) {
   }).filter((e) => e.en || e.es);
 }
 
-/** Card ids to consult for a profile, most specific first (platform, then framework). */
+/**
+ * Card ids to consult for a profile, most specific first (platform, then framework).
+ * `profile.cards` arrives from detect-platform as repo paths, so every id goes through `cardIdOf`.
+ */
 export function cardIdsFor(profile) {
   if (!profile || typeof profile !== 'object') return [];
-  if (Array.isArray(profile.cards) && profile.cards.length) return profile.cards.map(String);
+  const norm = (list) => [...new Set(list.map(cardIdOf).filter(Boolean))];
+  if (Array.isArray(profile.cards) && profile.cards.length) return norm(profile.cards);
   const ids = [];
   if (profile.platform && profile.platform.id) ids.push(String(profile.platform.id));
   if (profile.framework && profile.framework.id) ids.push(String(profile.framework.id));
   for (const p of Array.isArray(profile.cms_plugins) ? profile.cms_plugins : []) if (p && p.id) ids.push(String(p.id));
-  return [...new Set(ids)];
+  return norm(ids);
 }
 
 /** Manual-path entries for a profile: every card it matched, in order, tagged with its card id. */
@@ -367,7 +381,7 @@ export async function main(args = {}) {
   for (const change of changes) {
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change, ok: false, error: String(e && e.message || e) }; }
+    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
     if (out.change) updated.push(out.change);
     results.push({ change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok, ...(out.note ? { note: out.note } : {}), ...(out.error ? { error: out.error } : {}), ...(out.reason ? { reason: out.reason } : {}) });
   }

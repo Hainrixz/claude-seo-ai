@@ -158,8 +158,10 @@ export function renderSummary(result) {
   if (!result.changes_count) L.push('No changes planned. Every fixable finding was skipped — see `skipped` below.');
   for (const group of result.groups) {
     const head = group.adapter + ' — ' + group.changes.length + ' change' + (group.changes.length === 1 ? '' : 's');
+    const needs = [...new Set(group.needs || [])].filter(Boolean);
     const state = group.available === false ? '  [unavailable]'
-      : (group.ready === false ? '  [not ready: ' + [...new Set(group.needs || [])].join(', ') + ']' : '');
+      // an empty "[not ready: ]" tells the operator nothing — say only what we can name
+      : (group.ready === false ? (needs.length ? '  [not ready: ' + needs.join(', ') + ']' : '  [not ready]') : '');
     L.push(head + state);
     if (group.available === false) L.push('    ' + group.reason);
     for (const c of group.changes) {

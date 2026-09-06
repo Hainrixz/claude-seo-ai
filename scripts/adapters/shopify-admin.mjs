@@ -388,7 +388,7 @@ export async function capabilities(ctx = {}) {
   const out = {
     adapter: ADAPTER,
     ready: false,
-    needs: [...missing, ...(store ? [] : ['SHOPIFY_STORE'])],
+    needs: [...new Set([...missing, ...(store ? [] : ['SHOPIFY_STORE'])])],
     tools: {},
     store,
     api_version: API_VERSION,
@@ -923,7 +923,7 @@ export async function main(args = {}) {
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change: { ...change, status: 'failed', error: String(e && e.message || e) }, ok: false }; }
+    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
     if (out.change) updated.push(out.change);
     results.push({
       change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok,

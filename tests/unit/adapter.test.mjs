@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -242,6 +242,59 @@ test('redactCommand hides env secrets, flag values, headers and basic-auth URLs'
   assert.ok(!A.redactCommand('SHOPIFY_CLI_THEME_TOKEN=shptka_zzzz9999 shopify theme push', { env: {} }).includes('shptka_zzzz9999'));
   // a non-secret value is left readable
   assert.match(A.redactCommand('shopify theme list --store my-store.myshopify.com', { env: { SHOPIFY_STORE: 'my-store.myshopify.com' } }), /my-store\.myshopify\.com/);
+});
+
+test('redactCommand masks curl basic-auth flags — the shape a WordPress app password comes in', () => {
+  const bare = { env: {} };
+  // `-u user:app_password` is exactly what the WordPress REST docs hand people.
+  assert.equal(A.redactCommand('curl -u admin:hunter2 https://site/wp-json/wp/v2/posts/1', bare),
+    'curl -u admin:[redacted] https://site/wp-json/wp/v2/posts/1');
+  assert.equal(A.redactCommand('curl --user admin:hunter2 -X POST https://site/x', bare),
+    'curl --user admin:[redacted] -X POST https://site/x');
+  assert.equal(A.redactCommand('curl --proxy-user admin:hunter2 https://site/x', bare),
+    'curl --proxy-user admin:[redacted] https://site/x');
+  for (const quoted of ['curl -u "admin:abcd efgh ijkl" https://site/x', "curl -u 'admin:abcd efgh' https://site/x"]) {
+    const red = A.redactCommand(quoted, bare);
+    assert.ok(!red.includes('abcd'), red);
+    assert.match(red, /admin:\[redacted\]/);
+  }
+  // No password on the line means nothing to hide, and an unrelated -u stays readable.
+  assert.equal(A.redactCommand('curl -u admin https://site/x', bare), 'curl -u admin https://site/x');
+  assert.equal(A.redactCommand('sort -u findings.txt', bare), 'sort -u findings.txt');
+});
+
+test('a ticket never stores the password from the command it authorizes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cseo-ticket-'));
+  try {
+    const command = 'curl -u admin:hunter2secret -X POST https://site.example/wp-json/wp/v2/posts/1';
+    const issued = A.issueTicket(dir, { command, run: 'run_1', change: 'chg_000000000000' });
+    const onDisk = readFileSync(issued.path, 'utf8');
+    assert.ok(!onDisk.includes('hunter2secret'), 'the ticket file leaked the password: ' + onDisk);
+    assert.match(issued.ticket.command_preview, /admin:\[redacted\]/);
+    // The ticket still unlocks the real command: only the stored preview is masked.
+    assert.equal(A.checkTicket(dir, command).ok, true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('no adapter stamps a change terminally failed from its op-dispatch catch', () => {
+  // `failed` is terminal: a transient throw inside a read-only op (preview/verify) must not kill the
+  // change, and the results row must carry the reason. Every adapter uses one shape for this.
+  const dir = join(ROOT, 'scripts', 'adapters');
+  const files = readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort();
+  assert.ok(files.length >= 7, 'expected the adapter set, found ' + files.length);
+  let seen = 0;
+  for (const file of files) {
+    const src = readFileSync(join(dir, file), 'utf8');
+    for (const line of src.split('\n')) {
+      if (!/^\s*catch \(e\) \{ out = /.test(line)) continue;
+      seen++;
+      assert.ok(!line.includes("status: 'failed'"),
+        file + ' burns the change in its op catch — only apply may transition to failed:\n  ' + line.trim());
+      assert.match(line, /error: String\(\(e && e\.message\) \|\| e\)/,
+        file + ' drops the reason in its op catch:\n  ' + line.trim());
+    }
+  }
+  assert.ok(seen >= 7, 'expected an op-dispatch catch in each adapter, found ' + seen);
 });
 
 test('canonicalJson sorts keys recursively so hashes are stable', () => {

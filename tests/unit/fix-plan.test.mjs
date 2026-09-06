@@ -205,6 +205,27 @@ test('re-planning the same run is stable and replaces only its own adapters', ()
   } finally { s.cleanup(); }
 });
 
+test('the summary never prints an empty "[not ready: ]" badge', () => {
+  const base = {
+    run: 'run_1', run_dir: '/tmp/run_1', report: '/tmp/report.json', changes: [], changes_count: 0,
+    target: { kind: 'url', value: URL_ }, notes: [],
+  };
+  const render = (group) => FP.renderSummary({ ...base, groups: [group] });
+
+  const named = render({ adapter: 'shopify-theme', changes: [], ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_STORE'] });
+  assert.match(named, /\[not ready: SHOPIFY_STORE\]/, 'a duplicate key is listed once');
+
+  // An adapter that could not say what it needs still reads as not ready, without the dangling list.
+  for (const needs of [[], undefined, [null, '']]) {
+    const blank = render({ adapter: 'wordpress-wpcli', changes: [], ready: false, needs });
+    assert.match(blank, /wordpress-wpcli — 0 changes {2}\[not ready\]/);
+    assert.ok(!blank.includes('[not ready: ]'), blank);
+  }
+
+  const ok = render({ adapter: 'instructions', changes: [], ready: true, needs: [] });
+  assert.ok(!ok.includes('not ready'), ok);
+});
+
 test('usage errors: a missing or unreadable report, and a bad project path', () => {
   const s = sandbox();
   try {

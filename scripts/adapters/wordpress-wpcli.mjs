@@ -31,6 +31,7 @@ import { reproduceCommand } from '../lib/finding.mjs';
 import { readJson, writeJson, writeText } from '../lib/store.mjs';
 import {
   checkPublicUrl, groupByPage, normalizeAnswers, publicUrlFor, renderCommandPreview, slugOf,
+  whichOnPath,
 } from './_shared.mjs';
 
 export const ADAPTER = 'wordpress-wpcli';
@@ -143,22 +144,41 @@ export function parseJsonOutput(result) {
 export async function capabilities(ctx = {}, options = {}) {
   const env = ctx.env || process.env;
   const t = transportFor(ctx, options);
-  const built = wpCommand(['core', 'version'], ctx, options, { format: 'json' });
+  // Probe the filesystem instead of asserting: an injected exec stands in for the real binaries, but
+  // with no injection a `true` this adapter did not verify would be a fabricated capability claim.
+  const injected = !!ctx.execImpl;
+  const wpLocal = injected || !!whichOnPath('wp', env);
+  const sshBinary = injected || !!whichOnPath('ssh', env);
   const out = {
     adapter: ADAPTER,
     ready: false,
     needs: [],
-    tools: { wp: true, ...(t.transport === 'ssh' ? { ssh: true } : {}) },
+    // over ssh the remote host runs `wp`, so the local probe can only speak for the ssh client
+    tools: t.transport === 'local' ? { wp: wpLocal } : { ssh: sshBinary },
     transport: t.transport,
     host: t.host,
     path: t.path,
-    command: redact(built.command, { env }),
+    command: null,
     writes: 'live WordPress post meta, post fields and site options through WP-CLI',
     notes: [],
   };
+  // Building the command needs a transport target, so this check comes before it: without one
+  // `buildWpCli` throws, and capabilities has to answer "here is what is missing" instead.
   if (t.transport !== 'local' && !t.ssh) {
     out.needs.push('WP_SSH');
     out.notes.push(...explainKeys(['WP_SSH'], { env }).lines);
+    return out;
+  }
+  const built = wpCommand(['core', 'version'], ctx, options, { format: 'json' });
+  out.command = redact(built.command, { env });
+  if (t.transport !== 'local' && !sshBinary) {
+    out.needs.push('ssh on PATH');
+    out.notes.push('no `ssh` on PATH: this adapter shells out to the ssh client for the remote transport');
+    return out;
+  }
+  if (t.transport === 'local' && !wpLocal) {
+    out.needs.push('wp-cli on PATH');
+    out.notes.push('no `wp` on PATH: install WP-CLI, or point --ssh at the host that has it');
     return out;
   }
   if (t.transport === 'local' && !t.path) {
@@ -166,6 +186,7 @@ export async function capabilities(ctx = {}, options = {}) {
   }
   const res = await runCommand(built, ctx);
   if (res.code !== 0) {
+    out.needs.push(t.transport === 'local' ? 'a working `wp` on PATH' : 'a working `wp` on ' + (t.host || 'the remote host'));
     out.notes.push('`wp core version` failed: ' + redact(String(res.error || res.stderr || 'exit ' + res.code).trim().split('\n')[0], { env }));
     return out;
   }

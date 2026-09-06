@@ -582,6 +582,38 @@ test('wp-cli capabilities runs `wp core version --format=json`', async () => {
   assert.match(calls[0].line, /wp core version --format=json/);
 });
 
+test('wp-cli capabilities probes for the binaries instead of asserting them, and names what is missing', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'cseo-wpcli-'));
+  try {
+    // No injected exec and nothing on PATH: `tools.wp` must be the answer of a real probe.
+    const bare = await CLI.capabilities({ env: { PATH: '' }, dataDir: null });
+    assert.equal(bare.ready, false);
+    assert.equal(bare.tools.wp, false, 'capabilities must never claim a tool it did not find');
+    assert.deepEqual(bare.needs, ['wp-cli on PATH'], 'a not-ready answer always names what is missing');
+    assert.match(bare.notes.join('\n'), /wp` on PATH/);
+
+    // With a `wp` on PATH the probe flips, without spawning it for the answer.
+    const bin = join(base, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'wp'), '#!/bin/sh\n', { mode: 0o755 });
+    const { impl } = mockExec([{ match: 'core version', stdout: '"6.7.1"' }]);
+    const found = await CLI.capabilities({ env: { PATH: bin }, execImpl: impl, dataDir: null });
+    assert.equal(found.tools.wp, true);
+    assert.equal(found.ready, true);
+    assert.deepEqual(found.needs, []);
+
+    // Over ssh the remote host owns `wp`, so the local probe only speaks for the ssh client.
+    const remote = await CLI.capabilities({ env: { PATH: '' }, dataDir: null }, { ssh: 'deploy@host.example:/srv/www' });
+    assert.equal(remote.tools.wp, undefined, 'no claim is made about a binary on another machine');
+    assert.equal(remote.tools.ssh, false);
+    assert.deepEqual(remote.needs, ['ssh on PATH']);
+
+    // A transport with no target still says WP_SSH, as before.
+    const noTarget = await CLI.capabilities({ env: { PATH: bin }, dataDir: null }, { transport: 'ssh' });
+    assert.deepEqual(noTarget.needs, ['WP_SSH']);
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
 test('wp-cli plan writes post meta for Yoast, captures before, and can roll it back', async () => {
   const { impl, calls } = mockExec([
     { match: 'post list', stdout: '[42]' },
