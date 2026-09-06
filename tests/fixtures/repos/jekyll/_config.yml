@@ -1,0 +1,4 @@
+title: Ridgeline
+url: https://ridgeline.example
+plugins:
+  - jekyll-feed
