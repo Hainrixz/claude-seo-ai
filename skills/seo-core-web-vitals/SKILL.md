@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Core Web Vitals are a confirmed Google ranking signal and a proxy for page quality. Thresholds, field-vs-lab honesty rules, and LCP decomposition: `references/cwv-thresholds.md` (follow it exactly).
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`scripts[]`, `stylesheets[]`, `images[]`) plus `timing.ttfb_ms`, `body.bytes`, and `render` — field data still needs the PSI tier; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Field CWV at p75** — LCP ≤ 2.5 s, INP ≤ 200 ms (INP replaced FID), CLS ≤ 0.1, all at the 75th percentile of real-user data. All three must pass for a "good" rating. Use the proactive-warning thresholds (LCP > 2.0 s, INP > 160 ms, CLS > 0.08) to `warn` before failing.
 2. **Render-blocking resources** — synchronous `<script>` in `<head>` (no `defer`/`async`/`type=module`), blocking `<link rel="stylesheet">`, and `@import` chains that delay first render (LCP/INP risk).
 3. **Unoptimized images** — missing `width`/`height` (or `aspect-ratio`), no `loading="lazy"` below the fold, no responsive `srcset`/`sizes`, legacy formats where AVIF/WebP would serve, and a non-preloaded LCP image.
@@ -20,7 +23,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 **Advisory only.** Performance fixes touch build config, server, CDN, and runtime JavaScript — high breakage risk — so the tool **diagnoses and prioritizes** but never auto-edits performance code. For each failing metric, name the specific resource/element causing it and rank fixes by expected leverage (e.g. preload the LCP image, defer non-critical JS, reserve image dimensions). Give framework-specific direction where the stack is known. **Never fabricate measured values** — if field data is absent, ask the user to supply a PSI/CrUX key or leave a clearly-marked TODO placeholder rather than guessing a metric.
 
 ## Verification
-- Field (Tier 1): `node ${CLAUDE_SKILL_DIR}/../../scripts/psi-client.mjs --url <u>` calls the PageSpeed Insights API (`loadingExperience`, method `psi_api`); CrUX History via the same client (`crux_api`) for p75 trends. Requires a free API key.
+- Field (Tier 1): `node "${CLAUDE_PLUGIN_ROOT}/scripts/psi-client.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) calls the PageSpeed Insights API (`loadingExperience`, method `psi_api`); CrUX History via the same client (`crux_api`) for p75 trends. Requires a free API key. <!-- reconcile-flags-v0.2 -->
 - Tier 0 (no key): emit `status: needs_api` for every field-CWV finding, plus clearly-labeled **lab heuristics** (render-blocking count, missing image dimensions, bundle weight). Label lab signals "lab data — not what Google ranks on"; never present a heuristic as a measured field value.
 - When the required data tier is unavailable, status is `needs_api` — **never** a false `pass`.
 

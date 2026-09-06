@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 A clean, single-rooted heading tree and proper semantic landmarks make a page's outline machine-readable — the same structure that AI engines use to extract answer blocks and that search engines use to understand content scope. Schema/entity context: `references/schema-tier1.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`headings[]` with `region`, `landmarks`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Single H1**: exactly one `<h1>` per page. Zero H1s, or multiple H1s, are both findings.
 2. **No skipped levels**: nesting descends one level at a time (an `<h2>` may be followed by `<h3>`, not directly by `<h4>`). Build the outline and flag any jump.
 3. **Descriptive text**: each heading names its section in human terms — flag empty headings, headings used purely for visual styling, and generic placeholders ("Section 1", "Welcome").
@@ -27,8 +30,8 @@ Mark each finding's `fixable` field consistent with `schema/finding.schema.json`
 
 ## Verification
 - Method: `dom_assert`. Re-parse the snapshot, rebuild the outline, and assert the specific condition (one H1, no level skip, landmark present).
-- Offline reproduce: `node ${CLAUDE_SKILL_DIR}/../../scripts/parse-html.mjs --url <u>` (or `--file <path>`) — returns the `headings` block (`counts` per level, `h1_count`, and `skipped_levels`), which counts H1s and walks the H1-H6 tree for skipped levels.
-- When the rendered DOM tier is required but unavailable (heading injected client-side and only `raw_html` is present), status is `needs_api`, never a false `pass`.
+- Offline reproduce: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — returns the `headings` block (`counts` per level, `h1_count`, and `skipped_levels`), which counts H1s and walks the H1-H6 tree for skipped levels. <!-- reconcile-flags-v0.2 -->
+- When the rendered DOM tier is required but unavailable (heading injected client-side and only `raw_html_path` is present), status is `needs_api`, never a false `pass`.
 
 ## Findings
 Emit findings per `schema/finding.schema.json`. Examples:

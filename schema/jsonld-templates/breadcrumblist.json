@@ -1,0 +1,10 @@
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "@id": "TODO:page_url#breadcrumb",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "TODO:home_label", "item": "TODO:site_url/" },
+    { "@type": "ListItem", "position": 2, "name": "TODO:section_label", "item": "TODO:section_url" },
+    { "@type": "ListItem", "position": 3, "name": "TODO:current_page_label" }
+  ]
+}

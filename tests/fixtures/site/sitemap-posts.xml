@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>{{ORIGIN}}/blog/a</loc>
+    <lastmod>2026-07-01</lastmod>
+    <xhtml:link rel="alternate" hreflang="es" href="{{ORIGIN}}/es/blog/a"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="{{ORIGIN}}/fr/blog/a"/>
+    <image:image><image:loc>{{ORIGIN}}/img/a.png</image:loc></image:image>
+  </url>
+  <url><loc>{{ORIGIN}}/blog/b?ref=sitemap&amp;v=2</loc><lastmod>2026-07-15T08:30:00+00:00</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>{{ORIGIN}}/es/blog/a</loc><lastmod>2026-07-01</lastmod></url>
+</urlset>

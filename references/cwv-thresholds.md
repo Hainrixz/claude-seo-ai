@@ -12,7 +12,7 @@ Proactive-warning thresholds (warn before failing): LCP > 2.0 s, INP > 160 ms, C
 
 ## Field vs lab — be honest
 
-- **Field data (CrUX, p75)** is what Google actually ranks on. Source it from the PageSpeed Insights API (`loadingExperience`) or the CrUX History API (Tier 1, free key).
+- **Field data (CrUX, p75)** is what Google actually ranks on. Source it from the PageSpeed Insights API (`loadingExperience`, Tier 1, free key). When PSI returns `origin_fallback: true` the numbers are origin-level, not page-level — the finding must say so. CrUX History API (trend data): **TO-VERIFY — not implemented** in `psi-client.mjs`; never claim a CWV trend from this tool.
 - **Lab data (local Lighthouse)** is a single synthetic run. Useful for diagnosing causes, but **label it "lab data — not what Google ranks on"** and never let it drive the Search score on its own.
 - With no API key (Tier 0): emit only `needs_api` for field CWV plus heuristic, clearly-labeled lab signals (render-blocking resources, missing image dimensions → CLS risk, large bundles → INP/LCP risk). Never present a heuristic as a measured field value.
 

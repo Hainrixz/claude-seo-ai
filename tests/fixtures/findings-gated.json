@@ -1,0 +1,75 @@
+[
+  {
+    "id": "M2.robots.noindex_sitewide", "module": "M2", "title": "Site-wide noindex on every sampled page",
+    "status": "fail", "severity": 5, "scope": "site",
+    "location": { "url": "https://example.test/" },
+    "evidence": { "observed": "meta name=robots content=noindex on 5/5 sampled pages", "snippet": "<meta name=\"robots\" content=\"noindex\">" },
+    "expected": "Indexable pages carry no noindex directive",
+    "recommendation": "Remove the noindex meta tag from the production template.", "fixable": "proposed",
+    "verification": { "method": "dom_assert", "assertion": "no meta[name=robots] containing noindex", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "noindex removes the page from the index (documented)." }
+  },
+  {
+    "id": "M1.robots.ok", "module": "M1", "title": "robots.txt valid and reachable",
+    "status": "pass", "severity": 5, "scope": "site",
+    "evidence": { "observed": "robots.txt returns 200; Googlebot allowed" },
+    "expected": "robots.txt reachable and not blocking Googlebot",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "robots_parse", "assertion": "no Disallow: / for Googlebot", "reproduce": "node \"/plugin/scripts/parse-robots-sitemap.mjs\" --file site/robots.txt" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Blocked crawl prevents indexing." }
+  },
+  {
+    "id": "M7.title.ok", "module": "M7", "title": "Title length within band",
+    "status": "pass", "severity": 3, "scope": "page",
+    "evidence": { "observed": "title length 54" },
+    "expected": "Title between 30 and 60 characters",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "dom_assert", "assertion": "30 <= title.length <= 60", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Titles are a documented ranking and snippet input." }
+  },
+  {
+    "id": "M17.sitemap.ok", "module": "M17", "title": "Sitemap reachable and well-formed",
+    "status": "pass", "severity": 3, "scope": "site",
+    "evidence": { "observed": "/sitemap.xml returns 200 with 42 <url> entries" },
+    "expected": "A valid XML sitemap is declared and reachable",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "xml_parse", "assertion": "sitemap parses with >= 1 <loc>", "reproduce": "node \"/plugin/scripts/parse-robots-sitemap.mjs\" --url https://example.test/" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "low", "rationale": "Sitemaps aid discovery (documented)." }
+  },
+  {
+    "id": "M11.heading.no_direct_answer", "module": "M11", "title": "Question heading without a direct answer",
+    "status": "fail", "severity": 5, "scope": "page",
+    "evidence": { "observed": "H2 'What is X?' followed by a 3-paragraph windup" },
+    "expected": "A direct answer follows each question heading",
+    "recommendation": "Rewrite the lead paragraph as a direct answer.", "fixable": "proposed",
+    "verification": { "method": "manual_review", "assertion": "first passage after the heading answers it", "reproduce": "node \"/plugin/scripts/check-answerblocks.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "high", "rationale": "Synthetic sev-5 directional finding: must NOT cap the AI score." }
+  },
+  {
+    "id": "M14.retrieval.allowed", "module": "M14", "title": "AI retrieval bots allowed",
+    "status": "pass", "severity": 4, "scope": "site",
+    "evidence": { "observed": "OAI-SearchBot, Claude-SearchBot, PerplexityBot are not blocked" },
+    "expected": "Retrieval/citation bots are allowed",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "robots_parse", "assertion": "retrieval bots not Disallow: /", "reproduce": "node \"/plugin/scripts/parse-robots-sitemap.mjs\" --file site/robots.txt" },
+    "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "high", "rationale": "Blocked retrieval bots cannot cite the page." }
+  },
+  {
+    "id": "M12.facts.ok", "module": "M12", "title": "Substantive numeric facts present",
+    "status": "pass", "severity": 3, "scope": "page",
+    "evidence": { "observed": "7 substantive numeric facts with sources in 900 words" },
+    "expected": "Original, sourced facts in the body",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "dom_assert", "assertion": "substantive numeric density > 0", "reproduce": "node \"/plugin/scripts/factdensity.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "medium", "rationale": "Fact density correlates with citation." }
+  },
+  {
+    "id": "M21.llmstxt.missing", "module": "M21", "title": "No llms.txt",
+    "status": "fail", "severity": 5, "scope": "site",
+    "evidence": { "observed": "GET /llms.txt -> 404" },
+    "expected": "Optional llms.txt present",
+    "recommendation": "Optionally add llms.txt.", "fixable": "auto",
+    "verification": { "method": "header_check", "assertion": "/llms.txt returns 200", "reproduce": "curl -sI https://example.test/llms.txt" },
+    "expected_impact": { "axis": "ai", "confidence": "established", "magnitude": "low", "rationale": "Synthetic: sev-5 established fail in a weight-0 category must NOT cap the AI score." }
+  }
+]

@@ -1,0 +1,13 @@
+User-agent: GPTBot
+Disallow: /
+Content-Signal: ai-train=no
+
+User-agent: OAI-SearchBot
+Allow: /
+Content-Signal: search=yes, ai-input=yes
+
+User-agent: *
+Disallow: /admin/
+Content-Signal: search=yes, ai-input=maybe, foo=bar, ai-train
+
+Sitemap: https://example.com/sitemap.xml

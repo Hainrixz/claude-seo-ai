@@ -1,6 +1,7 @@
 ---
 name: seo-score
 description: Compute the two never-blended 0-100 scores (Search SEO and AI Visibility / GEO-AEO) from a set of findings, with severity-weighted category values, dynamic re-normalization of conditional modules, severity gating, and letter bands. Used by seo-orchestrator and the `score` command.
+user-invocable: false
 allowed-tools: Read, Bash
 ---
 
@@ -15,10 +16,10 @@ Turns findings (conforming to `schema/finding.schema.json`) into the two scores.
 4. **Score** = `Σ(category_value × weight) / Σ(active weight)` for each of Search SEO and AI Visibility.
 5. **Severity gating**: if any finding has `severity: 5` and `status: fail`, cap the affected score at 40 and set `capped: true`.
 6. Assign bands (A≥90, B≥80, C≥70, D≥60, F<60) and a one-line interpretation from the Search×AI quadrant.
-7. M21 (llms.txt) weight is 0 — report it, never let it move the AI score.
+7. M21 (AI discovery & agent endpoints — llms.txt, agents.md, UCP, agentic sitemap) weight is 0 — report it, never let it move the AI score.
 
 ## Determinism
-Prefer `scripts/score.mjs` (run via Bash with the findings JSON) so the number is reproducible and CI-checkable; if Node is unavailable, compute by hand following the same formula and note the fallback. Either way the math must match `references/scoring-model.md`.
+Prefer `node "${CLAUDE_PLUGIN_ROOT}/scripts/score.mjs" --run latest` (or `--run <run-dir>` / `--run latest:<host>` / `--findings <path>`, with `--vertical a,b --multilingual` when scoring a bare findings file) so the number is reproducible and CI-checkable; if Node is unavailable, compute by hand following the same formula and note the fallback. <!-- reconcile-flags-v0.2 --> Either way the math must match `references/scoring-model.md`.
 
 ## Output
 ```json

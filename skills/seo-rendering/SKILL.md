@@ -8,13 +8,16 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Most AI crawlers do not execute JavaScript, so content that only exists after hydration is invisible to them — CSR-only is a hard AI gate. JS dependency also delays first paint; see `references/cwv-thresholds.md` for how this feeds LCP/INP.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` and `parsed_rendered`, plus the `render{needed,signals,used,confidence,hint,delta}` block — the script already computed the raw-vs-rendered delta; `raw_html_path`/`rendered_html_path` name the files on disk; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`) and the raw HTML the server first returned:
-1. **Content delta**: diff `raw_html` vs `rendered_dom` — measure the share of primary text, internal links, headings (h1–h3), and `<script type="application/ld+json">` blocks that appear **only** after JavaScript runs.
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) and the script-computed `render.delta`:
+1. **Content delta**: diff `raw_html_path` vs `rendered_html_path` — measure the share of primary text, internal links, headings (h1–h3), and `<script type="application/ld+json">` blocks that appear **only** after JavaScript runs.
 2. **Classify the strategy**: CSR-only (empty/near-empty raw shell, content injected client-side) / SSR / SSG (prerendered static) / ISR (prerendered + revalidated). Use raw-HTML completeness and framework signals (`__NEXT_DATA__`, hydration markers, `data-reactroot`, build manifests).
 3. **Hydration-blocked text**: primary content present in raw HTML but hidden/empty until hydration, or rendered only into a client-only island.
 4. **Lazy-loaded main content**: above-the-fold or primary content that requires scroll/intersection/interaction to load — invisible to a non-interacting crawler.
-5. **AI gate**: if the h1, primary body, or JSON-LD exist only in `rendered_dom`, flag the page as not reliably consumable by non-JS AI crawlers.
+5. **AI gate**: if the h1, primary body, or JSON-LD exist only in `rendered_html_path`, flag the page as not reliably consumable by non-JS AI crawlers.
 
 ## Fixes (fixable: advisory)
 Rendering strategy is a framework/architecture decision with high breakage risk, so M4 is **ADVISORY only** — it diagnoses and prioritizes, it never auto-edits build/server code.
@@ -23,12 +26,12 @@ Rendering strategy is a framework/architecture decision with high breakage risk,
 - Where the right strategy depends on data freshness or constraints the snapshot can't reveal, leave a clearly-marked TODO for the user — **never** fabricate a `revalidate` interval or assert a strategy choice. Every finding carries `fixable: advisory`.
 
 ## Verification
-- `render_diff`: compute the content-delta ratio of `raw_html` vs `rendered_dom` (primary text / links / headings / JSON-LD present in rendered but absent in raw). A high delta on primary content confirms the JS dependency.
-- Rendering an accurate `rendered_dom` requires a headless-browser data tier. When that tier is unavailable, status is `needs_api` — never a false `pass`.
+- `render_diff`: compute the content-delta ratio of `raw_html_path` vs `rendered_html_path` (primary text / links / headings / JSON-LD present in rendered but absent in raw). A high delta on primary content confirms the JS dependency.
+- Rendering an accurate `rendered_html_path` requires a headless-browser data tier. When that tier is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings
 Emit findings per `schema/finding.schema.json`. Examples:
-- `M4.render.csr_only_primary_content` — h1 and body text exist only in `rendered_dom`, raw HTML is an empty shell (status `fail`, severity 5, axis `both`, `fixable: advisory`, confidence `established`).
+- `M4.render.csr_only_primary_content` — h1 and body text exist only in `rendered_html_path`, raw HTML is an empty shell (status `fail`, severity 5, axis `both`, `fixable: advisory`, confidence `established`).
 - `M4.render.jsonld_js_injected` — JSON-LD blocks present only after hydration, so non-JS crawlers see no structured data (status `warn`, severity 4, axis `ai`, `fixable: advisory`, confidence `established`).
 - `M4.render.lazy_main_content` — primary content loads only on scroll/interaction (status `warn`, severity 4, axis `both`, `fixable: advisory`, confidence `directional`).
 Each finding: `evidence.observed` quotes the raw vs rendered delta on the page; `verification.reproduce` is a runnable `render_diff` assertion; `expected_impact` is banded + confidence-tagged (no naked %).

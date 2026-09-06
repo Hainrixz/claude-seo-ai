@@ -1,0 +1,26 @@
+# Synthetic robots.txt for the claude-seo-ai fixture server
+User-agent: *
+Disallow: /admin/
+Allow: /admin/public/
+Disallow: /private
+Disallow: /*.pdf$
+Disallow: /search?
+Disallow: /assets/app.js
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: OAI-SearchBot
+Disallow:
+
+User-agent: SlowBot
+Crawl-delay: 5
+Disallow: /tmp/
+
+User-agent: Googlebot
+Allow: /
+
+Sitemap: {{ORIGIN}}/sitemap.xml
+
+# Content signals — see https://contentsignals.org for the vocabulary
+Content-Signal: search=yes, ai-input=no, ai-train=no

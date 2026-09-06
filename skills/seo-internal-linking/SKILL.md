@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Internal links distribute crawl priority and topical authority and tell search engines (and AI crawlers) how your pages relate. Reference: `references/schema-tier1.md` for the entity/`@id` linkage this topology should mirror; M6/seo-entity-linking owns external `sameAs`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`anchors[]` with `region`/`internal`/`anchor`, `landmarks`) and the crawl graph in `<run_dir>/crawl.json` (`graph.edges`, `pages[].inlinks`, `templates[]`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Pillar/cluster topology**: classify each URL (pillar hub vs. cluster page) and confirm clusters link up to their pillar and the pillar links down to its cluster — gaps break the hub-and-spoke model.
 2. **Contextual in-body links**: count links inside `<main>`/`<article>` prose (target ~3-5 descriptive in-content links per page); flag pages with zero in-body internal links.
 3. **Anchor-text descriptiveness**: flag generic anchors ("click here", "read more", "learn more", bare URLs) and over-optimized exact-match repetition; anchors should describe the destination.
@@ -23,7 +26,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 - Never invent target URLs, anchor wording, or topology you cannot observe in the snapshot/crawl — ask the user or leave a clearly-marked TODO placeholder. (Severity for this module's findings: 3.)
 
 ## Verification
-- `node ${CLAUDE_SKILL_DIR}/../../scripts/link-graph.mjs --url <u>` builds the internal link graph (`verification.method: link_graph`) and asserts in-body link counts, orphan status, anchor quality, and pillar/cluster edges.
+- `node "${CLAUDE_PLUGIN_ROOT}/scripts/link-graph.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) builds the internal link graph (`verification.method: link_graph`) and asserts in-body link counts, orphan status, anchor quality, and pillar/cluster edges. <!-- reconcile-flags-v0.2 -->
 - The full topology/orphan check needs a site-wide crawl tier. When that crawl data is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings

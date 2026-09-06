@@ -1,0 +1,5 @@
+{
+  "ucp": { "version": "2026-01-15" },
+  "services": { "dev.fixture.catalog": [{ "version": "2026-01-15", "spec": "{{ORIGIN}}/specs/catalog.json", "transport": "rest", "endpoint": "{{ORIGIN}}/api/catalog", "schema": "{{ORIGIN}}/schemas/catalog.json" }] },
+  "capabilities": { "dev.fixture.checkout": [{ "version": "2026-01-15", "spec": "{{ORIGIN}}/specs/checkout.json", "schema": "{{ORIGIN}}/schemas/checkout.json" }] }
+}

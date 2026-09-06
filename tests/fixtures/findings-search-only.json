@@ -1,0 +1,20 @@
+[
+  {
+    "id": "M1.robots.ok", "module": "M1", "title": "robots.txt valid and reachable",
+    "status": "pass", "severity": 5, "scope": "site",
+    "evidence": { "observed": "robots.txt returns 200; Googlebot allowed" },
+    "expected": "robots.txt reachable and not blocking Googlebot",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "robots_parse", "assertion": "no Disallow: / for Googlebot", "reproduce": "node \"/plugin/scripts/parse-robots-sitemap.mjs\" --file site/robots.txt" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Blocked crawl prevents indexing." }
+  },
+  {
+    "id": "M7.description.short", "module": "M7", "title": "Meta description below the pass band",
+    "status": "warn", "severity": 3, "scope": "page",
+    "evidence": { "observed": "meta description length 48 (pass band 70-160)" },
+    "expected": "Description between 70 and 160 characters",
+    "recommendation": "Extend the description to 150-160 characters.", "fixable": "proposed",
+    "verification": { "method": "dom_assert", "assertion": "70 <= description.length <= 160", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "low", "rationale": "Descriptions influence snippets, not rankings." }
+  }
+]

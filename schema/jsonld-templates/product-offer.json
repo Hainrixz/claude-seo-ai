@@ -1,0 +1,23 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "@id": "TODO:page_url#product",
+  "name": "TODO:product_name_matches_visible_title",
+  "description": "TODO:product_description",
+  "image": ["TODO:product_image_url"],
+  "sku": "TODO:sku",
+  "gtin": "TODO:gtin_if_known",
+  "brand": { "@type": "Brand", "name": "TODO:brand_name" },
+  "url": "TODO:page_url",
+  "offers": {
+    "@type": "Offer",
+    "@id": "TODO:page_url#offer",
+    "url": "TODO:page_url",
+    "price": "TODO:price_matches_visible_price",
+    "priceCurrency": "TODO:currency_iso4217",
+    "availability": "https://schema.org/TODO:InStock_OutOfStock_PreOrder",
+    "itemCondition": "https://schema.org/NewCondition",
+    "priceValidUntil": "TODO:optional_date_iso8601",
+    "seller": { "@id": "TODO:site_url/#organization" }
+  }
+}

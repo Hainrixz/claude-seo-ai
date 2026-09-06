@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-seo-ai",
   "displayName": "Claude SEO AI",
-  "version": "0.1.0",
-  "description": "Audit and opt-in-fix classic SEO and AI-search visibility (GEO/AEO) for any website or web codebase. Two independent scores, reproducible findings, safe deterministic fixes.",
+  "version": "0.2.0",
+  "description": "Audit and opt-in-fix classic SEO and AI-search visibility (GEO/AEO) for any website or web codebase — works on any platform (Shopify, WordPress, Next.js, Webflow, Wix…). Two independent scores, reproducible findings, safe deterministic fixes.",
   "author": {
     "name": "Enrique",
     "email": "enriqueers98@gmail.com"
@@ -23,6 +23,11 @@
     "core-web-vitals",
     "structured-data",
     "llms-txt",
-    "audit"
+    "audit",
+    "shopify",
+    "wordpress",
+    "nextjs",
+    "geo-ai",
+    "agentic-commerce"
   ]
 }

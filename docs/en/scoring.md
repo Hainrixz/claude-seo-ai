@@ -3,7 +3,9 @@
 `claude-seo-ai` reports **two independent 0–100 scores** and **never blends them into one number**. They share inputs but weight them differently. A page can rank well yet be uncitable by AI, or be highly citable yet rank poorly — surfacing both is the point.
 
 - **Search SEO score** — how well the page is set up to rank in classic search engines.
-- **AI Visibility (GEO/AEO) score** — how extractable and citable the page is for AI answer engines.
+- **AI Visibility (GEO/AEO) score** — how extractable and citable the page is for AI answer engines, and whether it is even eligible (indexed + snippet-eligible).
+
+The scorer is `scripts/score.mjs`. It is pure logic (no network) and fully reproducible; the same findings always give the same scores.
 
 ## How a score is computed
 
@@ -21,66 +23,90 @@ points(finding) = status_factor × severity
 category_value = 100 × Σ points / Σ severity   (over scored findings only)
 ```
 
-Status factors come straight from the implementation:
-
 | status | factor | counted? |
 |---|---|---|
 | `pass` | 1.0 | yes |
 | `warn` | 0.5 | yes |
-| `fail` | 0.0 | yes (in denominator) |
-| `needs_api` | — | **excluded** from both numerator and denominator |
-| `not_applicable` | — | **excluded** from both numerator and denominator |
+| `fail` | 0.0 | yes (in the denominator) |
+| `needs_api` | — | **excluded**; counted in `needs_api_count` |
+| `manual_review` | — | **excluded**; counted in `manual_review_count` |
+| `not_applicable` | — | **excluded** |
+| any status with `severity: 0` | — | **excluded** (informational) |
 
-A finding only contributes to a score when its `expected_impact.axis` matches that score (`search`, `ai`, or `both`). Shared modules (M4, M5, M9, M13, M16) are scored independently in each score at that score's own weight. Module suffixes are normalized to the parent (e.g. `M7b` → `M7`).
+A finding only contributes to a score when its `expected_impact.axis` matches that score (`search`, `ai`, or `both`). Shared modules (M4, M5, M9, M13, M16, M18, M19) are scored independently in each score at that score's own weight. Module suffixes are normalized to the parent (`M7b` → `M7`). A finding whose module has no category on its axis is listed in `unmapped_findings` — never silently scored or silently dropped.
 
-### How `needs_api` is excluded
+### `needs_api` and `manual_review` are excluded, never assumed
 
-`needs_api` (and `not_applicable`) findings are dropped before scoring — they **never count as a pass and never penalize**. Each score reports `needs_api_count` so you know how much of the picture required an API you didn't connect. A category whose findings are all `needs_api`/`not_applicable` has no scored findings and is therefore inactive (see re-normalization below).
+Both statuses are dropped before scoring — they **never count as a pass and never penalize**. `needs_api` means an API key, MCP or renderer was missing; `manual_review` means a deterministic check could not decide (for example an unsupported page language) and a human or model must judge. Each axis reports `needs_api_count`, `manual_review_count` and `unscored_count` (everything on the axis that did not enter the score, for any reason) so you know how much of the picture was actually measured.
 
 ## Search SEO — category weights
 
-| Category | Modules | Weight |
-|---|---|---|
-| Indexability & Crawl | M1, M2, M3 | 22 |
-| Core Web Vitals / Performance | M15 | 16 |
-| On-Page & Meta | M7 | 12 |
-| Structured Data | M5 | 12 |
-| Rendering | M4 | 8 |
-| Internal Linking & Semantics | M10 | 8 |
-| E-E-A-T | M16 | 7 |
-| Images / Media | M9 | 5 |
-| Sitemaps & Discovery | M17 | 5 |
-| Freshness | M13 | 3 |
-| Social Cards | M8 | 2 |
-| **Conditional** E-commerce | M18 | 15 |
-| **Conditional** Local | M19 | 10 |
-| **Conditional** International | M20 | 8 |
+| Category (`name` in the output) | Modules | Weight | Activation |
+|---|---|---|---|
+| Indexability & Crawl | M1, M2, M3 | 22 | always |
+| Core Web Vitals / Performance | M15 | 16 | always |
+| On-Page & Meta | M7 | 12 | always |
+| Structured Data | M5 | 12 | always |
+| Rendering | M4 | 8 | always |
+| Internal Linking & Semantics | M10 | 8 | always |
+| E-E-A-T | M16 | 7 | always |
+| Images / Media | M9 | 5 | always |
+| Sitemaps & Discovery | M17 | 5 | always |
+| Freshness | M13 | 3 | always |
+| Social Cards | M8 | 2 | always |
+| E-commerce | M18 | 15 | `vertical:ecommerce` |
+| Local | M19 | 10 | `vertical:local-business` |
+| International | M20 | 8 | `flag:multilingual` |
 
 ## AI Visibility (GEO/AEO) — category weights
 
-| Category | Modules | Weight |
+Always-on weights sum to 100.
+
+| Category (`name` in the output) | Modules | Weight | Activation |
+|---|---|---|---|
+| Answer Extractability | M11 | 18 | always |
+| AI Crawler Access | M14 | 14 | always |
+| Fact Density / Original Data | M12 | 14 | always |
+| Structured Data | M5 | 12 | always |
+| Rendering (non-JS) | M4 | 10 | always |
+| Entity / Knowledge-Graph | M6 | 9 | always |
+| E-E-A-T / Authority | M16 | 9 | always |
+| Freshness | M13 | 6 | always |
+| Agent-readiness | M22 | 4 | always |
+| Images / Multimodal | M9 | 4 | always |
+| AI discovery & agent endpoints | M21 | **0** | always (reported, never scored) |
+| Agentic commerce readiness | M18 | 6 | `vertical:ecommerce` |
+| Local / place data | M19 | 5 | `vertical:local-business` |
+
+**M21 has weight 0.** llms.txt, agents.md, the UCP profile, the ARD catalog and the agentic sitemap are checked and reported, but no engine documents that they affect citation, so they never move the AI score. Their findings show up in the category list and in `unscored_count`.
+
+## Conditional categories and how they activate
+
+Only categories that are **active** and have **weight > 0** enter the denominator. When a category is inactive its weight is removed and the rest re-normalize, so a blog is never penalized for lacking Product schema. Each category reports its `active_weight` — the share (in %) of the active total it actually carried.
+
+There are two ways a conditional category becomes active:
+
+1. **Declared** — pass `--vertical ecommerce,local-business`, `--multilingual`, or `--vertical-json <file>` (the output of `seo-vertical-detect`, or a `profile.json` with a `vertical` object). This is what the audit does. In declared mode, anything you did not declare is off: findings of an inactive conditional module are listed in `ignored_conditional[]` and never scored, and a declared vertical with no scored findings produces a warning.
+2. **Inferred** (legacy fallback, when you pass no flag) — a conditional category activates as soon as it has one scored finding. The output flags this: `activation.source: "inferred"`, `activation.inferred_categories`, and a warning asking you to declare the vertical.
+
+Each category emits `activation`: `always`, `vertical:ecommerce`, `vertical:local-business`, `flag:multilingual`, or `inactive`.
+
+## Severity calibration
+
+Severity measures **how much eligibility or extractability the observed fact removes** — not how important the module is. Only severity 5 can cap a score (see below).
+
+| Severity | Meaning | Examples |
 |---|---|---|
-| Answer Extractability | M11 | 20 |
-| Structured Data | M5 | 16 |
-| Fact Density / Original Data | M12 | 14 |
-| AI Crawler Access | M14 | 12 |
-| Rendering (non-JS) | M4 | 10 |
-| Entity / Knowledge-Graph | M6 | 10 |
-| E-E-A-T / Authority | M16 | 9 |
-| Freshness | M13 | 6 |
-| Images / Multimodal | M9 | 3 |
-| llms.txt | M21 | 0 (reported, **excluded from score**) |
+| 5 | Catastrophic, eligibility-killing at site/template scope | site-wide `noindex`, robots.txt blocking Googlebot, `nosnippet`/`max-snippet:0` site-wide, CSR-only shell, robots.txt returning 5xx |
+| 4 | Major: a page class loses eligibility or extractability | page-level `noindex` on a key page, Product without price, robots blocking CSS/JS |
+| 3 | Moderate: a documented or strongly correlated signal is missing | question heading without a direct answer, missing `dateModified`, thin fact density, author without Person schema |
+| 2 | Minor | anaphora openers, missing `x-default`, no `Sitemap:` directive |
+| 1 | Cosmetic | optional discovery files |
+| 0 | Informational — never scored | web-search probes, GSC AI export, `not_applicable` |
 
-`llms.txt` has weight `0`: it is checked and reported but, like any zero-weight category, it never moves the score.
+Findings re-assigned in v0.2.0: `M11.heading.no_direct_answer` 5→3, `M11.passage.unresolved_anaphora` 5→2, `M12.*` 4→3, `M6.*` 4→3, `M16.author.missing_person_schema` 4→3, `M4.render.jsonld_js_injected` 4→3, `M18.offer.missing_price` 5→4, `M18.offer.price_feed_mismatch` 5→3, `M18.facets.uncanonicalized` 5→3, `M1.sitemap.missing_directive` 5→2, `M1.robots.blocks_css_js` 5→4, `M20.hreflang.invalid_bcp47` 4→3, `M20.hreflang.missing_xdefault` 4→2.
 
-## Dynamic re-normalization of conditional verticals
-
-Only categories that are **active** and have **weight > 0** enter the denominator. A category is active when it has at least one scored finding in that axis.
-
-- The conditional verticals — **E-commerce (M18)**, **Local (M19)**, **International (M20)** — only become active when their signals are detected (e.g. Product/Offer schema or cart routes trigger e-commerce).
-- When a category is inactive, its weight is removed and the remaining weights re-normalize, so the score is always out of the **active** total. A blog is never penalized for lacking Product schema.
-
-## Letter bands
+## Letter bands and the `unscored` state
 
 | Band | Range |
 |---|---|
@@ -89,50 +115,105 @@ Only categories that are **active** and have **weight > 0** enter the denominato
 | C | ≥ 70 |
 | D | ≥ 60 |
 | F | < 60 |
+| `unscored` | no active category with weight > 0 |
 
-## Severity gating (sev-5 fail caps at F)
+When nothing on an axis could be scored — no findings, only `needs_api`/`manual_review`, only inactive conditionals, or only weight-0 modules — the axis is **unscored**: `value: null`, `raw_value: null`, `band: "unscored"`, `state: "unscored"`. An empty findings set is never reported as an F.
 
-Any finding in the axis with `severity: 5` **and** `status: fail` (e.g. site-wide `noindex`, `robots.txt` blocking all crawlers, canonical+noindex on key pages) caps that score at **40 (band F)** regardless of other passes, and sets `capped: true`. This keeps a technically broken site from showing green. The cap only lowers a score — if the weighted value is already ≤ 40, nothing changes.
+## Severity gating (caps)
 
-## Search-vs-AI quadrant interpretations
+A score is capped at **40 (band F)** only when a finding meets **all** of these conditions:
 
-Each score carries a one-line `interpretation`. The implementation classifies a score as **high** when `value ≥ 75` and **low** when `value < 60`; the quadrant is read from the pair. The exact strings (Search, then AI):
+1. `severity: 5` **and** `status: fail`;
+2. `expected_impact.confidence: "established"` — a `directional` or `speculative` finding never caps, however severe;
+3. its category is **active with weight > 0** on that axis — so M21 (weight 0) and inactive conditional modules never cap.
+
+The output keeps both numbers: `raw_value` is the weighted value before the cap, `value` is `min(raw_value, 40)`; `capped: true` and `state: "capped"` say the gate applied (even when `raw_value` was already ≤ 40), and `cap_reasons[]` lists every gating finding (`id`, `module`, `category`, `severity`, `status`, `confidence`, `scope`).
+
+### Non-production environments
+
+Pass `--environment preview|staging|local` (the audit takes it from `profile.json`). On a non-production host, caps whose id matches `M2.*noindex*`, `M1.robots.*` or `M14.ai_eligibility.not_indexable` are **suppressed**: noindex and robots blocking are expected there. They move to `suppressed_caps[]` with the environment and the reason `expected on a non-production host`, and a warning is added. Any other established sev-5 failure (a CSR-only shell, for instance) still caps. The default, `production`, never suppresses.
+
+### Probes are never scored
+
+Web-search presence probes (`M14.probe.*`) and GSC generative-AI imports (`M14.gsc_ai.*`) are severity 0 and reported under `probes` in `report.json`. They are a proxy, not citation data, and cannot move or cap either score.
+
+## Validation
+
+Every finding is validated against `schema/finding.schema.json` before scoring. Invalid findings are **dropped** and listed in `dropped_findings[]` (`index`, `id`, `errors[]`); `dropped_count` appears at the top level and on both axes. Use `--strict` to make any drop exit with code 2 (CI), and `--validate-only` to check a findings file without scoring it.
+
+## Search-vs-AI interpretations
+
+High = `value ≥ 75`, low = `value < 60`. Each score carries **its own** one-line `interpretation`:
 
 | Quadrant | Search interpretation | AI interpretation |
 |---|---|---|
-| High Search / Low AI | Ranks well, hard to cite by AI engines. | Weak classic ranking despite content. |
-| Low Search / High AI | Foundational SEO issues to fix first. | Citable by AI, but weak classic ranking. |
+| High Search / Low AI | Ranks well; classic fundamentals are strong. | Hard to cite by AI engines — add extractable structure and verify AI eligibility. |
+| Low Search / High AI | Foundational SEO issues to fix first. | Citable by AI, but weak classic ranking limits reach. |
 | Low Search / Low AI | Foundational issues — fix indexability and structure first. | Foundational issues — add structure, schema, and answer blocks. |
 | High Search / High AI | Strong classic SEO; pursue depth and authority. | Strong AI visibility; keep content fresh and original. |
 | Any other (mixed) | Mixed — see the prioritized actions. | Mixed — see the prioritized actions. |
+| Axis unscored | Unscored — no scored findings in an active Search category. | Unscored — no scored findings in an active AI category. |
 
-> Note: scores between 60 and 75 fall outside both the high and low thresholds, so a pair that isn't squarely in one quadrant yields the **mixed** interpretation.
+Scores between 60 and 75 are neither high nor low, so a pair that isn't squarely in one quadrant is **mixed**. When one axis is unscored, the other is interpreted on its own level.
+
+## Site rollup (`--manifest`)
+
+With a crawl manifest (`crawl.json`), the scorer scores every sampled page and rolls the results up to a site score:
+
+1. Findings are deduplicated (`id` + scope + location) so a site-wide finding emitted by several page runs counts **once**.
+2. Findings attach to pages through `location.url` (host lower-cased, no hash, no trailing slash), `location.file` / the page `slug`, or a `page` hint (url or slug — a rollup-only key, stripped before validation). `scope: site` findings apply to every page, `scope: template` findings to every page of that template; unmatched page findings are treated as site-wide, with a warning.
+3. Each page gets its own two scores (so a site-wide cap caps every page).
+4. `site value = Σ w_page × page_value / Σ w_page` over scored pages. `w_page` comes from `manifest.pages[].weight` when present, otherwise from the page role: **homepage 3 · target 2 · first sample of each template 2 · long-tail 1**. This is `method: "role_weights"`; weighting by Search Console impressions is planned as `method: "gsc_impressions"`.
+5. The rollup is `capped` only when every scored page is capped (a site-wide gate); page-only caps are counted in a warning. `pages[]` lists each page's role, weight, both scores and `worst_pages` gives the three lowest pages per axis.
+
+## Running the scorer
+
+```bash
+# a findings file, stdin, or a persisted run
+node scripts/score.mjs --findings findings.json
+cat findings.json | node scripts/score.mjs
+node scripts/score.mjs --run ~/.claude-seo-ai/runs/example.com/latest        # reads <run>/findings.json
+
+# declare the vertical (what the audit does) instead of inferring it
+node scripts/score.mjs --findings findings.json --vertical ecommerce,local-business --multilingual
+node scripts/score.mjs --findings findings.json --vertical-json profile.json
+
+# staging/preview hosts: noindex/robots caps are suppressed and reported
+node scripts/score.mjs --findings findings.json --environment staging
+
+# site rollup from a crawl manifest (findings from --findings/--run, or the ones the manifest carries)
+node scripts/score.mjs --run <run-dir> --manifest              # <run-dir>/crawl.json
+node scripts/score.mjs --manifest crawl.json
+
+# CI
+node scripts/score.mjs --findings findings.json --strict        # exit 2 if any finding was dropped
+node scripts/score.mjs --findings findings.json --validate-only
+```
+
+Input is a JSON array of findings, or `{ "findings": [...] }`, each conforming to `schema/finding.schema.json`. Exit codes: `0` ok · `1` bad invocation (no input, unreadable file, invalid JSON, bad flag) · `2` `--strict` with dropped findings.
 
 ## Output shape
 
-Running the scorer emits both scores side by side:
-
 ```json
 {
-  "findings_count": 0,
+  "findings_count": 7,
   "search_seo": {
-    "value": 0,
-    "band": "F",
-    "capped": false,
-    "needs_api_count": 0,
-    "categories": [ { "name": "...", "weight": 22, "value": 0, "active": false } ],
-    "interpretation": "..."
+    "value": 40, "band": "F", "capped": true, "needs_api_count": 1,
+    "raw_value": 71.8, "state": "capped",
+    "cap_reasons": [ { "id": "M2.robots.noindex_sitewide", "module": "M2", "category": "Indexability & Crawl", "severity": 5, "status": "fail", "confidence": "established", "scope": "site" } ],
+    "suppressed_caps": [],
+    "manual_review_count": 0, "unscored_count": 1, "dropped_count": 0,
+    "warnings": [],
+    "categories": [
+      { "name": "Indexability & Crawl", "weight": 22, "value": 50, "active": true, "modules": ["M1", "M2", "M3"], "active_weight": 56.4, "activation": "always", "conditional": false, "scored": 2, "needs_api": 0, "manual_review": 0 }
+    ],
+    "interpretation": "Foundational SEO issues to fix first."
   },
-  "ai_visibility": { "value": 0, "band": "F", "capped": false, "needs_api_count": 0, "categories": [], "interpretation": "..." }
+  "ai_visibility": { "value": null, "band": "unscored", "state": "unscored", "...": "same keys" },
+  "dropped_count": 0, "dropped_findings": [], "unmapped_findings": [], "ignored_conditional": [],
+  "activation": { "source": "declared", "vertical": { "primary": "ecommerce", "also": [], "multilingual": false }, "environment": "production", "inferred_categories": [] },
+  "warnings": []
 }
 ```
 
-Run it with:
-
-```bash
-node scripts/score.mjs --findings findings.json
-# or
-cat findings.json | node scripts/score.mjs
-```
-
-Input is a JSON array of findings, or `{ "findings": [...] }`, each conforming to `schema/finding.schema.json`. The scorer is pure logic and fully reproducible.
+The legacy keys (`value`, `band`, `capped`, `needs_api_count`, `categories[].name/weight/value/active`, `interpretation`) are unchanged; everything else is additive. With `--manifest` the result also carries `method`, `weights`, `pages_count`, `pages[]`, `worst_pages`, `unassigned_count`. Both axis objects validate against `$defs.score` in `schema/audit-report.schema.json`.

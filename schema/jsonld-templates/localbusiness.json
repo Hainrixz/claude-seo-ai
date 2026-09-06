@@ -1,0 +1,33 @@
+{
+  "@context": "https://schema.org",
+  "@type": "TODO:LocalBusiness_or_subtype",
+  "@id": "TODO:site_url/#localbusiness",
+  "name": "TODO:business_name_matches_gbp",
+  "url": "TODO:site_url/",
+  "image": "TODO:storefront_image_url",
+  "telephone": "TODO:telephone_e164",
+  "priceRange": "TODO:price_range",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "TODO:street_address",
+    "addressLocality": "TODO:city",
+    "addressRegion": "TODO:region",
+    "postalCode": "TODO:postal_code",
+    "addressCountry": "TODO:country_iso3166"
+  },
+  "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": "TODO:latitude",
+    "longitude": "TODO:longitude"
+  },
+  "openingHoursSpecification": [
+    {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": ["TODO:Monday"],
+      "opens": "TODO:09:00",
+      "closes": "TODO:18:00"
+    }
+  ],
+  "sameAs": ["TODO:google_business_profile_or_maps_url_confirmed_by_user"],
+  "parentOrganization": { "@id": "TODO:site_url/#organization" }
+}

@@ -28,7 +28,7 @@
   },
   {
     "id": "M11.heading.no_direct_answer", "module": "M11", "title": "Question heading without a direct answer",
-    "status": "fail", "severity": 5, "scope": "page",
+    "status": "fail", "severity": 3, "scope": "page",
     "evidence": { "observed": "H3 'How do I add JSON-LD?' is followed by a windup, not an answer" },
     "expected": "A ~40-60 word direct answer follows each question heading",
     "recommendation": "Rewrite the lead paragraph as a direct answer.", "fixable": "proposed",

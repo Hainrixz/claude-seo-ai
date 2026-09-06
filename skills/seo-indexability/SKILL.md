@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 If a page can't be crawled, indexed, or canonicalized correctly, every other signal is wasted — this is the floor under the Search score. Schema-side context: `references/schema-tier1.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`canonicals[]`, `robots_meta[]`) plus `status_chain`, `headers`, `robots_directives.effective`, and the crawl graph in `<run_dir>/crawl.json` for orphans, depth, and duplicate clusters; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`) plus response headers:
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) plus `headers`, `status_chain`, and `robots_directives`:
 1. **Canonical**: exactly one `<link rel="canonical">`; absolute HTTPS URL; classify self-referential vs cross-domain vs chained (canonical points to a URL that itself canonicalizes elsewhere). Flag canonical that resolves to a redirect or 4xx.
 2. **Canonical + noindex**: the lethal combination on the *same* URL (a noindex page used as a canonical target, or a canonicalized page also carrying noindex) — contradictory signals that drop the page.
 3. **Robots directives**: `<meta name="robots">` and the `X-Robots-Tag` header for `noindex`/`nofollow`/`none`; reconcile header vs meta (header wins).

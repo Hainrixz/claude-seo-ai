@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Entity linkage tells search engines and AI systems *which real-world thing* a page is about and ties it to the Knowledge Graph. Reference: `references/schema-tier1.md` (the `sameAs`/`@id`/Person+Organization rules). This module owns the `sameAs` detail M5 defers here.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `anchors[]`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **sameAs identity links**: for `Organization`/`Person` entities, check for `sameAs[]` resolving to canonical identities — Wikidata QID, Wikipedia, LinkedIn, Crunchbase, official social/company profiles. Wikidata is the strongest Knowledge Graph target.
 2. **Primary entity defined**: confirm exactly one clear primary entity per page (via `@id` + `mainEntity`/`mainEntityOfPage`), not an ambiguous or missing subject.
 3. **Entity consistency (local)**: for `LocalBusiness`, verify NAP (name, address, telephone) in schema matches visible on-page NAP and is internally consistent across blocks.

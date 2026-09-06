@@ -1,0 +1,11 @@
+# As a condition of accessing this website, you agree to abide by the following content signals.
+# The vocabulary is defined at https://contentsignals.org/
+User-agent: *
+Disallow: /admin/
+
+User-agent: GPTBot
+Disallow: /
+
+Sitemap: https://example.com/sitemap.xml
+
+Content-Signal: search=yes, ai-input=no, ai-train=no

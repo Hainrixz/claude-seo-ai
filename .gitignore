@@ -15,3 +15,7 @@ tmp/
 
 # claude-seo-ai fixer backups (runtime, never committed)
 backups/
+
+# claude-seo-ai run artifacts (persisted audits) and comparisons — runtime data, never committed
+runs/
+compare/

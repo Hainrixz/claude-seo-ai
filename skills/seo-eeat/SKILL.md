@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Experience, Expertise, Authoritativeness, and Trust are how both Google's quality systems and AI answer engines decide whether to rely on a page. Trust is foundational and now applies beyond YMYL. Schema details: `references/schema-tier1.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `anchors[]`, `text_sample`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Author identity & credentials**: is there a visible byline? A `Person` schema with `name`, `jobTitle`, `knowsAbout`, and `sameAs[]` (LinkedIn/Wikidata)? Does the byline link to an author/bio page? Are credentials/experience stated, not just a name?
 2. **Organization trust**: discoverable About and Contact pages; an `Organization` block with `name`, `url`, `logo`, `contactPoint`, `sameAs[]`; visible editorial/privacy/returns policies appropriate to the vertical.
 3. **Experience & expertise markers**: first-hand signals (original photos, "we tested", dates, methodology) and topical depth — not just generic prose.
@@ -21,7 +24,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 - **ADVISORY** (`fixable: advisory`): writing real author bios, About/contact pages, or editorial policies — the tool never authors these. **Never fabricate** names, credentials, dates, or identity links — ask the user or leave a clearly-marked `TODO` placeholder.
 
 ## Verification
-- Offline: `node ${CLAUDE_SKILL_DIR}/../../scripts/validate-jsonld.mjs --url <u>` plus `dom_assert` for visible byline/links/policy pages.
+- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-jsonld.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) plus `dom_assert` for visible byline/links/policy pages. <!-- reconcile-flags-v0.2 -->
 - When confirming an identity link or a live About/contact page requires a fetch that is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings

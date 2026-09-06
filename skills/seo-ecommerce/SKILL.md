@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Conditional commerce module: it only runs when commerce signals are detected, then audits and completes product structured data. Reference: `references/schema-tier1.md` (Product + Offer, Review/AggregateRating rows).
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `metas[]`, `text_sample`) and `vertical` from the envelope — the commerce gate is decided there; `site/discovery.json` carries the UCP profile probe; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Commerce gate**: detect commerce signals (price/currency text, add-to-cart/buy controls, `Product`/`Offer` schema, `og:type=product`). If none, every M18 finding is `not_applicable` (severity 0) — do not force product schema onto non-commerce pages.
 2. **Product + Offer**: `Product` has `name`, `image`; `Offer` has `price`, `priceCurrency`, `availability` (`schema.org/InStock` etc.). Per `references/schema-tier1.md`.
 3. **AggregateRating / Review**: if ratings are visibly shown, expect `AggregateRating` (`ratingValue`, `reviewCount`/`bestRating`) and/or `Review` (`author`). Never mark up ratings not visible on the page.
@@ -23,7 +26,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 - **ADVISORY** (`fixable: advisory`): price / availability mismatches between page, schema, and feed — the store backend/feed is the source of truth, so the tool never writes these. **Never invent** prices, currencies, availability, or ratings — ask the user or leave a clearly-marked TODO placeholder.
 
 ## Verification
-- Offline: `node ${CLAUDE_SKILL_DIR}/../../scripts/validate-jsonld.mjs --url <u>` (`schema_validator`) — JSON validity + required Product/Offer properties.
+- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-jsonld.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) (`schema_validator`) — JSON validity + required Product/Offer properties. <!-- reconcile-flags-v0.2 -->
 - Tier 1: Google Rich Results Test / schema.org validator (`rich_results_api`) for merchant-listing eligibility.
 - Tier 2: Merchant Center feed diff — compare schema vs feed `price`/`availability`. When the required data tier (feed/API) is unavailable, status is `needs_api`, never a false `pass`.
 

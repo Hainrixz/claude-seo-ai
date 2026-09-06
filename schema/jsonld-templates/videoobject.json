@@ -1,0 +1,13 @@
+{
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "@id": "TODO:page_url#video",
+  "name": "TODO:video_title",
+  "description": "TODO:video_description",
+  "thumbnailUrl": ["TODO:thumbnail_url"],
+  "uploadDate": "TODO:upload_date_iso8601",
+  "duration": "TODO:duration_iso8601_e.g._PT1M33S",
+  "contentUrl": "TODO:video_file_url_if_self_hosted",
+  "embedUrl": "TODO:embed_url",
+  "publisher": { "@id": "TODO:site_url/#organization" }
+}

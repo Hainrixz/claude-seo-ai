@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Sitemaps are the discovery contract you hand the crawler — they should list exactly the canonical, indexable URLs and nothing else. Schema rules for related markup: `references/schema-tier1.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` plus `<run_dir>/site/sitemaps.json` (+ `site/sitemap-urls.txt`), `<run_dir>/site/robots.json`, and `<run_dir>/crawl.json` for orphan reconciliation and per-URL status; Grep `pages/<slug>.html` for verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`) plus fetched `/sitemap.xml` and `/robots.txt`:
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) plus `site/sitemaps.json` and `site/robots.json`:
 1. **Presence & validity**: locate XML sitemap(s) (`/sitemap.xml`, robots `Sitemap:` lines, sitemap index); parse as well-formed XML against the sitemaps.org schema.
 2. **Size limits**: each sitemap `<=50,000` URLs and `<=50MB` uncompressed; if exceeded, expect a sitemap index splitting the set.
 3. **Extensions**: where relevant, validate `image:`, `video:`, and `news:` namespace entries (correct namespace declared, required child elements present).
@@ -25,7 +28,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`) plus 
 - **Never fabricate** lastmod times, media URLs, or canonical targets — pull from observed data, ask the user, or leave a clearly-marked `TODO` placeholder per the schema `fixable` contract.
 
 ## Verification
-- Offline: `node ${CLAUDE_SKILL_DIR}/../../scripts/parse-robots-sitemap.mjs --url <u>` — method `xml_parse`: parses robots.txt + sitemap XML, checks well-formedness, size caps, namespace/extension validity, and the canonical/noindex consistency assertion.
+- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — method `xml_parse`: parses robots.txt + sitemap XML, checks well-formedness, size caps, namespace/extension validity, and the canonical/noindex consistency assertion. <!-- reconcile-flags-v0.2 -->
 - When the required data tier (live fetch of sitemap/robots, or the resolved link graph) is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings

@@ -1,0 +1,8 @@
+# Fixture Site
+
+> A tiny synthetic website used by the claude-seo-ai test-suite.
+
+## Docs
+
+- [About](/about): what the fixture is for
+- [First article](/blog/a): a sample article

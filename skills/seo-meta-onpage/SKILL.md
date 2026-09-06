@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Head hygiene is cheap, deterministic, and the first thing every crawler reads. Reference: `references/schema-tier1.md` for the structured-data layer that sits alongside the head (owned by M5).
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`title`, `metas[]`, `robots_meta[]`, `canonicals[]`, `word_count`) plus `headers` (`content-language`, `x-robots-tag`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Title** — exactly one `<title>`; length 50-60 chars (warn outside the band, **fail** if missing or empty, **fail** if duplicated site-wide across distinct URLs). Not all caps; not pure keyword list.
 2. **Meta description** — present, 150-160 chars (warn outside, not fail — Google may rewrite it); not duplicated site-wide; describes the page, not boilerplate.
 3. **Viewport** — `<meta name="viewport" content="width=device-width, initial-scale=1">` present (fail if missing — mobile rendering/indexing depends on it).
@@ -24,7 +27,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 - **Never fabricate** a title, description, or `lang` — when content is too thin to derive a value, leave a clearly-marked `TODO:` placeholder for the user to fill.
 
 ## Verification
-- Method `dom_assert`: `node ${CLAUDE_SKILL_DIR}/../../scripts/parse-html.mjs --url <u>` (or `--file <path>`) — returns `title` (value/length/ok), `meta_description` (value/length/ok), `robots_meta`, `canonical`, and `head_hygiene` (viewport/charset/lang) so each head element's presence and length is asserted directly against the snapshot.
+- Method `dom_assert`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — returns `title` (value/length/ok), `meta_description` (value/length/ok), `robots_meta`, `canonical`, and `head_hygiene` (viewport/charset/lang) so each head element's presence and length is asserted directly against the snapshot. <!-- reconcile-flags-v0.2 -->
 - Duplicate-title/description checks need the full crawl set; when only a single page is available the cross-URL assertion is reported `needs_api`, **never** a false `pass`.
 
 ## Findings

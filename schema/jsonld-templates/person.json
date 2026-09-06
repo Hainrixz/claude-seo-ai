@@ -1,0 +1,15 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "@id": "TODO:site_url/author/TODO:author_slug#person",
+  "name": "TODO:person_name",
+  "url": "TODO:person_profile_url",
+  "image": "TODO:person_image_url",
+  "jobTitle": "TODO:job_title",
+  "worksFor": { "@id": "TODO:site_url/#organization" },
+  "sameAs": [
+    "TODO:sameas_url_confirmed_by_user"
+  ],
+  "knowsAbout": ["TODO:topic"],
+  "description": "TODO:credentials_supplied_by_user"
+}

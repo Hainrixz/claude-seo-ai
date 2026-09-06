@@ -1,0 +1,34 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Event",
+  "@id": "TODO:page_url#event",
+  "name": "TODO:event_name",
+  "description": "TODO:event_description",
+  "image": ["TODO:event_image_url"],
+  "startDate": "TODO:start_datetime_iso8601_with_offset",
+  "endDate": "TODO:end_datetime_iso8601_with_offset",
+  "eventStatus": "https://schema.org/EventScheduled",
+  "eventAttendanceMode": "https://schema.org/TODO:OfflineEventAttendanceMode_OnlineEventAttendanceMode_MixedEventAttendanceMode",
+  "location": {
+    "@type": "Place",
+    "name": "TODO:venue_name",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "TODO:street_address",
+      "addressLocality": "TODO:city",
+      "addressRegion": "TODO:region",
+      "postalCode": "TODO:postal_code",
+      "addressCountry": "TODO:country_iso3166"
+    }
+  },
+  "offers": {
+    "@type": "Offer",
+    "url": "TODO:ticket_url",
+    "price": "TODO:price",
+    "priceCurrency": "TODO:currency_iso4217",
+    "availability": "https://schema.org/InStock",
+    "validFrom": "TODO:sales_start_iso8601"
+  },
+  "organizer": { "@id": "TODO:site_url/#organization" },
+  "performer": { "@type": "TODO:Person_or_PerformingGroup", "name": "TODO:performer_name" }
+}

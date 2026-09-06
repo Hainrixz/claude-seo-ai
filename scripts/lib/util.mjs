@@ -1,59 +1,155 @@
 // Shared zero-dependency helpers for claude-seo-ai scripts.
-// HTML parsing is intentionally lightweight (regex over the served markup) so the
-// scripts run anywhere `node` exists, with no install step. For pathological
-// markup, prefer the agent's own reading of the PageSnapshot — these scripts
-// back the deterministic, reproducible checks (verification.reproduce).
+// HTML parsing runs on the zero-dependency tokenizer in lib/html.mjs (browser-like attribute
+// and implied-end-tag handling), so the scripts run anywhere `node` exists, with no install
+// step, and back the deterministic, reproducible checks (verification.reproduce).
+//
+// CLI contract (every script in scripts/*.mjs except the guard hook):
+//   export async function main(args) -> { result, code }
+//   if (isMain(import.meta.url)) runCli(main);
+// Scripts are importable without side effects; nothing here calls process.exit.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { fetchText as fetchTextImpl } from './fetch.mjs';
+import { decodeEntities } from './entities.mjs';
+import { parseDocument, tokenize, extractPassages, parseLinkHeader, inContent, sameUrl } from './html.mjs';
 
-/** Minimal `--flag value` / `--flag` arg parser. */
+/** Process exit-code taxonomy shared by every script. */
+export const EXIT = Object.freeze({
+  OK: 0,         // ran and produced a result
+  USAGE: 1,      // bad invocation: missing/invalid arguments, unreadable input path
+  RUNTIME: 2,    // ran but failed: network error, unexpected exception
+  THRESHOLD: 3,  // ran fine, but a gate/threshold was not met (audit --fail-under, check failures)
+});
+
+/**
+ * Minimal arg parser. Supports `--flag value`, `--flag` (boolean true),
+ * `--flag=value`, `--no-flag` (-> flag: false), repeated flags (-> array),
+ * and `--` (everything after is positional). Positionals land in `_`.
+ */
 export function parseArgs(argv = process.argv.slice(2)) {
   const out = { _: [] };
+  const set = (key, value) => {
+    if (Object.prototype.hasOwnProperty.call(out, key) && key !== '_') {
+      out[key] = Array.isArray(out[key]) ? [...out[key], value] : [out[key], value];
+    } else {
+      out[key] = value;
+    }
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith('--')) {
-      const key = a.slice(2);
+    if (a === '--') { out._.push(...argv.slice(i + 1)); break; }
+    if (a.startsWith('--') && a.length > 2) {
+      const body = a.slice(2);
+      const eq = body.indexOf('=');
+      if (eq !== -1) { set(body.slice(0, eq), body.slice(eq + 1)); continue; }
+      if (body.startsWith('no-') && body.length > 3) { set(body.slice(3), false); continue; }
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) { out[key] = true; }
-      else { out[key] = next; i++; }
+      if (next === undefined || next.startsWith('--')) { set(body, true); }
+      else { set(body, next); i++; }
     } else { out._.push(a); }
   }
   return out;
 }
 
-/** Print a JSON result to stdout and exit. */
+/** Print a JSON result to stdout, set the process exit code, and return the object (never exits). */
 export function emit(obj, code = 0) {
   process.stdout.write(JSON.stringify(obj, null, 2) + '\n');
-  process.exit(code);
+  process.exitCode = Number.isInteger(code) ? code : EXIT.RUNTIME;
+  return obj;
 }
 
-/** Fetch text with a short timeout; returns { ok, status, text, headers, error }. */
-export async function fetchText(url, { timeoutMs = 15000, headers = {} } = {}) {
-  if (typeof fetch !== 'function') {
-    return { ok: false, status: 0, text: '', headers: {}, error: 'global fetch unavailable (need Node >=18)' };
-  }
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+/** True when the module at `metaUrl` is the entry script of this process (symlink-safe). */
+export function isMain(metaUrl) {
   try {
-    const res = await fetch(url, {
-      redirect: 'follow',
-      signal: ctrl.signal,
-      headers: { 'user-agent': 'claude-seo-ai/0.1 (+https://github.com/Hainrixz/claude-seo-ai)', ...headers },
-    });
-    const text = await res.text();
-    const h = {};
-    for (const [k, v] of res.headers.entries()) h[k.toLowerCase()] = v;
-    return { ok: res.ok, status: res.status, text, headers: h, finalUrl: res.url, error: null };
-  } catch (e) {
-    return { ok: false, status: 0, text: '', headers: {}, error: String(e && e.message || e) };
-  } finally { clearTimeout(t); }
+    const entry = process.argv[1];
+    if (!entry || !metaUrl) return false;
+    const a = realpathSync(entry);
+    const b = realpathSync(fileURLToPath(metaUrl));
+    return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+  } catch { return false; }
 }
 
-/** Load HTML from --url or --file. Returns { source, html, headers, status, error }. */
+/**
+ * Run a script's `main(args)` as a CLI: parses argv, emits `result` with exit code `code`.
+ * A thrown error becomes `{ error }` with EXIT.RUNTIME. Never calls process.exit.
+ */
+export async function runCli(main, argv) {
+  let out;
+  try {
+    out = await main(parseArgs(argv));
+  } catch (e) {
+    const err = { error: String(e && e.message || e) };
+    if (process.env.CLAUDE_SEO_AI_DEBUG && e && e.stack) err.stack = e.stack;
+    return emit(err, EXIT.RUNTIME);
+  }
+  if (out && typeof out === 'object' && Object.prototype.hasOwnProperty.call(out, 'result')) {
+    return emit(out.result, Number.isInteger(out.code) ? out.code : EXIT.OK);
+  }
+  return emit(out === undefined ? {} : out, EXIT.OK);
+}
+
+/**
+ * Fetch text with redirects followed. Delegates to lib/fetch.mjs (recorded redirect chain, byte cap,
+ * gzip + charset handling, one retry on network error / 5xx). Legacy shape:
+ * { ok, status, text, headers, finalUrl, error } plus `chain` (the status_chain).
+ */
+export async function fetchText(url, opts = {}) { return fetchTextImpl(url, opts); }
+
+/**
+ * Read a persisted PageSnapshot (pages/<slug>.json written by scripts/snapshot.mjs).
+ * Returns { snapshot, path, run_dir, error }. `run_dir` is the directory holding pages/ and site/.
+ */
+export function readSnapshot(pathOrArgs) {
+  const p = pathOrArgs && typeof pathOrArgs === 'object' ? pathOrArgs.snapshot : pathOrArgs;
+  if (typeof p !== 'string' || !p.trim()) return { snapshot: null, path: null, run_dir: null, error: 'provide --snapshot <pages/<slug>.json>' };
+  const abs = resolve(p.trim());
+  let snap;
+  try { snap = JSON.parse(readFileSync(abs, 'utf8')); }
+  catch (e) { return { snapshot: null, path: abs, run_dir: null, error: 'cannot read snapshot ' + abs + ': ' + String(e && e.message || e) }; }
+  if (!snap || typeof snap !== 'object' || !Number.isInteger(snap.snapshot_version)) return { snapshot: null, path: abs, run_dir: null, error: 'not a PageSnapshot (missing snapshot_version): ' + abs };
+  const run_dir = /[\\/]pages$/i.test(dirname(abs)) ? resolve(dirname(abs), '..') : dirname(abs);
+  return { snapshot: snap, path: abs, run_dir, error: null };
+}
+
+/**
+ * Load HTML from --snapshot, --file or --url (in that precedence).
+ * Returns { source: 'snapshot'|'file'|'url'|'none', html, headers, status, finalUrl?, snapshot?, error }.
+ *   --snapshot <pages/<slug>.json> [--prefer raw|rendered]  real status/headers/html from a persisted snapshot; the
+ *       `snapshot` field is { path, run_dir, slug, prefer, used: 'raw'|'rendered', rendered_available, render_used, note }.
+ *   --file  reports `status: null` and empty headers: a local file has no HTTP response, and pretending it
+ *       returned 200 would be a fabricated value.
+ */
 export async function loadInput(args) {
+  if (args.snapshot !== undefined) {
+    const base = { source: 'snapshot', html: '', headers: {}, status: null, finalUrl: null, snapshot: null, error: null };
+    const prefer = args.prefer === undefined || args.prefer === true ? 'raw' : String(args.prefer).toLowerCase();
+    if (prefer !== 'raw' && prefer !== 'rendered') return { ...base, error: '--prefer must be raw or rendered' };
+    const rs = readSnapshot(args);
+    if (rs.error) return { ...base, error: rs.error };
+    const snap = rs.snapshot;
+    const wantRendered = prefer === 'rendered';
+    const hasRendered = !!(snap.rendered_html_path || (snap.html_inline && snap.html_inline.rendered));
+    const used = wantRendered && hasRendered ? 'rendered' : 'raw';
+    const rel = used === 'rendered' ? snap.rendered_html_path : snap.raw_html_path;
+    let html = null;
+    if (rel) {
+      try { html = readFileSync(resolve(rs.run_dir, rel), 'utf8'); }
+      catch (e) { return { ...base, error: 'snapshot HTML missing: ' + rel + ' (' + String(e && e.message || e) + ')' }; }
+    } else if (snap.html_inline && typeof snap.html_inline[used] === 'string') html = snap.html_inline[used];
+    else return { ...base, error: 'snapshot has no ' + used + ' HTML (raw_html_path is null and nothing is inlined)' };
+    const info = {
+      path: rs.path, run_dir: rs.run_dir, slug: snap.target && snap.target.slug ? snap.target.slug : null, prefer, used,
+      rendered_available: hasRendered, render_used: snap.render && snap.render.used ? snap.render.used : 'none',
+      note: wantRendered && used === 'raw' ? 'rendered DOM not available in this snapshot; using the raw HTML' : null,
+    };
+    return { source: 'snapshot', html, headers: snap.headers && typeof snap.headers === 'object' ? snap.headers : {}, status: snap.status === undefined ? null : snap.status,
+      finalUrl: snap.target && snap.target.final_url ? snap.target.final_url : null, snapshot: info, error: null };
+  }
   if (args.file) {
-    try { return { source: 'file', html: readFileSync(args.file, 'utf8'), headers: {}, status: 200, error: null }; }
-    catch (e) { return { source: 'file', html: '', headers: {}, status: 0, error: String(e && e.message || e) }; }
+    try { return { source: 'file', html: readFileSync(args.file, 'utf8'), headers: {}, status: null, error: null }; }
+    catch (e) { return { source: 'file', html: '', headers: {}, status: null, error: String(e && e.message || e) }; }
   }
   if (args.url) {
     const r = await fetchText(args.url);
@@ -62,121 +158,93 @@ export async function loadInput(args) {
   return { source: 'none', html: '', headers: {}, status: 0, error: 'provide --url <u> or --file <path>' };
 }
 
-const stripTags = (s) => s.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-export { stripTags };
-
-/** Decode the handful of HTML entities relevant to text fields. */
-export function decodeEntities(s = '') {
-  return s
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, ' ');
+/**
+ * Map a failed loadInput() to a CLI result: missing args / unreadable file are USAGE,
+ * a failed fetch is RUNTIME. Returns null when the input is usable.
+ */
+export function inputFailure(input) {
+  if (!input || !(input.error && !input.html)) return null;
+  const code = input.source === 'url' ? EXIT.RUNTIME : EXIT.USAGE;
+  return { result: { error: input.error }, code };
 }
 
-/** First match group or null. */
-function firstGroup(html, re) { const m = html.match(re); return m ? m[1] : null; }
+// ---------------------------------------------------------------------------
+// HTML getters: a compat facade over lib/html.mjs parseDocument(). Signatures and results on
+// well-formed markup are unchanged; they now also handle unquoted and single-quoted attributes,
+// apostrophes inside values, tags spanning lines, raw-text decoys (script/style/template/
+// noscript/svg content is never mistaken for headings, links or images) and the full entity table.
+// A one-entry cache avoids re-tokenizing when a script calls several getters on the same HTML.
 
-/** Extract <title>. */
-export function getTitle(html) {
-  const t = firstGroup(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
-  return t == null ? null : decodeEntities(stripTags(t));
+let _lastHtml = null;
+let _lastDoc = null;
+function docFor(html) {
+  const s = typeof html === 'string' ? html : String(html ?? '');
+  if (s !== _lastHtml) { _lastDoc = parseDocument(s); _lastHtml = s; }
+  return _lastDoc;
 }
 
-/** Get the content of a <meta name="..."> (case-insensitive). */
+export { decodeEntities, parseDocument, tokenize, extractPassages, parseLinkHeader, inContent, sameUrl };
+
+/** Remove tags and collapse whitespace. Contents of raw-text elements (script/style/…) are dropped as well. */
+export function stripTags(s) {
+  const str = typeof s === 'string' ? s : String(s ?? '');
+  if (str.indexOf('<') === -1) return str.replace(/\s+/g, ' ').trim();
+  let out = '';
+  for (const t of tokenize(str)) if (t.kind === 'text') out += t.text;
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+/** Extract the first <title> (decoded, whitespace-collapsed) or null. */
+export function getTitle(html) { return docFor(html).title.value; }
+
+/** Content of the first <meta name="..."> that carries a content attribute (case-insensitive name). */
 export function getMetaName(html, name) {
-  const re = new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']*)["'][^>]*>`, 'i');
-  const re2 = new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*name=["']${name}["'][^>]*>`, 'i');
-  const v = firstGroup(html, re) ?? firstGroup(html, re2);
-  return v == null ? null : decodeEntities(v);
+  const n = String(name).trim().toLowerCase();
+  const m = docFor(html).metas.find((x) => x.name === n && x.content !== null);
+  return m ? m.content : null;
 }
 
-/** Get the content of a <meta property="..."> (Open Graph). */
+/** Content of the first <meta property="..."> (Open Graph and friends). */
 export function getMetaProperty(html, prop) {
-  const re = new RegExp(`<meta[^>]*property=["']${prop}["'][^>]*content=["']([^"']*)["'][^>]*>`, 'i');
-  const re2 = new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*property=["']${prop}["'][^>]*>`, 'i');
-  const v = firstGroup(html, re) ?? firstGroup(html, re2);
-  return v == null ? null : decodeEntities(v);
+  const p = String(prop).trim().toLowerCase();
+  const m = docFor(html).metas.find((x) => x.property === p && x.content !== null);
+  return m ? m.content : null;
 }
 
-/** Get a <link rel="..."> href (first match). */
+/** href of the first <link> whose rel list contains `rel` (raw attribute value, not resolved). */
 export function getLinkRel(html, rel) {
-  const re = new RegExp(`<link[^>]*rel=["']${rel}["'][^>]*href=["']([^"']*)["'][^>]*>`, 'i');
-  const re2 = new RegExp(`<link[^>]*href=["']([^"']*)["'][^>]*rel=["']${rel}["'][^>]*>`, 'i');
-  return firstGroup(html, re) ?? firstGroup(html, re2);
+  const r = String(rel).trim().toLowerCase();
+  const l = docFor(html).links_rel.find((x) => x.rel.includes(r) && x.href !== null);
+  return l ? l.href : null;
 }
 
-/** Get <html lang="..">. */
-export function getHtmlLang(html) {
-  return firstGroup(html, /<html[^>]*\blang=["']([^"']*)["'][^>]*>/i);
-}
+/** <html lang> (falls back to xml:lang) or null. */
+export function getHtmlLang(html) { return docFor(html).lang; }
 
-/** Get declared charset. */
-export function getCharset(html) {
-  return firstGroup(html, /<meta[^>]*charset=["']?([\w-]+)["']?[^>]*>/i);
-}
+/** Declared charset from <meta charset> or <meta http-equiv="content-type">, or null. */
+export function getCharset(html) { return docFor(html).charset.value; }
 
-/** Collect headings as [{level, text}]. */
+/** Headings h1-h6 as [{level, text, region}] in document order (aria role=heading pseudo-headings excluded). */
 export function getHeadings(html) {
-  const out = [];
-  const re = /<(h[1-6])[^>]*>([\s\S]*?)<\/\1>/gi;
-  let m;
-  while ((m = re.exec(html))) out.push({ level: Number(m[1][1]), text: decodeEntities(stripTags(m[2])) });
-  return out;
+  return docFor(html).headings.filter((h) => !h.aria).map((h) => ({ level: h.level, text: h.text, region: h.region }));
 }
 
-/** Collect <img> tags with src/alt/dimensions. */
+const pxDigits = (v) => (v == null ? null : (/^\s*(\d+)(?:\.\d+)?\s*(?:px)?\s*$/i.exec(String(v)) || [])[1] || null);
+
+/**
+ * <img> tags as [{src, altPresent, alt, width, height}]. width/height are the numeric pixel value
+ * as a string, or null when absent or not a pixel number ("100%", "auto") — those are unsized.
+ * src is the src attribute only; a lazy placeholder is never replaced by data-src here.
+ */
 export function getImages(html) {
-  const out = [];
-  const re = /<img\b[^>]*>/gi;
-  let m;
-  while ((m = re.exec(html))) {
-    const tag = m[0];
-    const src = firstGroup(tag, /\bsrc=["']([^"']*)["']/i);
-    const altPresent = /\balt=/i.test(tag);
-    const alt = firstGroup(tag, /\balt=["']([^"']*)["']/i);
-    const width = firstGroup(tag, /\bwidth=["']?(\d+)/i);
-    const height = firstGroup(tag, /\bheight=["']?(\d+)/i);
-    out.push({ src, altPresent, alt: alt == null ? null : decodeEntities(alt), width, height });
-  }
-  return out;
+  return docFor(html).images.map((i) => ({ src: i.src, altPresent: i.alt_present, alt: i.alt, width: pxDigits(i.width), height: pxDigits(i.height) }));
 }
 
-/** Collect <a href> links as [{href, anchor}]. */
-export function getLinks(html) {
-  const out = [];
-  const re = /<a\b[^>]*\bhref=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-  while ((m = re.exec(html))) out.push({ href: m[1], anchor: decodeEntities(stripTags(m[2])) });
-  return out;
-}
+/** <a href> anchors as [{href, anchor, …}] (see parseDocument().anchors for the extra fields). */
+export function getLinks(html) { return docFor(html).anchors; }
 
-/** Extract all JSON-LD blocks; returns [{ok, type, data, error, raw}]. */
-export function getJsonLd(html) {
-  const out = [];
-  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  let m;
-  while ((m = re.exec(html))) {
-    const raw = m[1].trim();
-    try {
-      const data = JSON.parse(raw);
-      const types = collectTypes(data);
-      out.push({ ok: true, type: types, data, error: null, raw });
-    } catch (e) {
-      out.push({ ok: false, type: [], data: null, error: String(e && e.message || e), raw });
-    }
-  }
-  return out;
-}
-
-function collectTypes(node, acc = []) {
-  if (Array.isArray(node)) { for (const n of node) collectTypes(n, acc); return acc; }
-  if (node && typeof node === 'object') {
-    if (node['@type']) {
-      if (Array.isArray(node['@type'])) acc.push(...node['@type']); else acc.push(node['@type']);
-    }
-    if (Array.isArray(node['@graph'])) for (const n of node['@graph']) collectTypes(n, acc);
-  }
-  return acc;
-}
+/** JSON-LD blocks as [{ok, type, data, error, raw}]; the MIME match ignores parameters, case and whitespace. */
+export function getJsonLd(html) { return docFor(html).jsonld; }
 
 /** Valid-ish BCP-47 language[-REGION] check (lenient, covers common cases + x-default). */
 export function isBcp47(code) {

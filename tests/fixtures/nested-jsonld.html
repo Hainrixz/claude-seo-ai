@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nested JSON-LD fixture</title>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "Widget Pro",
+  "image": [],
+  "brand": { "@type": "Brand", "name": "Acme" },
+  "offers": [
+    { "@type": "Offer", "price": "", "priceCurrency": "USD", "availability": "https://schema.org/InStock" }
+  ],
+  "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.6", "reviewCount": null }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Article",
+      "headline": "Nested nodes are validated too",
+      "datePublished": "2026-02-02",
+      "author": { "@type": "Person", "name": "Ana Ruiz", "sameAs": [] },
+      "publisher": { "@id": "#org" }
+    },
+    { "@type": "Organization", "@id": "#org", "name": "Acme", "logo": "" }
+  ]
+}
+</script>
+</head>
+<body>
+<main>
+  <h1>Nested JSON-LD fixture</h1>
+  <p>Body text for the fixture page, long enough to count as a passage of content.</p>
+</main>
+</body>
+</html>

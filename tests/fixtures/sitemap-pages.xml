@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+  <url><loc>https://example.com/</loc><lastmod>2026-08-15</lastmod></url>
+  <url><loc>https://example.com/about</loc><lastmod>2026-08-15</lastmod><news:news><news:publication_date>2026-08-15</news:publication_date></news:news></url>
+</urlset>

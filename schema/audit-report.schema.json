@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Hainrixz/claude-seo-ai/schema/audit-report.schema.json",
   "title": "claude-seo-ai Audit Report",
-  "description": "Top-level result of `/claude-seo-ai audit`. Carries the two never-blended scores plus all findings.",
+  "description": "Top-level result of an audit run (the audit command or scripts/audit.mjs, written by scripts/report.mjs as report.json). Carries the two never-blended scores plus all findings, and — when available — the crawl coverage, per-page scores, site rollup, platform profile and probes.",
   "type": "object",
   "required": ["target", "generated_at", "tier", "vertical", "scores", "findings"],
   "additionalProperties": false,
@@ -14,6 +14,7 @@
       "properties": {
         "kind": { "type": "string", "enum": ["url", "path"] },
         "value": { "type": "string" },
+        "host": { "type": "string", "description": "Lower-cased hostname of the audited origin (absent for local paths)." },
         "pages_analyzed": { "type": "integer", "minimum": 1 }
       }
     },
@@ -22,11 +23,26 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 2,
-      "description": "Highest data tier reached: 0 offline, 1 render/PSI, 2 OAuth (GSC/Merchant)."
+      "description": "Highest data tier reached: 0 offline/static scripts, 1 render/PSI, 2 OAuth (GSC/Merchant)."
     },
     "vertical": {
-      "type": "string",
-      "enum": ["saas", "blog-publisher", "local-business", "ecommerce", "docs", "generic"]
+      "description": "Either the legacy single vertical id, or the seo-vertical-detect object (primary + secondary verticals + multilingual flag).",
+      "oneOf": [
+        { "$ref": "#/$defs/vertical_id" },
+        {
+          "type": "object",
+          "required": ["primary"],
+          "additionalProperties": false,
+          "properties": {
+            "primary": { "$ref": "#/$defs/vertical_id" },
+            "also": { "type": "array", "items": { "$ref": "#/$defs/vertical_id" } },
+            "multilingual": { "type": "boolean" },
+            "locales": { "type": "array", "items": { "type": "string" } },
+            "signals": { "type": ["object", "array"], "description": "Detection evidence (free-form)." },
+            "source": { "type": "string", "enum": ["declared", "inferred", "detected"] }
+          }
+        }
+      ]
     },
     "scores": {
       "type": "object",
@@ -40,18 +56,145 @@
     "findings": {
       "type": "array",
       "items": { "$ref": "https://github.com/Hainrixz/claude-seo-ai/schema/finding.schema.json" }
-    }
+    },
+    "run_id": { "type": "string", "description": "UTC run id (YYYY-MM-DDTHH-mm-ssZ)." },
+    "plugin_version": { "type": "string" },
+    "run_dir": { "type": "string", "description": "Absolute path of the persisted run directory." },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["deterministic", "full", "prompt-only"], "description": "deterministic = scripts only (model-judged modules not evaluated); full = scripts + agents; prompt-only = degraded mode without node." },
+        "modules_covered": { "type": "array", "items": { "type": "string" } },
+        "modules_model_only": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "description": "Per-page scores from the site rollup (scripts/score.mjs scoreSite).",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": true,
+        "properties": {
+          "url": { "type": "string" },
+          "slug": { "type": "string" },
+          "role": { "type": "string" },
+          "template": { "type": ["string", "null"] },
+          "weight": { "type": "number", "minimum": 0 },
+          "findings_count": { "type": "integer", "minimum": 0 },
+          "search": { "$ref": "#/$defs/page_score" },
+          "ai": { "$ref": "#/$defs/page_score" }
+        }
+      }
+    },
+    "site_rollup": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "method": { "type": "string", "description": "Rollup method id, e.g. role_weights (weighted mean of per-page scores by page role); future: gsc_impressions." },
+        "weights": { "type": "object", "additionalProperties": { "type": "number" } },
+        "worst_pages": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "search": { "type": "array", "items": { "$ref": "#/$defs/worst_page" } },
+            "ai": { "type": "array", "items": { "$ref": "#/$defs/worst_page" } }
+          }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "data_sources": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "render": { "type": ["string", "object", "null"], "description": "Renderer used: none | chrome | playwright | external, or an object with details." },
+        "psi": { "type": ["string", "object", "boolean", "null"] },
+        "gsc": { "type": ["string", "object", "boolean", "null"] }
+      }
+    },
+    "platform": { "type": "object", "additionalProperties": true, "description": "SiteProfile from scripts/detect-platform.mjs (platform, framework, cms_plugins, hosting, environment, capabilities…)." },
+    "probes": { "type": "object", "additionalProperties": true, "description": "Never-scored probes (web_search presence proxy, gsc_generative_ai import). Informational only." },
+    "dropped_findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dropped_finding" }
+    },
+    "site": { "type": "object", "additionalProperties": true, "description": "Site-level artifacts summary (robots, sitemaps, discovery)." },
+    "warnings": { "type": "array", "items": { "type": "string" } }
   },
   "$defs": {
+    "vertical_id": {
+      "type": "string",
+      "enum": ["saas", "blog-publisher", "local-business", "ecommerce", "docs", "generic"]
+    },
+    "band": { "type": "string", "enum": ["A", "B", "C", "D", "F", "unscored"] },
+    "dropped_finding": {
+      "type": "object",
+      "required": ["index", "errors"],
+      "additionalProperties": false,
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "id": { "type": ["string", "null"] },
+        "errors": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cap_reason": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "module": { "type": "string" },
+        "category": { "type": "string" },
+        "severity": { "type": "integer" },
+        "status": { "type": "string" },
+        "confidence": { "type": "string" },
+        "scope": { "type": "string" },
+        "reason": { "type": "string" },
+        "environment": { "type": "string" }
+      }
+    },
+    "page_score": {
+      "type": "object",
+      "required": ["value", "band"],
+      "additionalProperties": true,
+      "properties": {
+        "value": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "raw_value": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "band": { "$ref": "#/$defs/band" },
+        "state": { "type": "string", "enum": ["scored", "unscored", "capped"] },
+        "capped": { "type": "boolean" }
+      }
+    },
+    "worst_page": {
+      "type": "object",
+      "required": ["url", "value"],
+      "additionalProperties": true,
+      "properties": {
+        "url": { "type": "string" },
+        "value": { "type": ["number", "null"] },
+        "band": { "$ref": "#/$defs/band" }
+      }
+    },
     "score": {
       "type": "object",
       "required": ["value", "band", "interpretation", "categories"],
       "additionalProperties": false,
       "properties": {
-        "value": { "type": "number", "minimum": 0, "maximum": 100 },
-        "band": { "type": "string", "enum": ["A", "B", "C", "D", "F"] },
-        "capped": { "type": "boolean", "description": "true if a severity-5 FAIL gated the score to <=40." },
+        "value": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Final score after gating. null when the axis is unscored (no active category with weight > 0)." },
+        "raw_value": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Weighted value before the severity cap (equals value unless capped)." },
+        "band": { "$ref": "#/$defs/band" },
+        "state": { "type": "string", "enum": ["scored", "unscored", "capped"] },
+        "capped": { "type": "boolean", "description": "true when a severity-5 established FAIL in an active, weighted category gated the score to <= 40." },
+        "cap_reasons": { "type": "array", "items": { "$ref": "#/$defs/cap_reason" } },
+        "suppressed_caps": { "type": "array", "items": { "$ref": "#/$defs/cap_reason" }, "description": "Caps that would have applied but were suppressed because the environment is not production (expected noindex/robots on preview, staging, local)." },
         "interpretation": { "type": "string" },
+        "needs_api_count": { "type": "integer", "minimum": 0 },
+        "manual_review_count": { "type": "integer", "minimum": 0 },
+        "unscored_count": { "type": "integer", "minimum": 0, "description": "Findings in this axis that did not enter the score for any reason (needs_api, manual_review, not_applicable, severity 0, inactive conditional category, unmapped module)." },
+        "dropped_count": { "type": "integer", "minimum": 0, "description": "Findings dropped before scoring because they failed schema validation (same number on both axes)." },
+        "warnings": { "type": "array", "items": { "type": "string" } },
         "categories": {
           "type": "array",
           "items": {
@@ -60,9 +203,16 @@
             "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
-              "weight": { "type": "number", "minimum": 0, "maximum": 100 },
-              "value": { "type": "number", "minimum": 0, "maximum": 100 },
-              "active": { "type": "boolean" }
+              "weight": { "type": "number", "minimum": 0, "maximum": 100, "description": "Nominal weight from the model table." },
+              "value": { "type": "number", "minimum": 0, "maximum": 100, "description": "Severity-weighted pass rate; 0 when the category has no scored findings (see active)." },
+              "active": { "type": "boolean" },
+              "modules": { "type": "array", "items": { "type": "string" } },
+              "active_weight": { "type": "number", "minimum": 0, "maximum": 100, "description": "Share (%) of the active total this category actually carried in the score; 0 when inactive." },
+              "activation": { "type": "string", "enum": ["always", "vertical:ecommerce", "vertical:local-business", "flag:multilingual", "inactive"] },
+              "conditional": { "type": "boolean" },
+              "scored": { "type": "integer", "minimum": 0 },
+              "needs_api": { "type": "integer", "minimum": 0 },
+              "manual_review": { "type": "integer", "minimum": 0 }
             }
           }
         }

@@ -1,0 +1,24 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": "TODO:site_url/#organization",
+  "name": "TODO:organization_name",
+  "url": "TODO:site_url/",
+  "logo": {
+    "@type": "ImageObject",
+    "@id": "TODO:site_url/#logo",
+    "url": "TODO:logo_url",
+    "width": "TODO:logo_width_px",
+    "height": "TODO:logo_height_px"
+  },
+  "sameAs": [
+    "TODO:sameas_url_confirmed_by_user"
+  ],
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "contactType": "TODO:contact_type",
+    "email": "TODO:contact_email",
+    "telephone": "TODO:contact_telephone",
+    "availableLanguage": ["TODO:language_bcp47"]
+  }
+}

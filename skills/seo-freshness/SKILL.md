@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Freshness is a recency signal both classic ranking systems (Query Deserves Freshness) and AI answer engines weigh — Perplexity in particular favours recently-updated sources when citing. Date fields tie directly to Article schema (cross-check M5); see `references/schema-tier1.md` for the date rules.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `metas[]` for `article:published_time`/`modified_time`) plus `headers.last-modified`; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Visible dates**: detect on-page "Published" / "Updated on" / "Last reviewed" patterns and their values (ISO or human-readable).
 2. **Schema dates**: parse `datePublished`/`dateModified` from JSON-LD `Article`/`BlogPosting`/`NewsArticle`.
 3. **Agreement**: visible date and schema date must match; flag mismatches and schema dates with no visible counterpart (AI engines distrust hidden-only dates).
@@ -32,7 +35,7 @@ Findings conform to `schema/finding.schema.json`. Examples:
 - `M13.datemodified.missing` — Article schema with `datePublished` but no `dateModified` (status `fail`, severity 3, `fixable: auto`, axis `both`, confidence `directional`).
 - `M13.dates.visible_schema_mismatch` — visible "Updated May 2025" vs schema `dateModified: 2023-01-10` (status `warn`, severity 3, `fixable: proposed`, axis `both`, confidence `directional`).
 - `M13.content.stale_volatile` — "best X 2024" page unchanged for 2 years on a fast-moving topic (status `warn`, severity 2, `fixable: advisory`, axis `both`, confidence `directional`).
-Each finding: `evidence.observed` quotes the page (date string + selector); `verification.reproduce` is a runnable assertion (e.g. `node scripts/check-freshness.mjs --url <u>`); `expected_impact` is banded + confidence-tagged, with any published number confined to `rationale` with a citation.
+Each finding: `evidence.observed` quotes the page (date string + selector); `verification.reproduce` is a runnable assertion (e.g. `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-freshness.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`)); `expected_impact` is banded + confidence-tagged, with any published number confined to `rationale` with a citation. <!-- reconcile-flags-v0.2 -->
 
 ## Honesty
 - Freshness is a contextual signal, not a universal ranking boost — refreshing evergreen content rarely moves rankings, and a `dateModified` bump without a real content change is detectable and adds no durable value. Confidence here is **directional**, never `established`; never present a date edit as a guaranteed ranking gain or backdate to fake recency.

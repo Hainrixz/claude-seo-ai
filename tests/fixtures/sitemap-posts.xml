@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://example.com/blog/a?x=1&amp;y=2</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://example.com/es/blog/a"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://example.com/blog/a"/>
+    <image:image><image:loc>https://example.com/img/a.png</image:loc></image:image>
+    <image:image><image:loc>https://example.com/img/a2.png</image:loc></image:image>
+  </url>
+  <url><loc>https://example.com/blog/b</loc><lastmod>2026-07-15T08:30:00+00:00</lastmod></url>
+  <url><loc>https://example.com/blog/c</loc><lastmod>15/07/2026</lastmod><priority>7</priority><changefreq>sometimes</changefreq></url>
+  <url><lastmod>2026-07-01</lastmod></url>
+</urlset>

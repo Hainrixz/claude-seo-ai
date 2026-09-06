@@ -1,0 +1,29 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Review",
+      "@id": "TODO:page_url#review-TODO:review_slug",
+      "itemReviewed": { "@id": "TODO:page_url#product" },
+      "author": { "@type": "Person", "name": "TODO:review_author_name" },
+      "datePublished": "TODO:review_date_iso8601",
+      "reviewBody": "TODO:review_body_visible_on_page",
+      "reviewRating": {
+        "@type": "Rating",
+        "ratingValue": "TODO:rating_value",
+        "bestRating": "5",
+        "worstRating": "1"
+      }
+    },
+    {
+      "@id": "TODO:page_url#product",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "TODO:aggregate_rating_value_from_real_reviews",
+        "reviewCount": "TODO:review_count",
+        "bestRating": "5",
+        "worstRating": "1"
+      }
+    }
+  ]
+}

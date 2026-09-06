@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Google indexes mobile-first: the mobile rendering of a page is the canonical one for ranking. This module checks that a page is usable on a small viewport. Layout problems that hurt mobile usability often surface as CLS — cross-check `references/cwv-thresholds.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`metas[]` for the viewport tag) and `parsed_rendered` when `render.used` is not `none` (layout/geometry checks need it); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Viewport meta**: a `<meta name="viewport">` exists with `width=device-width` and `initial-scale=1`. Flag missing, fixed-width (`width=1024`), or zoom-blocking (`user-scalable=no`, `maximum-scale=1`) values — the last also harms accessibility.
 2. **No horizontal scroll**: detect fixed-width containers / large absolute widths that force the viewport wider than the device (content overflowing a ~360 px small viewport).
 3. **Tap-target size**: interactive elements (links, buttons, form controls) should be large enough and spaced so adjacent targets are not easily mis-tapped.
@@ -22,8 +25,8 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 
 ## Verification
 - Method `dom_assert`: assert against the snapshot (viewport meta presence/content, computed widths, target geometry).
-- Reproduce the deterministic part (viewport meta presence/content) offline: `node ${CLAUDE_SKILL_DIR}/../../scripts/parse-html.mjs --url <u>` (or `--file <path>`) — inspect `head_hygiene.viewport`. Tap-target/overflow geometry is a `manual_review` pass over the rendered snapshot.
-- Tap-target and overflow checks need the **rendered** snapshot (computed layout). When only `raw_html` is available and layout cannot be resolved, status is `needs_api`, never a false `pass`.
+- Reproduce the deterministic part (viewport meta presence/content) offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — inspect `head_hygiene.viewport`. Tap-target/overflow geometry is a `manual_review` pass over the rendered snapshot. <!-- reconcile-flags-v0.2 -->
+- Tap-target and overflow checks need the **rendered** snapshot (computed layout). When only `raw_html_path` is available and layout cannot be resolved, status is `needs_api`, never a false `pass`.
 
 ## Findings
 Emit findings per `schema/finding.schema.json`. Examples:

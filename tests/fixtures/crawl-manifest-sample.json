@@ -1,0 +1,87 @@
+{
+  "target": "https://example.test/blog/first-post",
+  "pages": [
+    { "url": "https://example.test/", "slug": "_", "role": "homepage", "template": "home", "snapshot": "pages/_.json" },
+    { "url": "https://example.test/blog/first-post", "slug": "blog_first-post", "role": "target", "template": "blog/*", "snapshot": "pages/blog_first-post.json" },
+    { "url": "https://example.test/blog/second-post/", "slug": "blog_second-post", "role": "sample", "template": "blog/*", "snapshot": "pages/blog_second-post.json" },
+    { "url": "https://example.test/about", "slug": "about", "role": "sample", "template": "about", "snapshot": "pages/about.json" },
+    { "url": "https://example.test/blog/third-post", "slug": "blog_third-post", "role": "sample", "template": "blog/*", "snapshot": "pages/blog_third-post.json" }
+  ],
+  "templates": [
+    { "key": "home", "discovered": 1, "sampled": 1 },
+    { "key": "blog/*", "discovered": 40, "sampled": 3 },
+    { "key": "about", "discovered": 1, "sampled": 1 }
+  ],
+  "findings": [
+    {
+      "id": "M1.robots.ok", "module": "M1", "title": "robots.txt valid and reachable",
+      "status": "pass", "severity": 5, "scope": "site",
+      "evidence": { "observed": "robots.txt returns 200; Googlebot allowed" },
+      "expected": "robots.txt reachable", "recommendation": "No action.", "fixable": "advisory",
+      "verification": { "method": "robots_parse", "assertion": "no Disallow: / for Googlebot", "reproduce": "node \"/plugin/scripts/parse-robots-sitemap.mjs\" --file site/robots.txt" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Blocked crawl prevents indexing." }
+    },
+    {
+      "id": "M1.robots.ok", "module": "M1", "title": "robots.txt valid and reachable (duplicate emitted by a second page run)",
+      "status": "pass", "severity": 5, "scope": "site",
+      "evidence": { "observed": "robots.txt returns 200; Googlebot allowed" },
+      "expected": "robots.txt reachable", "recommendation": "No action.", "fixable": "advisory",
+      "verification": { "method": "robots_parse", "assertion": "no Disallow: / for Googlebot", "reproduce": "node \"/plugin/scripts/parse-robots-sitemap.mjs\" --file site/robots.txt" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Blocked crawl prevents indexing." }
+    },
+    {
+      "id": "M5.blogposting.missing_datemodified", "module": "M5", "title": "BlogPosting missing dateModified",
+      "status": "fail", "severity": 3, "scope": "template",
+      "location": { "url": "https://example.test/blog/first-post" },
+      "evidence": { "observed": "BlogPosting has datePublished but no dateModified" },
+      "expected": "Include dateModified (ISO 8601)", "recommendation": "Add dateModified to the BlogPosting template.", "fixable": "auto",
+      "verification": { "method": "schema_validator", "assertion": "BlogPosting.dateModified present", "reproduce": "node \"/plugin/scripts/validate-jsonld.mjs\" --snapshot pages/blog_first-post.json" },
+      "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "medium", "rationale": "dateModified is a documented freshness signal." }
+    },
+    {
+      "id": "M9.alt.missing", "module": "M9", "title": "Content image without alt",
+      "status": "fail", "severity": 3, "scope": "page",
+      "location": { "url": "https://example.test/blog/second-post" },
+      "evidence": { "observed": "<img src=\"hero.jpg\"> has no alt attribute" },
+      "expected": "Every content image has alt text", "recommendation": "Add contextual alt text.", "fixable": "proposed",
+      "verification": { "method": "dom_assert", "assertion": "img has non-empty alt", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/blog_second-post.json" },
+      "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "low", "rationale": "Alt aids a11y and image understanding." }
+    },
+    {
+      "id": "M7.title.ok", "module": "M7", "title": "Title length within band",
+      "status": "pass", "severity": 3, "scope": "page",
+      "location": { "url": "https://example.test/" },
+      "evidence": { "observed": "title length 54" },
+      "expected": "Title between 30 and 60 characters", "recommendation": "No action.", "fixable": "advisory",
+      "verification": { "method": "dom_assert", "assertion": "30 <= title.length <= 60", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/_.json" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Titles are a documented snippet input." }
+    },
+    {
+      "page": "blog_third-post",
+      "id": "M11.heading.no_direct_answer", "module": "M11", "title": "Question heading without a direct answer",
+      "status": "fail", "severity": 3, "scope": "page",
+      "evidence": { "observed": "H2 'Why does it matter?' followed by a windup" },
+      "expected": "A direct answer follows each question heading", "recommendation": "Rewrite the lead paragraph.", "fixable": "proposed",
+      "verification": { "method": "manual_review", "assertion": "first passage answers the heading", "reproduce": "node \"/plugin/scripts/check-answerblocks.mjs\" --snapshot pages/blog_third-post.json" },
+      "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "high", "rationale": "Self-contained answers correlate with citation." }
+    },
+    {
+      "id": "M12.facts.ok", "module": "M12", "title": "Substantive numeric facts present",
+      "status": "pass", "severity": 3, "scope": "page",
+      "location": { "url": "https://example.test/about" },
+      "evidence": { "observed": "5 substantive numeric facts with sources" },
+      "expected": "Original, sourced facts in the body", "recommendation": "No action.", "fixable": "advisory",
+      "verification": { "method": "dom_assert", "assertion": "substantive numeric density > 0", "reproduce": "node \"/plugin/scripts/factdensity.mjs\" --snapshot pages/about.json" },
+      "expected_impact": { "axis": "ai", "confidence": "directional", "magnitude": "medium", "rationale": "Fact density correlates with citation." }
+    },
+    {
+      "id": "M8.og.image_missing", "module": "M8", "title": "og:image missing",
+      "status": "warn", "severity": 2, "scope": "page",
+      "location": { "url": "https://example.test/nowhere" },
+      "evidence": { "observed": "no meta property=og:image" },
+      "expected": "og:image present", "recommendation": "Add an og:image.", "fixable": "proposed",
+      "verification": { "method": "dom_assert", "assertion": "meta[property=og:image] present", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/nowhere.json" },
+      "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "low", "rationale": "Synthetic: unmatched page finding, treated as site-wide with a warning." }
+    }
+  ]
+}

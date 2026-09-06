@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 AI engines cite passages they can lift whole, without surrounding context — so passage structure is the highest-leverage on-page AI signal. This module checks extractability; for who is allowed to fetch and cite the page, see `references/ai-crawlers.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`headings[]`, `text_sample`, `word_count`) — passages come from the HTML file, not from a summary; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Heading → direct answer**: for each H2/H3 that reads as a question (or implies one), is the first paragraph a direct, ~40-60 word answer — not a windup ("In this section we'll explore…")?
 2. **Self-contained passages**: are top-level passages ~134-167 words and answerable on their own? Flag unresolved anaphora ("as mentioned above", "this", "the latter") that needs prior context to parse.
 3. **Structured forms**: presence of lists, comparison tables, and explicit term **definitions** where the content warrants them — these are disproportionately quoted.
@@ -23,7 +26,7 @@ Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
 - **Never** silently rewrite published prose, and never invent facts to fill a passage — if a claim is missing leave a clearly-marked `TODO` placeholder for the user. No finding here is `auto`.
 
 ## Verification
-- Method is `manual_review`. The deterministic part is reproducible offline: word-count windows (answer 40-60w; passage 134-167w), question-heading detection, anaphora openers, and TL;DR presence via `node ${CLAUDE_SKILL_DIR}/../../scripts/check-answerblocks.mjs --url <u>` (or `--file <path>`). Use `manual_review` as the finding's `verification.method` (the enum has no `heuristic` value); the script is the `verification.reproduce` command.
+- Method is `manual_review`. The deterministic part is reproducible offline: word-count windows (answer 40-60w; passage 134-167w), question-heading detection, anaphora openers, and TL;DR presence via `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-answerblocks.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`). Use `manual_review` as the finding's `verification.method` (the enum has no `heuristic` value); the script is the `verification.reproduce` command. <!-- reconcile-flags-v0.2 -->
 - Semantic completeness and anaphora resolution still require a judgment pass; when that pass or the rendered DOM is unavailable, status is `needs_api` (or `warn`), **never** a false `pass`.
 
 ## Findings

@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Generative engines preferentially cite passages that are concrete, quantified, and attributable. This module measures how "citable" the page's prose is — facts, numbers, original data, and authoritative outbound links — not vocabulary. AI retrieval/citation context: `references/ai-crawlers.md`.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`anchors[]` for outbound links, `text_sample`) and the HTML file for passage-level counts; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Statistic/number density** per passage: tokenize the main content into passages (paragraph / `<li>` / heading-bounded block) and count numeric tokens — figures, percentages, dates, quantities, ranges. Flag long passages of pure assertion with zero numeric support.
 2. **Proprietary/original data**: detect first-party-data signals — patterns like "our study", "our survey", "our data", "we analyzed", "we surveyed", "in our test", "internal data" — and note whether such claims are backed by a method/sample, a table, or a chart.
 3. **Outbound citations**: count outbound links from the main content to authoritative sources (standards bodies, primary research, official docs, `.gov`/`.edu`, named publications); distinguish them from internal/nav/affiliate links.
@@ -28,7 +31,7 @@ Emit findings per `schema/finding.schema.json`. Examples:
 - `M12.density.low_numeric_passages` — multiple main-content passages with zero numeric support (status `warn`, severity 4, `fixable: advisory`, axis `ai`, confidence `directional`).
 - `M12.citations.no_outbound_authority` — main content makes factual claims but links to zero authoritative outbound sources (status `warn`, severity 4, `fixable: advisory`, axis `ai`, confidence `directional`).
 - `M12.claim.unsourced_superlative` — a superlative/comparative claim with no inline citation or data (status `warn`, severity 1, `fixable: advisory`, axis `ai`, confidence `speculative`).
-Each finding: `evidence.observed` quotes the exact passage/claim from the page; `verification.reproduce` is the runnable count (e.g. `node scripts/factdensity.mjs --url <u>`); `expected_impact` is banded + confidence-tagged (no naked %).
+Each finding: `evidence.observed` quotes the exact passage/claim from the page; `verification.reproduce` is the runnable count (e.g. `node "${CLAUDE_PLUGIN_ROOT}/scripts/factdensity.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`)); `expected_impact` is banded + confidence-tagged (no naked %). <!-- reconcile-flags-v0.2 -->
 
 ## Honesty
 - Refuse "AI-specific keyword" rewrites — there is no magic vocabulary that wins citations. Citability comes from extractable structure, **verifiable** facts, and demonstrable authority, not phrasing tricks.

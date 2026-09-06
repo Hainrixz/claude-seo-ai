@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Accessible, well-described media is read by both ranking systems and AI extractors — alt text is the primary semantic handle for an image. Reference: `references/schema-tier1.md` (VideoObject row).
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`images[]` with `alt_present`/`sized`/`lazy`, `iframes`, `jsonld[]`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **Alt presence**: every content `<img>` has an `alt` attribute. Distinguish decorative images (`alt=""` + `role="presentation"` is correct, not a finding) from missing `alt` entirely (fail).
 2. **Alt quality**: not empty on a content image; not the filename (`IMG_2031.jpg`); not duplicated verbatim across distinct images; not keyword-stuffed (comma-separated keyword lists are an anti-pattern). Alt should be descriptive and contextual to surrounding content. Target length ~80-140 chars — long enough to be specific, short enough that screen readers/AI don't truncate.
 3. **Dimensions**: `width` and `height` set on `<img>` (or aspect-ratio reserved in CSS) to prevent layout shift (CLS, a Core Web Vitals input — defer the CWV measurement itself to the perf module).
@@ -30,7 +33,7 @@ Emit findings per `schema/finding.schema.json`. Examples (all severity 3, axis `
 - `M9.alt.missing` — content `<img>` with no `alt` attribute. status `fail`, `fixable: proposed`, confidence `established`. `evidence.observed` quotes the offending `<img>` tag.
 - `M9.img.no_dimensions` — `<img>` lacking `width`/`height`. status `warn`, `fixable: auto`, confidence `directional` (CLS link). 
 - `M9.video.missing_videoobject` — embedded video without VideoObject schema. status `warn`, `fixable: proposed`, confidence `established`.
-Each finding: `evidence.observed` quotes the page; `verification.reproduce` is runnable, e.g. `node scripts/parse-html.mjs --url <u>` then inspect the `images` block (`missing_alt`, `empty_alt`, `missing_dimensions`). `expected_impact` is banded + confidence-tagged (no naked %).
+Each finding: `evidence.observed` quotes the page; `verification.reproduce` is runnable, e.g. `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) then inspect the `images` block (`missing_alt`, `empty_alt`, `missing_dimensions`). `expected_impact` is banded + confidence-tagged (no naked %). <!-- reconcile-flags-v0.2 -->
 
 ## Honesty
 - Alt text aids accessibility and image/AI understanding; treat ranking lift as `directional`, not a guaranteed gain — do not promise traffic from alt rewrites.

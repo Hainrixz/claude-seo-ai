@@ -1,0 +1,34 @@
+[
+  {
+    "id": "M5.product.missing_offer", "module": "M5", "title": "Product without Offer",
+    "status": "fail", "severity": 4, "scope": "page",
+    "expected": "Product has an Offer with price", "recommendation": "Add offers.", "fixable": "proposed",
+    "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "high", "rationale": "Required for product rich results." }
+  },
+  {
+    "id": "M9.alt.missing", "module": "M9", "title": "Content image without alt",
+    "status": "ok", "severity": "3", "scope": "page",
+    "evidence": { "observed": "<img src=\"hero.jpg\"> has no alt attribute" },
+    "expected": "Every content image has descriptive alt text",
+    "recommendation": "Add contextual alt text.", "fixable": "proposed",
+    "verification": { "method": "dom_assert", "assertion": "img has non-empty alt", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "low", "rationale": "Alt aids a11y and image understanding." }
+  },
+  {
+    "id": "X1.not.a.module", "module": "M7", "title": "Bad id and stray property",
+    "status": "warn", "severity": 2, "scope": "page", "page": "home",
+    "evidence": { "observed": "synthetic" },
+    "expected": "n/a", "recommendation": "n/a", "fixable": "advisory",
+    "verification": { "method": "dom_assert", "assertion": "n/a", "reproduce": "true" },
+    "expected_impact": { "axis": "search", "confidence": "speculative", "magnitude": "low", "rationale": "synthetic" }
+  },
+  {
+    "id": "M5.blogposting.ok", "module": "M5", "title": "BlogPosting complete",
+    "status": "pass", "severity": 3, "scope": "page",
+    "evidence": { "observed": "BlogPosting has headline, author, datePublished, dateModified" },
+    "expected": "Tier-1 recommended properties present",
+    "recommendation": "No action.", "fixable": "advisory",
+    "verification": { "method": "schema_validator", "assertion": "no missing_recommended", "reproduce": "node \"/plugin/scripts/validate-jsonld.mjs\" --snapshot pages/_.json" },
+    "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "medium", "rationale": "Documented rich-result requirements." }
+  }
+]

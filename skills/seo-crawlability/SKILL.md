@@ -6,10 +6,13 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 # seo-crawlability (M1)
 
-Crawl access is the precondition for every other search signal: if Googlebot/Bingbot can't fetch the page and its assets, nothing else ranks. This module covers general-purpose crawl access only. AI-specific bot directives (GPTBot, Claude-SearchBot, etc.) and `llms.txt` live in `seo-ai-crawlers` (M14/M21); see `references/ai-crawlers.md` for that boundary.
+Crawl access is the precondition for every other search signal: if Googlebot/Bingbot can't fetch the page and its assets, nothing else ranks. This module covers general-purpose crawl access only. AI-specific bot directives (GPTBot, Claude-SearchBot, etc.) live in `seo-ai-crawlers` (M14) and AI discovery files (`llms.txt`, `agents.md`, UCP) in `seo-ai-discovery` (M21); see `references/ai-crawlers.md` for that boundary.
+
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` plus `status_chain` and `headers`, and the parsed robots file in `<run_dir>/site/robots.json` (syntax, groups, Googlebot/Bingbot verdicts for the audited URL, `Sitemap:` lines); Grep `pages/<slug>.html` for verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
 
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`) plus a fetch of `/robots.txt`:
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) plus `site/robots.json`:
 1. **Reachability**: `/robots.txt` returns 200 (a 404 means "allow all" but is worth flagging; a 5xx can suspend crawling).
 2. **Syntax**: each line is a valid directive (`User-agent`, `Disallow`, `Allow`, `Sitemap`, `Crawl-delay`); flag unknown tokens, missing `User-agent` group headers, and BOM/encoding issues.
 3. **Asset blocking**: any `Disallow` that blocks CSS/JS, fonts, or `/wp-includes/`-style paths — this breaks rendering and is a leading cause of "page looks broken to Google" (cross-check with M-render).
@@ -26,7 +29,7 @@ Generated edits are a diff for `fix`, mapped to the schema `fixable` field:
 Never fabricate a sitemap URL or path: if the canonical sitemap location is unknown, emit a clearly-marked `TODO` placeholder for the user to fill, or ask.
 
 ## Verification
-- `node ${CLAUDE_SKILL_DIR}/../../scripts/parse-robots-sitemap.mjs --url <u>` — fetches and parses `/robots.txt`, resolves the effective allow/deny for the named agent + URL, and checks for the `Sitemap:` directive (method `robots_parse`).
+- `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — fetches and parses `/robots.txt`, resolves the effective allow/deny for the named agent + URL, and checks for the `Sitemap:` directive (method `robots_parse`). <!-- reconcile-flags-v0.2 -->
 - When `/robots.txt` cannot be fetched (network/auth/edge block) the status is `needs_api`, never a false `pass`.
 
 ## Findings

@@ -2,63 +2,124 @@
 // Fetch Core Web Vitals via the Google PageSpeed Insights API. Backs M15.
 // Field (CrUX, p75) data is what Google ranks on; lab data is labeled separately.
 //
-// Usage: node psi-client.mjs --url https://example.com [--strategy mobile|desktop] [--key <PSI_API_KEY>]
+// Usage: node psi-client.mjs --url https://example.com [--strategy mobile|desktop] [--key <PSI_API_KEY>] [--timeout 60000]
 //        (key optional but recommended; without network/key the result is status:"needs_api")
 //
 // Reads PSI_API_KEY from env if --key is omitted.
+// Exit codes: 0 ok, or status "needs_api" with an `api_error` object when the API could not be
+//             used (documented: an unavailable measurement is a finding, not a crash) · 1 usage (no --url)
+// Callers MUST branch on `status`, never on the exit code alone.
+//
+// Honesty: when PSI sets `loadingExperience.origin_fallback`, the numbers are ORIGIN-level (the URL
+// itself has too little CrUX traffic) — `field.origin_fallback` + `field.scope` say so; a finding
+// must never present them as page-level. Absent metrics → `has_field_data: false`, never zeros.
 
-import { parseArgs, emit, fetchText } from './lib/util.mjs';
+import { EXIT, isMain, runCli } from './lib/util.mjs';
+import { fetchText } from './lib/fetch.mjs';
 
-const args = parseArgs();
-if (!args.url) emit({ status: 'needs_api', error: 'provide --url' }, 1);
-const strategy = args.strategy === 'desktop' ? 'desktop' : 'mobile';
-const key = args.key || process.env.PSI_API_KEY || null;
-
-const THRESH = { LCP: { good: 2500, poor: 4000 }, INP: { good: 200, poor: 500 }, CLS: { good: 0.1, poor: 0.25 } };
+export const THRESH = Object.freeze({ LCP: { good: 2500, poor: 4000 }, INP: { good: 200, poor: 500 }, CLS: { good: 0.1, poor: 0.25 } });
 const rate = (metric, v) => v == null ? null : (v <= THRESH[metric].good ? 'good' : v <= THRESH[metric].poor ? 'needs-improvement' : 'poor');
+const num = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
 
-const api = new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
-api.searchParams.set('url', args.url);
-api.searchParams.set('strategy', strategy);
-api.searchParams.append('category', 'performance');
-if (key) api.searchParams.set('key', key);
-
-const r = await fetchText(api.href, { timeoutMs: 60000 });
-if (!r.ok) {
-  emit({
-    status: 'needs_api',
-    strategy,
-    error: 'PageSpeed Insights unavailable (no network/key or quota). Field CWV cannot be measured — do not present a heuristic as a measured field value.',
-    detail: r.error || ('HTTP ' + r.status),
-    hint: 'set PSI_API_KEY or pass --key; otherwise report status needs_api.',
-  });
+/** Summarize a PSI loadingExperience block (page or origin) into the field shape; null when it has no metrics. */
+export function fieldFrom(le) {
+  const metrics = le && le.metrics && typeof le.metrics === 'object' && Object.keys(le.metrics).length ? le.metrics : null;
+  if (!metrics) return null;
+  const p75 = (k) => metrics[k] && typeof metrics[k].percentile === 'number' ? metrics[k].percentile : null;
+  const cat = (k) => metrics[k] && metrics[k].category ? String(metrics[k].category).toLowerCase() : null;
+  const cls = p75('CUMULATIVE_LAYOUT_SHIFT_SCORE');
+  const out = {
+    has_field_data: true,
+    origin_fallback: le.origin_fallback === true,
+    scope: le.origin_fallback === true ? 'origin' : 'page',
+    overall_category: le.overall_category || null,
+    lcp_ms: p75('LARGEST_CONTENTFUL_PAINT_MS'),
+    inp_ms: p75('INTERACTION_TO_NEXT_PAINT'),
+    cls: cls != null ? cls / 100 : null,
+    fcp_ms: p75('FIRST_CONTENTFUL_PAINT_MS'),
+    ttfb_ms: p75('EXPERIMENTAL_TIME_TO_FIRST_BYTE'),
+  };
+  out.lcp_rating = rate('LCP', out.lcp_ms);
+  out.inp_rating = rate('INP', out.inp_ms);
+  out.cls_rating = rate('CLS', out.cls);
+  out.google_categories = { lcp: cat('LARGEST_CONTENTFUL_PAINT_MS'), inp: cat('INTERACTION_TO_NEXT_PAINT'), cls: cat('CUMULATIVE_LAYOUT_SHIFT_SCORE') };
+  return out;
 }
 
-let data; try { data = JSON.parse(r.text); } catch (e) { emit({ status: 'needs_api', error: 'PSI returned non-JSON', detail: String(e && e.message || e) }); }
+export async function main(args) {
+  if (!args.url || typeof args.url !== 'string') {
+    return { result: { status: 'needs_api', error: 'provide --url' }, code: EXIT.USAGE };
+  }
+  const strategy = args.strategy === 'desktop' ? 'desktop' : 'mobile';
+  const key = (typeof args.key === 'string' && args.key) || process.env.PSI_API_KEY || null;
 
-const le = data.loadingExperience && data.loadingExperience.metrics;
-const cruxMs = (k) => le && le[k] ? le[k].percentile : null;
-const field = le ? {
-  has_field_data: true,
-  lcp_ms: cruxMs('LARGEST_CONTENTFUL_PAINT_MS'),
-  inp_ms: cruxMs('INTERACTION_TO_NEXT_PAINT'),
-  cls: cruxMs('CUMULATIVE_LAYOUT_SHIFT_SCORE') != null ? cruxMs('CUMULATIVE_LAYOUT_SHIFT_SCORE') / 100 : null,
-} : { has_field_data: false };
-if (field.has_field_data) {
-  field.lcp_rating = rate('LCP', field.lcp_ms);
-  field.inp_rating = rate('INP', field.inp_ms);
-  field.cls_rating = rate('CLS', field.cls);
+  const api = new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
+  api.searchParams.set('url', args.url);
+  api.searchParams.set('strategy', strategy);
+  api.searchParams.append('category', 'performance');
+  if (key) api.searchParams.set('key', key);
+
+  // fetchText retries once on network error / 5xx with backoff; never on 4xx (quota, bad key).
+  const r = await fetchText(api.href, { timeoutMs: num(args.timeout, 60000), retries: 1 });
+  if (!r.ok) {
+    return {
+      result: {
+        status: 'needs_api',
+        strategy,
+        error: 'PageSpeed Insights unavailable (no network/key or quota). Field CWV cannot be measured — do not present a heuristic as a measured field value.',
+        detail: r.error || ('HTTP ' + r.status),
+        hint: 'set PSI_API_KEY or pass --key; otherwise report status needs_api.',
+        api_error: { kind: r.status ? 'http' : 'network', status: r.status || null, detail: r.error || ('HTTP ' + r.status) },
+      },
+      code: EXIT.OK,
+    };
+  }
+
+  let data;
+  try { data = JSON.parse(r.text); } catch (e) {
+    const detail = String(e && e.message || e);
+    return {
+      result: {
+        status: 'needs_api', strategy, error: 'PSI returned non-JSON', detail,
+        api_error: { kind: 'non_json', status: r.status, detail },
+      },
+      code: EXIT.OK,
+    };
+  }
+
+  const le = data.loadingExperience || null;
+  const field = fieldFrom(le) || {
+    has_field_data: false,
+    origin_fallback: !!(le && le.origin_fallback),
+    scope: null,
+    overall_category: (le && le.overall_category) || null,
+    note: 'CrUX has no field data for this URL (insufficient real-user traffic); lab data below is the only measurement available.',
+  };
+  const originField = fieldFrom(data.originLoadingExperience || null);
+
+  const lh = data.lighthouseResult || {};
+  const audits = lh.audits || {};
+  const numv = (id) => audits[id] && typeof audits[id].numericValue === 'number' ? audits[id].numericValue : null;
+  const lab = {
+    note: 'LAB data (single synthetic run) — NOT what Google ranks on; field data above is.',
+    performance_score: lh.categories && lh.categories.performance && typeof lh.categories.performance.score === 'number'
+      ? Math.round(lh.categories.performance.score * 100) : null,
+    lcp_ms: numv('largest-contentful-paint'),
+    cls: numv('cumulative-layout-shift'),
+    tbt_ms: numv('total-blocking-time'),
+    fcp_ms: numv('first-contentful-paint'),
+    speed_index_ms: numv('speed-index'),
+    lighthouse_version: lh.lighthouseVersion || null,
+    fetch_time: lh.fetchTime || null,
+  };
+
+  return {
+    result: {
+      status: 'ok', strategy, url: data.id || args.url, analysis_utc: data.analysisUTCTimestamp || null,
+      field, origin: originField, lab, thresholds: THRESH,
+    },
+    code: EXIT.OK,
+  };
 }
 
-const audits = (data.lighthouseResult && data.lighthouseResult.audits) || {};
-const num = (id) => audits[id] && typeof audits[id].numericValue === 'number' ? audits[id].numericValue : null;
-const lab = {
-  note: 'LAB data (single synthetic run) — NOT what Google ranks on; field data above is.',
-  performance_score: data.lighthouseResult && data.lighthouseResult.categories && data.lighthouseResult.categories.performance
-    ? Math.round(data.lighthouseResult.categories.performance.score * 100) : null,
-  lcp_ms: num('largest-contentful-paint'),
-  cls: num('cumulative-layout-shift'),
-  tbt_ms: num('total-blocking-time'),
-};
-
-emit({ status: 'ok', strategy, url: data.id || args.url, field, lab, thresholds: THRESH });
+if (isMain(import.meta.url)) runCli(main);

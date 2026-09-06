@@ -1,0 +1,23 @@
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "@id": "TODO:page_url#software",
+  "name": "TODO:app_name",
+  "description": "TODO:app_description",
+  "url": "TODO:page_url",
+  "image": "TODO:app_image_or_icon_url",
+  "applicationCategory": "TODO:e.g._BusinessApplication_DeveloperApplication",
+  "operatingSystem": "TODO:e.g._Web_Windows_macOS_iOS_Android",
+  "softwareVersion": "TODO:version_if_known",
+  "offers": {
+    "@type": "Offer",
+    "price": "TODO:price_0_for_free",
+    "priceCurrency": "TODO:currency_iso4217"
+  },
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "TODO:aggregate_rating_value_from_real_reviews_or_remove_block",
+    "ratingCount": "TODO:rating_count"
+  },
+  "publisher": { "@id": "TODO:site_url/#organization" }
+}

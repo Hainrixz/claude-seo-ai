@@ -1,12 +1,16 @@
 ---
 name: seo-vertical-detect
-description: Classify a website as ecommerce, local-business, blog-publisher, saas, docs, or generic (multiple may apply), and report detected locales. Used by seo-orchestrator to decide which conditional modules to run and how to reweight the scores.
-allowed-tools: Read, Grep, Glob, WebFetch
+description: Classify a website as ecommerce, local-business, blog-publisher, saas, docs, or generic (multiple may apply), and report detected locales, from the persisted PageSnapshot plus the platform detector's vertical hints. Used by seo-orchestrator to decide which conditional modules to run and how to reweight the scores.
+user-invocable: false
+allowed-tools: Read, Grep, Glob
 ---
 
 # seo-vertical-detect
 
 Given the PageSnapshot, classify the site so the orchestrator can route conditional modules. Read `references/routing.md` for the signal table.
+
+## Inputs
+Read-only over persisted data — no fetching: the homepage `parsed` (`jsonld[]`, `anchors[]`, `metas[]`, `hreflang[]`, `<html lang>`, `text_sample`) from `<run_dir>/pages/<slug>.json`, `<run_dir>/crawl.json` (route patterns, templates), `<run_dir>/site/discovery.json` (llms.txt presence), and the `vertical_hints[]` emitted by `detect-platform.mjs` in `<run_dir>/profile.json` (e.g. WooCommerce/Shopify → ecommerce; a docs generator → docs). Hints are signals, not verdicts — cite them in `signals` like any other evidence.
 
 ## Method
 Score each vertical from observable signals (not guesses):

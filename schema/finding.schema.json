@@ -4,7 +4,20 @@
   "title": "claude-seo-ai Finding",
   "description": "A single audit finding. Falsifiability-first: every finding must be independently observable (evidence) and re-checkable (verification.reproduce). Impact is banded + confidence-tagged, never a fabricated percentage.",
   "type": "object",
-  "required": ["id", "module", "title", "status", "severity", "scope", "evidence", "expected", "recommendation", "fixable", "verification", "expected_impact"],
+  "required": [
+    "id",
+    "module",
+    "title",
+    "status",
+    "severity",
+    "scope",
+    "evidence",
+    "expected",
+    "recommendation",
+    "fixable",
+    "verification",
+    "expected_impact"
+  ],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -14,47 +27,95 @@
     },
     "module": {
       "type": "string",
-      "description": "Owning module id (M1..M21, optionally with a sub-module letter, e.g. M7b for mobile, M7c for headings; the scorer maps it to its parent category).",
+      "description": "Owning module id (M1..M22, optionally with a sub-module letter, e.g. M7b for mobile, M7c for headings; the scorer maps it to its parent category).",
       "pattern": "^M[0-9]{1,2}[a-z]?$"
     },
-    "title": { "type": "string", "minLength": 3, "maxLength": 160 },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160
+    },
     "status": {
       "type": "string",
-      "enum": ["pass", "warn", "fail", "not_applicable", "needs_api"],
-      "description": "needs_api means the check could not be verified without an API key/MCP — it is NEVER a silent pass."
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "not_applicable",
+        "needs_api",
+        "manual_review"
+      ],
+      "description": "needs_api = could not be verified without an API key/MCP/renderer; manual_review = a deterministic check could not decide (e.g. unsupported page language) and a human or model must judge. Both are NEVER a silent pass: the scorer excludes them from numerator and denominator and reports their counts."
     },
     "severity": {
       "type": "integer",
       "minimum": 0,
       "maximum": 5,
-      "description": "1 = cosmetic, 5 = can tank the score (e.g. site-wide noindex). 0 is reserved for not_applicable findings (no impact; excluded from scoring)."
+      "description": "0 = informational/unscored (probes, GSC AI exports, not_applicable — never moves a score); 1 = cosmetic; 2 = minor; 3 = moderate; 4 = major; 5 = catastrophic, eligibility-killing at site/template scope (site-wide noindex, robots blocking Googlebot, nosnippet/max-snippet:0 site-wide, CSR-only shell, robots 5xx). Only severity 5 + status fail + confidence established can cap a score."
     },
-    "scope": { "type": "string", "enum": ["page", "template", "site"] },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "page",
+        "template",
+        "site"
+      ]
+    },
     "location": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "url": { "type": "string" },
-        "file": { "type": "string" },
-        "selector": { "type": "string" },
-        "line": { "type": "integer", "minimum": 1 }
+        "url": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "resource": {
+          "type": "string",
+          "description": "Platform resource the finding is attached to when it is not a URL/file, e.g. a Shopify theme asset, a WordPress option name, a sitemap file or a robots.txt group."
+        }
       }
     },
     "evidence": {
       "type": "object",
       "description": "The OBSERVED fact — verbatim, reproducible.",
-      "required": ["observed"],
+      "required": [
+        "observed"
+      ],
       "additionalProperties": false,
       "properties": {
-        "observed": { "type": "string", "minLength": 1 },
-        "snippet": { "type": "string" }
+        "observed": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snippet": {
+          "type": "string"
+        }
       }
     },
-    "expected": { "type": "string", "minLength": 1 },
-    "recommendation": { "type": "string", "minLength": 1 },
+    "expected": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recommendation": {
+      "type": "string",
+      "minLength": 1
+    },
     "fixable": {
       "type": "string",
-      "enum": ["auto", "proposed", "advisory"],
+      "enum": [
+        "auto",
+        "proposed",
+        "advisory"
+      ],
       "description": "auto = deterministic/additive/verifiable write; proposed = draft requiring per-item accept; advisory = never written by the tool."
     },
     "fix_preview": {
@@ -64,40 +125,91 @@
     "verification": {
       "type": "object",
       "description": "How to confirm this finding independently. reproduce MUST be runnable.",
-      "required": ["method", "assertion", "reproduce"],
+      "required": [
+        "method",
+        "assertion",
+        "reproduce"
+      ],
       "additionalProperties": false,
       "properties": {
         "method": {
           "type": "string",
-          "enum": ["dom_assert", "header_check", "schema_validator", "rich_results_api", "psi_api", "crux_api", "gsc_api", "robots_parse", "xml_parse", "link_graph", "render_diff", "manual_review"]
+          "enum": [
+            "dom_assert",
+            "header_check",
+            "schema_validator",
+            "rich_results_api",
+            "psi_api",
+            "crux_api",
+            "gsc_api",
+            "robots_parse",
+            "xml_parse",
+            "link_graph",
+            "render_diff",
+            "ua_diff",
+            "web_search_probe",
+            "manual_review"
+          ]
         },
-        "assertion": { "type": "string", "minLength": 1 },
+        "assertion": {
+          "type": "string",
+          "minLength": 1
+        },
         "reproduce": {
           "type": "string",
           "minLength": 1,
-          "description": "A concrete command or assertion a human/CI can run, e.g. 'node scripts/validate-jsonld.mjs --url ...'."
+          "description": "A concrete command or assertion a human/CI can run, e.g. 'node \"<plugin_root>/scripts/validate-jsonld.mjs\" --snapshot <pages/x.json>'. Prefer absolute paths (lib/finding.mjs reproduceCommand builds them)."
         }
       }
     },
     "expected_impact": {
       "type": "object",
       "description": "Honest, banded impact. NO naked percentages — published numbers may appear only inside rationale with a citation.",
-      "required": ["axis", "confidence", "magnitude", "rationale"],
+      "required": [
+        "axis",
+        "confidence",
+        "magnitude",
+        "rationale"
+      ],
       "additionalProperties": false,
       "properties": {
-        "axis": { "type": "string", "enum": ["search", "ai", "both"] },
+        "axis": {
+          "type": "string",
+          "enum": [
+            "search",
+            "ai",
+            "both"
+          ]
+        },
         "confidence": {
           "type": "string",
-          "enum": ["established", "directional", "speculative"],
-          "description": "established = documented by the engine; directional = strong correlational/industry evidence; speculative = plausible, unproven. Speculative findings never cap a score below a band."
+          "enum": [
+            "established",
+            "directional",
+            "speculative"
+          ],
+          "description": "established = documented by the engine; directional = strong correlational/industry evidence; speculative = plausible, unproven. Only established findings can cap a score (severity 5 + fail); directional and speculative findings never cap."
         },
-        "magnitude": { "type": "string", "enum": ["high", "medium", "low"] },
-        "rationale": { "type": "string", "minLength": 1 }
+        "magnitude": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "doc_ref": {
       "type": "array",
-      "items": { "type": "string", "format": "uri" }
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
     }
   }
 }

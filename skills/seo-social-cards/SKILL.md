@@ -8,8 +8,11 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 
 Social cards control how a URL renders when shared on social, chat, and AI assistants — a CTR/sharing signal, not a ranking one (see Honesty). Open Graph metadata is the same `<head>`-level hygiene tier as the structured-data work in `references/schema-tier1.md`, so audit it alongside that module.
 
+## Inputs
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`metas[]` for `og:*`/`twitter:*`, `canonicals[]`, `images[]`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+
 ## Audits
-Working from the PageSnapshot (`rendered_dom` if present, else `raw_html`):
+Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
 1. **OG content**: `og:title`, `og:description`, `og:url`, `og:type` present and non-empty; `og:url` matches the canonical; `og:type` sane for the page (e.g. `article` vs `website`).
 2. **OG image**: `og:image` present, ~1200x630 (1.91:1) and >=200x200, and **reachable** (HTTP 200, image content-type, absolute URL).
 3. **Twitter/X**: `twitter:card` (prefer `summary_large_image`); `twitter:title`, `twitter:description`, `twitter:image`. Twitter falls back to OG when these are absent — note when it is relying on OG.
