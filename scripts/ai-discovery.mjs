@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EXIT, isMain, runCli, readSnapshot } from './lib/util.mjs';
 import { fetchRaw } from './lib/fetch.mjs';
-import { fetchSiteArtifacts, DISCOVERY_PROBES } from './lib/site.mjs';
+import { fetchSiteArtifacts, DISCOVERY_PROBES, isSoftHtml404 } from './lib/site.mjs';
 import { parseSitemap } from './lib/sitemaps.mjs';
 import { isAllowed } from './lib/robots.mjs';
 import { BOTS } from './lib/bots.mjs';
@@ -397,7 +397,10 @@ export function analyzeDiscovery(discoveryJson, robots = null) {
   });
   agenticSitemap.status = statusOf('/sitemap_agentic_discovery.xml');
 
-  const found = DISCOVERY_PATHS.filter((p) => okOf(p));
+  // 200 + an HTML body at a machine endpoint is a catch-all page, not a published file (lib/site.mjs
+  // isSoftHtml404). It is reported under soft_404 with its status, never counted as found.
+  const softHtml = DISCOVERY_PATHS.filter((p) => isSoftHtml404(at(p)));
+  const found = DISCOVERY_PATHS.filter((p) => okOf(p) && !softHtml.includes(p));
   const cross = discoveryRobotsCheck(found.length ? found : DISCOVERY_PATHS.filter((p) => statusOf(p) !== null), robots, origin);
   const errors_total = llms.errors.length + agentsMd.errors.length + ucp.errors.length + catalog.errors.length + agenticSitemap.errors.length;
 
@@ -415,7 +418,10 @@ export function analyzeDiscovery(discoveryJson, robots = null) {
     mcp_probe: at('/api/ucp/mcp') ? { status: statusOf('/api/ucp/mcp'), looks_like_html: !!at('/api/ucp/mcp').looks_like_html, content_type: at('/api/ucp/mcp').content_type } : null,
     https_enforcement: d.https_enforcement || null,
     robots_cross_check: cross,
-    summary: { found, missing: DISCOVERY_PATHS.filter((p) => !okOf(p)), errors_total, blocked_paths: cross.discovery_paths_blocked_for.map((r) => r.path) },
+    summary: {
+      found, soft_404: softHtml, missing: DISCOVERY_PATHS.filter((p) => !okOf(p) || softHtml.includes(p)),
+      errors_total, blocked_paths: cross.discovery_paths_blocked_for.map((r) => r.path),
+    },
     note: NOTE,
   };
 }

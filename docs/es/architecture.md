@@ -448,6 +448,18 @@ lo que estos hooks no pueden sustituir.
 - **Sin fabricación**: nunca inventar estadísticas, citas, fechas (sin antedatar `dateModified`),
   credenciales ni enlaces de identidad `sameAs`. Los valores desconocidos se preguntan o se dejan como
   un marcador `TODO:<field>` claramente señalado.
+- **Una página que no respondió 2xx nunca se puntúa.** Las verificaciones on-page se saltan una
+  página que no es contenido, así que un 404 o un intersticial 429 apenas acumularía hallazgos
+  negativos y puntuaría por encima de una página real. Esa página se queda en `pages[]` de
+  `report.json` con su `status` y `scorable: false`, se lista en `site_rollup.unscored_pages`, se
+  nombra en un aviso y no aporta peso al agregado; `compare` informa el cambio 200 → 429 como cambio
+  de cobertura, nunca como una mejora.
+- **Un 200 que sirve HTML en un endpoint para máquinas es un soft 404.** `/llms.txt`,
+  `/llms-full.txt`, `/agents.md`, `/.well-known/ucp`, `/.well-known/ai-catalog.json` y el sitemap
+  agéntico no son documentos HTML: una página comodín ahí significa que el archivo no está publicado.
+  Esas rutas pasan de `discovery.summary.found` a `discovery.summary.soft_404` (su estado se sigue
+  registrando), de modo que ni el informe ni la matriz de presencia de competidores afirman que un
+  sitio publica un archivo que no publica.
 - **Sin porcentajes desnudos.** El impacto se expresa por bandas, y las cifras publicadas aparecen
   solo dentro de `rationale`.
 

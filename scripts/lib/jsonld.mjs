@@ -76,6 +76,59 @@ export function flattenNodes(data) {
   return out;
 }
 
+/* ----------------------------------------------------------------- references vs declarations */
+
+/**
+ * Properties whose object value POINTS AT an item described elsewhere instead of declaring one
+ * here: a review widget's `itemReviewed`, a "related/similar product" pointer, a variant's parent
+ * group. A node reached through one of them is a back-reference, so it can never be "missing" the
+ * properties the real node carries — judging it produces a false claim about the page's markup.
+ */
+export const BACK_REFERENCE_PROPS = Object.freeze(['itemReviewed', 'isSimilarTo', 'isRelatedTo', 'isVariantOf']);
+/** `mainEntity` declares the item on a WebPage and only back-references it under a review node. */
+const REVIEW_TYPES = ['Review', 'UserReview', 'CriticReview', 'AggregateRating', 'EmployerAggregateRating'];
+/** Keys that do nothing but name a resource; a nested node carrying only these is a pointer to it. */
+export const NAMING_PROPS = Object.freeze(['url', 'name']);
+
+/** Last property segment of a flatten path: "AggregateRating.itemReviewed[0]" -> "itemReviewed". */
+export function pathProperty(path) {
+  const seg = String(path == null ? '' : path).split('.').pop() || '';
+  return seg.replace(/\[\d+\]$/, '');
+}
+
+/** Own, non-empty properties of a node, ignoring the @-keywords. */
+export function ownProps(node) {
+  if (!isPlainObject(node)) return [];
+  return Object.keys(node).filter((k) => !k.startsWith('@') && !isEmptyValue(node[k]));
+}
+
+/**
+ * True when a flattened entry (from flattenNodes) was reached through a back-reference property.
+ * @param {{path?: string, parent_types?: string[]}} entry
+ */
+export function isBackReference(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  const prop = pathProperty(entry.path);
+  if (BACK_REFERENCE_PROPS.includes(prop)) return true;
+  return prop === 'mainEntity' && (entry.parent_types || []).some((t) => REVIEW_TYPES.includes(t));
+}
+
+/**
+ * True for a flattened entry that points at a resource defined elsewhere rather than declaring it:
+ * a node with no own properties, or a NESTED node whose only properties name the target
+ * (`url`, `name`, `@id`) — a `hasVariant` entry, say. A top-level node carrying just a name is
+ * still a declaration, however thin, so it is not swallowed here.
+ * @param {{node?: object, depth?: number}} entry
+ */
+export function isReferenceStub(entry) {
+  if (!entry || typeof entry !== 'object') return true;
+  const isEntry = Array.isArray(entry.types) && typeof entry.path === 'string';
+  const node = isEntry ? entry.node : entry;
+  const own = ownProps(node);
+  if (!own.length) return true;
+  return isEntry && Number(entry.depth) > 0 && own.every((k) => NAMING_PROPS.includes(k));
+}
+
 /**
  * True when a property value should count as missing: absent, null, empty/blank string,
  * empty array, array of only-empty values, or an object with no own keys.

@@ -250,6 +250,20 @@ test('classifyFindings puts every finding in exactly one bucket', () => {
   assert.deepEqual(only9.actionable.map((x) => x.id), ['M9.c']);
 });
 
+test('a held-back count over a shorter id list says "across N id(s)", never a silent truncation', () => {
+  const f = (id) => ({ id, module: id.split('.')[0], status: 'fail', fixable: 'proposed' });
+  // The same two ids firing on three pages each: 6 occurrences, 2 distinct ids.
+  const findings = [f('M9.alt.missing'), f('M9.alt.missing'), f('M9.alt.missing'), f('M7.title.short'), f('M7.title.short'), f('M7.title.short')];
+  const cov = FP.buildCoverage({ findings, includeProposed: false, groups: [{ adapter: 'local-files', available: true, handed: findings, changes: [], skipped: [] }] });
+  assert.equal(cov.skipped_proposed.count, 6);
+  assert.equal(cov.skipped_proposed.id_count, 2);
+  assert.deepEqual(cov.skipped_proposed.ids, ['M9.alt.missing', 'M7.title.short']);
+  const printed = FP.renderCoverage(cov).join('\n');
+  assert.match(printed, /held back as proposed \(6 across 2 id\(s\)\)/);
+  assert.equal(FP.countPhrase(3, ['a', 'b', 'c']), '3', 'one id per finding needs no extra clause');
+  assert.equal(FP.countPhrase(24, new Array(15).fill('x'), 'fixable finding(s)'), '24 fixable finding(s) across 15 id(s)');
+});
+
 test('buildCoverage accounts for every finding an adapter did not plan, and why', () => {
   const f = (id, fixable) => ({ id, module: id.split('.')[0], status: 'fail', fixable });
   const findings = [f('M7.a', 'auto'), f('M7.b', 'proposed'), f('M9.c', 'advisory'), f('M12.d', 'auto')];

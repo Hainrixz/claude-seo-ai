@@ -11,8 +11,13 @@ import { isAllowed } from '../lib/robots.mjs';
 import { flattenNodes } from '../lib/jsonld.mjs';
 import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, platformId, originOf, jsonldBlocks } from './_shared.mjs';
 
-/** Archive URL shapes WordPress publishes by default and that are usually thin. */
-export const THIN_ARCHIVE_RE = /^\/(?:category|tag|author|page)\/|^\/\d{4}\/\d{2}(?:\/|$)/;
+/**
+ * Archive URL shapes WordPress publishes by default and that are usually thin. The date branch is
+ * anchored at BOTH ends: `/2026/`, `/2026/09/` and `/2026/09/05/` are archives, while
+ * `/2026/09/05/some-post-slug/` is the most common permalink structure there is — matching it would
+ * tell a publisher to noindex its articles.
+ */
+export const THIN_ARCHIVE_RE = /^\/(?:category|tag|author|page)\/|^\/\d{4}(?:\/\d{2}(?:\/\d{2})?)?\/?$/;
 const SEARCH_RE = /[?&]s=/;
 const ATTACHMENT_RE = /[?&]attachment_id=/;
 const REPLYTOCOM_RE = /[?&]replytocom=/;

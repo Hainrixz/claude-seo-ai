@@ -204,6 +204,12 @@ Useful flags: `--map staging.example.com=example.com` (repeatable) · `--format 
 Transitions involving `needs_api` / `manual_review` are listed separately and are **never** counted
 as fixed or regressed — losing an API key is not a regression in your site.
 
+The same rule covers the page sample. When a page one run scored is unscored in the other — it came
+back 429 or 404, or that crawl never sampled it — the two site scores are means over different page
+sets. Those pages are listed in `page_coverage`, their per-page rows are marked `coverage_change`
+instead of carrying a delta, the axis deltas stop counting towards the verdict, and a warning says
+why. A rate-limited re-crawl can never read as an improvement.
+
 Honesty notes the skill repeats to you: `WebSearch` in gap mode is one engine at one moment, not rank
 tracking; competitor scores describe structure, not predicted rankings; and a deterministic-only run
 is labeled as such.
@@ -245,6 +251,10 @@ Nothing is written into your project. Runs live under a root resolved in this or
 `<host>` is the lower-cased host with `:` → `_` (so a port survives on every filesystem); local
 targets become `local/<basename>-<hash>`. Run ids are UTC timestamps, so they sort chronologically.
 Retention keeps the last 20 runs per host (5 for gap-analysis hosts); the baseline is never pruned.
+
+`--lang en|es` sets the language of `report.md` and of everything written around the numbers:
+headings, table labels, the interpretation line and every warning. Finding text — title, evidence,
+recommendation — stays English, because it comes from the checks.
 
 The fix flow uses a second tree under the data directory:
 

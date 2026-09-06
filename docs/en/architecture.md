@@ -427,6 +427,16 @@ The real backstop is the user's own Bash permission prompt. Never allowlist `Bas
 - **No fabrication** — never invent statistics, citations, dates (no backdating `dateModified`),
   credentials or `sameAs` identity links. Unknown values are asked for, or left as a clearly-marked
   `TODO:<field>` placeholder.
+- **A page that did not answer 2xx is never scored.** The on-page checks skip a non-content page, so a
+  404 or a 429 interstitial would collect almost no negative findings and out-score a real page. Such
+  a page stays in `report.json` `pages[]` with its `status` and `scorable: false`, is listed in
+  `site_rollup.unscored_pages`, is named in a warning, and carries no weight in the rollup; `compare`
+  reports the 200 → 429 flip as a coverage change, never as an improvement.
+- **A 200 that serves HTML at a machine endpoint is a soft 404.** `/llms.txt`, `/llms-full.txt`,
+  `/agents.md`, `/.well-known/ucp`, `/.well-known/ai-catalog.json` and the agentic sitemap are not
+  HTML documents: a catch-all app shell there means the file is not published. Those paths are moved
+  from `discovery.summary.found` to `discovery.summary.soft_404` (their status is still recorded), so
+  neither the report nor the competitor presence matrix claims a site publishes a file it does not.
 - **No naked percentages.** Impact is banded, and published numbers appear only inside `rationale`.
 
 ## Degraded mode

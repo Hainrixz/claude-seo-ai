@@ -78,9 +78,12 @@
         "additionalProperties": true,
         "properties": {
           "url": { "type": "string" },
-          "slug": { "type": "string" },
+          "slug": { "type": ["string", "null"] },
           "role": { "type": "string" },
           "template": { "type": ["string", "null"] },
+          "status": { "type": ["integer", "null"], "description": "HTTP status the crawl recorded for this URL (null for a local file)." },
+          "scorable": { "type": "boolean", "description": "False when the response was not 2xx: the page is listed with its status but carries no weight in the rollup." },
+          "unscored_reason": { "type": "string", "enum": ["non_2xx_status"], "description": "Present only when scorable is false." },
           "weight": { "type": "number", "minimum": 0 },
           "findings_count": { "type": "integer", "minimum": 0 },
           "search": { "$ref": "#/$defs/page_score" },
@@ -94,6 +97,21 @@
       "properties": {
         "method": { "type": "string", "description": "Rollup method id, e.g. role_weights (weighted mean of per-page scores by page role); future: gsc_impressions." },
         "weights": { "type": "object", "additionalProperties": { "type": "number" } },
+        "pages_scored": { "type": "integer", "minimum": 0, "description": "Pages that actually entered the weighted mean (pages_count minus the non-2xx ones)." },
+        "unscored_pages": {
+          "type": "array",
+          "description": "Sampled pages left out of the rollup because they did not answer 2xx.",
+          "items": {
+            "type": "object",
+            "required": ["url"],
+            "additionalProperties": true,
+            "properties": {
+              "url": { "type": "string" },
+              "status": { "type": ["integer", "null"] },
+              "role": { "type": ["string", "null"] }
+            }
+          }
+        },
         "worst_pages": {
           "type": "object",
           "additionalProperties": false,

@@ -165,6 +165,11 @@ test('--max caps the frontier and says so in warnings and sampling.skipped_by_ca
   assert.ok(m.sampling.discovered <= 6, 'the frontier never grows past --max');
   assert.ok(m.sampling.skipped_by_cap.count > 0);
   assert.equal(m.sampling.skipped_by_cap.urls[0].max, 6);
+  // A URL linked from five pages hits the cap five times and is ONE skipped URL: the count and the
+  // list must describe the same thing, or the report overstates what was left out.
+  const capped = m.sampling.skipped_by_cap.urls.map((u) => u.url);
+  assert.deepEqual(capped.length, new Set(capped).size, JSON.stringify(capped));
+  assert.equal(m.sampling.skipped_by_cap.count, capped.length, 'the count is distinct URLs, not discoveries');
   assert.equal(m.budget.max_reached, true);
   assert.ok(m.warnings.some((w) => /--max 6/.test(w)), m.warnings.join(' | '));
 });
@@ -286,6 +291,8 @@ test('a non-HTML response is fetched but never sampled as a page', async () => {
   assert.equal(skip.filter, 'non-html-response');
   assert.match(skip.content_type, /^text\/markdown/);
   assert.ok(srv.hits.some((h) => h.path === '/notes.md'), 'it was fetched — the type is only known from the response');
+  assert.equal(m.templates.some((t) => (t.examples || []).some((u) => u === U('/notes.md'))), false,
+    'a machine-readable artifact is not a page template: it never appears in the sampling table');
 
   const direct = await run({ _: [U('/notes.md')], pages: 2, 'link-status': 0, json: true });
   assert.ok(direct.result.pages.some((p) => p.url === U('/notes.md')),

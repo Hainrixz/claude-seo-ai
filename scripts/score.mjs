@@ -78,6 +78,75 @@ export const INTERPRETATIONS = Object.freeze({
   unscored: { search: 'Unscored — no scored findings in an active Search category.', ai: 'Unscored — no scored findings in an active AI category.' },
 });
 
+/** The same one-liners in Spanish, keyed identically. See MESSAGES for the language rule. */
+export const INTERPRETATIONS_ES = Object.freeze({
+  hi_search_lo_ai: { search: 'Posiciona bien; los fundamentos clásicos son sólidos.', ai: 'Difícil de citar para los motores de IA — añade estructura extraíble y verifica la elegibilidad en IA.' },
+  lo_search_hi_ai: { search: 'Hay problemas de SEO de base que arreglar primero.', ai: 'Citable por IA, pero el posicionamiento clásico débil limita el alcance.' },
+  both_low: { search: 'Problemas de base — arregla primero la indexabilidad y la estructura.', ai: 'Problemas de base — añade estructura, schema y bloques de respuesta.' },
+  both_high: { search: 'SEO clásico sólido; ve por profundidad y autoridad.', ai: 'Visibilidad en IA sólida; mantén el contenido fresco y original.' },
+  mixed: { search: 'Mixto — revisa las acciones prioritarias.', ai: 'Mixto — revisa las acciones prioritarias.' },
+  unscored: { search: 'Sin puntuar — ningún hallazgo puntuado en una categoría activa de Búsqueda.', ai: 'Sin puntuar — ningún hallazgo puntuado en una categoría activa de IA.' },
+});
+
+/** Languages the score chrome is written in. Anything else falls back to English. */
+export const LANGS = Object.freeze(['en', 'es']);
+
+/**
+ * Score-level chrome — every warning this module emits — in both shipped languages, so a report
+ * rendered with `--lang es` does not print Spanish headings over English sentences. Finding text is
+ * NOT here: it comes from the checks and stays English, which the docs state explicitly.
+ * Every message takes one params object, so the two languages cannot drift in their arguments.
+ */
+export const MESSAGES = Object.freeze({
+  en: {
+    axis_search: () => 'search',
+    axis_ai: () => 'ai',
+    unknown_vertical: (p) => 'unknown vertical "' + p.id + '" ignored (known: ' + p.known + ')',
+    unknown_environment: (p) => 'unknown environment "' + p.environment + '"; assuming production',
+    category_inferred: (p) => 'category "' + p.name + '" (' + p.modules + ') activated by inference from its findings; pass --vertical/--multilingual or --vertical-json to declare the vertical explicitly',
+    category_declared_empty: (p) => 'category "' + p.name + '" is declared active (' + p.activation + ') but has no scored ' + p.modules + ' findings on the ' + p.axis + ' axis',
+    cap_suppressed: (p) => 'cap from ' + p.id + ' suppressed: noindex/robots blocking is expected on a ' + p.environment + ' host (environment=' + p.environment + ')',
+    coverage_floor: (p) => 'coverage ' + p.pct + '%: only ' + p.measured + ' of ' + p.total + ' always-on weight on the ' + p.axis
+      + ' axis carried a scored finding, so the band is provisional — unmeasured: ' + p.missing,
+    dropped: (p) => p.count + ' finding(s) failed schema validation and were dropped (see dropped_findings)',
+    unmapped: (p) => p.count + ' finding(s) reference a module with no category on their axis and were not scored (see unmapped_findings)',
+    no_pages: () => 'manifest has no pages; the rollup is empty',
+    unassigned: (p) => p.count + ' page/template-scoped finding(s) could not be matched to a manifest page and were treated as site-wide',
+    unscorable_pages: (p) => p.count + ' sampled page(s) did not return 2xx and were left unscored (they carry no weight in the rollup): ' + p.pages,
+    capped_pages: (p) => p.capped + ' of ' + p.scored + ' scored pages are capped on the ' + p.axis + ' axis (see pages[])',
+  },
+  es: {
+    axis_search: () => 'búsqueda',
+    axis_ai: () => 'IA',
+    unknown_vertical: (p) => 'vertical desconocida "' + p.id + '" ignorada (conocidas: ' + p.known + ')',
+    unknown_environment: (p) => 'entorno desconocido "' + p.environment + '"; se asume production',
+    category_inferred: (p) => 'la categoría "' + p.name + '" (' + p.modules + ') se activó por inferencia a partir de sus hallazgos; pasa --vertical/--multilingual o --vertical-json para declarar la vertical de forma explícita',
+    category_declared_empty: (p) => 'la categoría "' + p.name + '" está declarada activa (' + p.activation + ') pero no tiene hallazgos ' + p.modules + ' puntuados en el eje ' + p.axis,
+    cap_suppressed: (p) => 'se suprimió el límite de ' + p.id + ': el bloqueo por noindex/robots es lo esperado en un host ' + p.environment + ' (environment=' + p.environment + ')',
+    coverage_floor: (p) => 'cobertura ' + p.pct + '%: solo ' + p.measured + ' de ' + p.total + ' del peso siempre activo del eje ' + p.axis
+      + ' llevó un hallazgo puntuado, así que la banda es provisional — sin medir: ' + p.missing,
+    dropped: (p) => p.count + ' hallazgo(s) no pasaron la validación de esquema y se descartaron (ver dropped_findings)',
+    unmapped: (p) => p.count + ' hallazgo(s) apuntan a un módulo sin categoría en su eje y no se puntuaron (ver unmapped_findings)',
+    no_pages: () => 'el manifiesto no tiene páginas; el agregado del sitio está vacío',
+    unassigned: (p) => p.count + ' hallazgo(s) con alcance de página/plantilla no se pudieron asociar a una página del manifiesto y se trataron como del sitio',
+    unscorable_pages: (p) => p.count + ' página(s) muestreadas no respondieron 2xx y quedaron sin puntuar (no aportan peso al agregado): ' + p.pages,
+    capped_pages: (p) => p.capped + ' de ' + p.scored + ' páginas puntuadas están limitadas en el eje ' + p.axis + ' (ver pages[])',
+  },
+});
+
+/** Normalize a language flag to one this module writes. Unknown values fall back to English. */
+export const normalizeLang = (lang) => (LANGS.includes(String(lang || '').toLowerCase()) ? String(lang).toLowerCase() : 'en');
+
+/** Build one score-level message in `lang`; falls back to the English builder for a missing key. */
+export function message(lang, key, params = {}) {
+  const table = MESSAGES[normalizeLang(lang)] || MESSAGES.en;
+  const build = table[key] || MESSAGES.en[key];
+  return typeof build === 'function' ? build(params) : '';
+}
+
+/** Axis name as it reads inside a sentence ('search'/'ai' in English, 'búsqueda'/'IA' in Spanish). */
+export const axisLabel = (lang, axis) => message(lang, axis === 'ai' ? 'axis_ai' : 'axis_search');
+
 const STATUS_FACTOR = { pass: 1, warn: 0.5, fail: 0 };
 const EXCLUDED = new Set(['needs_api', 'manual_review', 'not_applicable']);
 
@@ -86,10 +155,13 @@ const parentModule = (m) => String(m || '').replace(/[a-z]$/, '');
 const round1 = (v) => +Number(v).toFixed(1);
 
 /** "a, b and 3 more" — used by the coverage warning. */
-function nameList(names, max = 4) {
+function nameList(names, max = 4, lang) {
   if (!names.length) return '(none)';
-  return names.length <= max ? names.join(', ') : names.slice(0, max).join(', ') + ' and ' + (names.length - max) + ' more';
+  return names.length <= max ? names.join(', ') : names.slice(0, max).join(', ') + more(lang, names.length - max);
 }
+
+/** " and 3 more" / " y 3 más" — the tail of a truncated list, in the message's own language. */
+const more = (lang, n) => (normalizeLang(lang) === 'es' ? ' y ' + n + ' más' : ' and ' + n + ' more');
 
 /**
  * How much of an axis was actually measured: the share (%) of its ALWAYS-ON weight that carried a
@@ -105,8 +177,9 @@ export function coverageOf(cats) {
   return { pct: total > 0 ? round1(100 * measured / total) : 0, measured, total, missing: alwaysOn.filter((c) => !c.active).map((c) => c.name) };
 }
 
-const coverageWarning = (cov, axis) => 'coverage ' + cov.pct + '%: only ' + cov.measured + ' of ' + cov.total
-  + ' always-on weight on the ' + axis + ' axis carried a scored finding, so the band is provisional — unmeasured: ' + nameList(cov.missing);
+const coverageWarning = (cov, axis, lang) => message(lang, 'coverage_floor', {
+  pct: cov.pct, measured: cov.measured, total: cov.total, axis: axisLabel(lang, axis), missing: nameList(cov.missing, 4, lang),
+});
 
 function axisMatches(finding, axis) {
   const a = finding && finding.expected_impact && finding.expected_impact.axis;
@@ -180,21 +253,22 @@ export function normalizeVerticalInput(input) {
 
 function normalizeOpts(opts = {}) {
   const warnings = [];
+  const lang = normalizeLang(opts.lang);
   const fromJson = normalizeVerticalInput(opts.verticalJson);
   const fromFlag = normalizeVerticalInput(opts.vertical);
   const declared = opts.vertical !== undefined || opts.multilingual !== undefined || opts.verticalJson !== undefined;
   const verticals = [...new Set([...fromJson.verticals, ...fromFlag.verticals])];
-  for (const u of [...fromJson.unknown, ...fromFlag.unknown]) warnings.push('unknown vertical "' + u + '" ignored (known: ' + VERTICALS.join(', ') + ')');
+  for (const u of [...fromJson.unknown, ...fromFlag.unknown]) warnings.push(message(lang, 'unknown_vertical', { id: u, known: VERTICALS.join(', ') }));
   let multilingual = fromJson.multilingual;
   if (opts.multilingual !== undefined) multilingual = parseBool(opts.multilingual);
   if (declared && multilingual === undefined) multilingual = false;
   let environment = typeof opts.environment === 'string' ? opts.environment.toLowerCase() : (fromJson.environment || 'production');
-  if (!ENVIRONMENTS.includes(environment)) { warnings.push('unknown environment "' + environment + '"; assuming production'); environment = 'production'; }
+  if (!ENVIRONMENTS.includes(environment)) { warnings.push(message(lang, 'unknown_environment', { environment })); environment = 'production'; }
   const conditions = declared
     ? { 'vertical:ecommerce': verticals.includes('ecommerce'), 'vertical:local-business': verticals.includes('local-business'), 'flag:multilingual': !!multilingual }
     : { 'vertical:ecommerce': undefined, 'vertical:local-business': undefined, 'flag:multilingual': undefined };
   return {
-    declared, verticals, multilingual, environment, conditions, warnings,
+    declared, verticals, multilingual, environment, conditions, warnings, lang,
     validate: opts.validate !== false,
   };
 }
@@ -226,11 +300,11 @@ function computeAxis(categories, entries, axis, ctx) {
         conditionMet = scored > 0;
         if (scored > 0) {
           inferred.push(c.name);
-          warnings.push('category "' + c.name + '" (' + c.modules.join(',') + ') activated by inference from its findings; pass --vertical/--multilingual or --vertical-json to declare the vertical explicitly');
+          warnings.push(message(ctx.lang, 'category_inferred', { name: c.name, modules: c.modules.join(',') }));
         }
       } else {
         conditionMet = cond;
-        if (cond && scored === 0) warnings.push('category "' + c.name + '" is declared active (' + c.activation + ') but has no scored ' + c.modules.join('/') + ' findings on the ' + axis + ' axis');
+        if (cond && scored === 0) warnings.push(message(ctx.lang, 'category_declared_empty', { name: c.name, activation: c.activation, modules: c.modules.join('/'), axis: axisLabel(ctx.lang, axis) }));
         if (!cond && fs.length) for (const f of fs) ignored.push({ id: f.id, module: f.module, category: c.name, axis, reason: c.activation + ' not declared' });
       }
       label = conditionMet ? c.activation : 'inactive';
@@ -260,7 +334,7 @@ function computeAxis(categories, entries, axis, ctx) {
       const reason = { id: f.id, module: f.module, category: cats[idx].name, severity: 5, status: 'fail', confidence, scope: f.scope };
       if (ctx.environment !== 'production' && ENV_SUPPRESSED_CAP_PATTERNS.some((re) => re.test(f.id))) {
         suppressed.push({ ...reason, environment: ctx.environment, reason: 'expected on a non-production host' });
-        warnings.push('cap from ' + f.id + ' suppressed: noindex/robots blocking is expected on a ' + ctx.environment + ' host (environment=' + ctx.environment + ')');
+        warnings.push(message(ctx.lang, 'cap_suppressed', { id: f.id, environment: ctx.environment }));
       } else capReasons.push(reason);
     }
   });
@@ -273,7 +347,7 @@ function computeAxis(categories, entries, axis, ctx) {
   const coverage = coverageOf(cats);
   const provisional = state !== 'unscored' && coverage.pct < COVERAGE_FLOOR;
   if (provisional) {
-    warnings.push(coverageWarning(coverage, axis));
+    warnings.push(coverageWarning(coverage, axis, ctx.lang));
     if (state === 'scored') state = 'partial';
   }
 
@@ -314,19 +388,29 @@ export function computeScore(categories, findings, axis, ctx) {
 
 const level = (s) => (s == null || s.value === null || s.value === undefined) ? 'unscored' : s.value >= 75 ? 'hi' : s.value < 60 ? 'lo' : 'mid';
 
-/** One-line interpretations for the pair. Returns { search, ai }. */
-export function interpret(search, ai) {
+/**
+ * Which INTERPRETATIONS entry each axis gets. Split out from the text so both languages read the
+ * same pairing rule from one place. Returns { search: key, ai: key }.
+ */
+export function interpretKeys(search, ai) {
   const S = level(search), A = level(ai);
-  const T = INTERPRETATIONS;
   if (S === 'unscored' || A === 'unscored') {
-    const solo = (lvl, axis) => lvl === 'unscored' ? T.unscored[axis] : lvl === 'hi' ? T.both_high[axis] : lvl === 'lo' ? T.both_low[axis] : T.mixed[axis];
-    return { search: solo(S, 'search'), ai: solo(A, 'ai') };
+    const solo = (lvl) => lvl === 'unscored' ? 'unscored' : lvl === 'hi' ? 'both_high' : lvl === 'lo' ? 'both_low' : 'mixed';
+    return { search: solo(S), ai: solo(A) };
   }
-  if (S === 'hi' && A === 'lo') return { ...T.hi_search_lo_ai };
-  if (S === 'lo' && A === 'hi') return { ...T.lo_search_hi_ai };
-  if (S === 'lo' && A === 'lo') return { ...T.both_low };
-  if (S === 'hi' && A === 'hi') return { ...T.both_high };
-  return { ...T.mixed };
+  let key = 'mixed';
+  if (S === 'hi' && A === 'lo') key = 'hi_search_lo_ai';
+  else if (S === 'lo' && A === 'hi') key = 'lo_search_hi_ai';
+  else if (S === 'lo' && A === 'lo') key = 'both_low';
+  else if (S === 'hi' && A === 'hi') key = 'both_high';
+  return { search: key, ai: key };
+}
+
+/** One-line interpretations for the pair, in `lang` ('en' by default). Returns { search, ai }. */
+export function interpret(search, ai, lang) {
+  const T = normalizeLang(lang) === 'es' ? INTERPRETATIONS_ES : INTERPRETATIONS;
+  const keys = interpretKeys(search, ai);
+  return { search: T[keys.search].search, ai: T[keys.ai].ai };
 }
 
 /* ------------------------------------------------------------------ public API */
@@ -347,7 +431,7 @@ export function scoreFindings(parsed, opts = {}) {
 
   const s = computeAxis(SEARCH, entries, 'search', o);
   const a = computeAxis(AI, entries, 'ai', o);
-  const texts = interpret(s.score, a.score);
+  const texts = interpret(s.score, a.score, o.lang);
   s.score.dropped_count = dropped.length;
   a.score.dropped_count = dropped.length;
   s.score.interpretation = texts.search;
@@ -355,9 +439,9 @@ export function scoreFindings(parsed, opts = {}) {
 
   const inferred = [...new Set([...s.inferred, ...a.inferred])];
   const warnings = [...o.warnings];
-  if (dropped.length) warnings.push(dropped.length + ' finding(s) failed schema validation and were dropped (see dropped_findings)');
+  if (dropped.length) warnings.push(message(o.lang, 'dropped', { count: dropped.length }));
   const unmapped = [...s.unmapped, ...a.unmapped];
-  if (unmapped.length) warnings.push(unmapped.length + ' finding(s) reference a module with no category on their axis and were not scored (see unmapped_findings)');
+  if (unmapped.length) warnings.push(message(o.lang, 'unmapped', { count: unmapped.length }));
 
   return {
     findings_count: list.length,
@@ -421,6 +505,37 @@ function pickScore(s) {
   return { value: s.value, raw_value: s.raw_value, band: s.band, state: s.state, capped: s.capped };
 }
 
+/** The score a page that was never really fetched gets: none at all, and it says so. */
+function unscorableScore() {
+  return { value: null, raw_value: null, band: bandOf(null), state: 'unscored', capped: false };
+}
+
+/**
+ * Is this manifest page a page whose score means anything? A sampled URL that answered outside
+ * 2xx (a 404, a 429 interstitial, a 5xx) is evidence about the sample, not about the site: the
+ * on-page checks skip it (scripts/checks/_shared.mjs isContentPage), so it collects almost none of
+ * the negative findings a real page collects and would score HIGHER than the pages around it.
+ * Such a page is kept in pages[] with its status and left unscored — it carries no weight in the
+ * rollup. A missing/null status is a local file (snapshot mode), which is scorable.
+ */
+export function isScorablePage(page) {
+  const s = page && page.status;
+  if (s === null || s === undefined) return true;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return true;
+  return n >= 200 && n < 300;
+}
+
+/** "…: /a (429), /b (404) and 3 more" — the pages a run sampled but could not score. */
+function listPages(list, max = 5, lang) {
+  const shown = list.slice(0, max).map((p) => shortUrl(p.url) + ' (' + (p.status === null ? 'no status' : p.status) + ')');
+  return shown.join(', ') + (list.length > max ? more(lang, list.length - max) : '');
+}
+
+function shortUrl(url) {
+  try { const u = new URL(url); return (u.pathname || '/') + (u.search || ''); } catch { return String(url); }
+}
+
 /**
  * Roll per-page scores up to a site score. `manifest` is a crawl.json ({ pages:[{url, slug?, role?,
  * template?, weight?}], templates?, findings? }); findings come from opts.findings (array or
@@ -429,6 +544,9 @@ function pickScore(s) {
  * stripped before validation). Site-scoped findings are deduplicated and scored once per page set
  * (they enter every page's score exactly once); template-scoped findings apply to every page of
  * that template. Rollup = Σ w_page × value / Σ w_page with role weights (or manifest weights).
+ * A manifest page whose `status` is outside 2xx is never scored (see isScorablePage): it stays in
+ * pages[] with its status and `scorable: false`, is listed in `unscored_pages`, and is named in a
+ * warning — a 429 interstitial must not lift the rollup by collecting fewer findings than a page.
  */
 export function scoreSite(manifest, opts = {}) {
   const m = manifest && typeof manifest === 'object' ? manifest : {};
@@ -446,19 +564,23 @@ export function scoreSite(manifest, opts = {}) {
   const { dropped } = validateFindings(hinted.map((h) => h.f));
   const droppedIdx = new Set(dropped.map((d) => d.index));
   const items = dedupeFindings(hinted.map((h, i) => ({ ...h, i })).filter((h) => !droppedIdx.has(h.i)));
-  if (dropped.length) warnings.push(dropped.length + ' finding(s) failed schema validation and were dropped (see dropped_findings)');
+  if (dropped.length) warnings.push(message(o.lang, 'dropped', { count: dropped.length }));
 
   // Index pages.
   const byUrl = new Map(), byKey = new Map();
   const seenTemplates = new Set();
   const pages = pagesIn.filter((p) => p && typeof p.url === 'string').map((p) => {
-    const w = pageWeight(p, seenTemplates);
-    const rec = { url: p.url, slug: p.slug || null, role: w.role, template: p.template || null, weight: w.weight, weight_source: w.source, _own: [] };
+    const scorable = isScorablePage(p);
+    // An unscored page must not consume the "first sample of this template" weight slot either:
+    // the next page of that template is the one that actually carries it into the rollup.
+    const w = pageWeight(p, scorable ? seenTemplates : new Set(seenTemplates));
+    const status = p.status === null || p.status === undefined ? null : (Number.isFinite(Number(p.status)) ? Number(p.status) : null);
+    const rec = { url: p.url, slug: p.slug || null, role: w.role, template: p.template || null, status, scorable, weight: w.weight, weight_source: w.source, _own: [] };
     byUrl.set(normalizeUrl(p.url), rec);
     for (const k of [p.slug, p.snapshot, p.file]) if (typeof k === 'string' && k) byKey.set(k, rec);
     return rec;
   });
-  if (!pages.length) warnings.push('manifest has no pages; the rollup is empty');
+  if (!pages.length) warnings.push(message(o.lang, 'no_pages'));
 
   const site = [], byTemplate = new Map();
   let unassigned = 0;
@@ -478,14 +600,23 @@ export function scoreSite(manifest, opts = {}) {
       byTemplate.get(page.template).push(f);
     } else page._own.push(f);
   }
-  if (unassigned) warnings.push(unassigned + ' page/template-scoped finding(s) could not be matched to a manifest page and were treated as site-wide');
+  if (unassigned) warnings.push(message(o.lang, 'unassigned', { count: unassigned }));
 
   const scoreOpts = { ...opts, validate: false };
   const scoredPages = pages.map((p) => {
     const fs = [...site, ...(p.template && byTemplate.get(p.template) ? byTemplate.get(p.template) : []), ...p._own];
     const r = scoreFindings(fs, scoreOpts);
-    return { url: p.url, slug: p.slug, role: p.role, template: p.template, weight: p.weight, weight_source: p.weight_source, findings_count: fs.length, search: pickScore(r.search_seo), ai: pickScore(r.ai_visibility), _full: r };
+    const base = {
+      url: p.url, slug: p.slug, role: p.role, template: p.template, status: p.status, scorable: p.scorable,
+      weight: p.weight, weight_source: p.weight_source, findings_count: fs.length,
+    };
+    if (!p.scorable) return { ...base, unscored_reason: 'non_2xx_status', search: unscorableScore(), ai: unscorableScore(), _full: r };
+    return { ...base, search: pickScore(r.search_seo), ai: pickScore(r.ai_visibility), _full: r };
   });
+  const unscorablePages = scoredPages.filter((p) => !p.scorable).map((p) => ({ url: p.url, status: p.status, role: p.role }));
+  if (unscorablePages.length) {
+    warnings.push(message(o.lang, 'unscorable_pages', { count: unscorablePages.length, pages: listPages(unscorablePages, 5, o.lang) }));
+  }
 
   // Flat pass over the deduplicated set: activation context, counts and category metadata.
   const flat = scoreFindings(items.map((it) => it.f), scoreOpts);
@@ -513,8 +644,10 @@ export function scoreSite(manifest, opts = {}) {
     const coverage = coverageOf(categories);
     const provisional = value !== null && coverage.pct < COVERAGE_FLOOR;
     const axisWarnings = [...flatAxis.warnings];
-    if (cappedPages.length && !capped) axisWarnings.push(cappedPages.length + ' of ' + scored.length + ' scored pages are capped on the ' + axisName + ' axis (see pages[])');
-    if (provisional && !axisWarnings.some((w) => w.startsWith('coverage '))) axisWarnings.push(coverageWarning(coverage, axisName));
+    if (cappedPages.length && !capped) axisWarnings.push(message(o.lang, 'capped_pages', { capped: cappedPages.length, scored: scored.length, axis: axisLabel(o.lang, axisName) }));
+    // The flat pass already pushed its own coverage sentence when it was provisional; matching on
+    // the text would break the moment the sentence is written in another language.
+    if (provisional && !flatAxis.provisional) axisWarnings.push(coverageWarning(coverage, axisName, o.lang));
     return {
       value, band: bandOf(value), capped,
       needs_api_count: flatAxis.needs_api_count,
@@ -536,7 +669,7 @@ export function scoreSite(manifest, opts = {}) {
 
   const search = rollupAxis('search_seo', 'search', SEARCH);
   const ai = rollupAxis('ai_visibility', 'ai', AI);
-  const texts = interpret(search, ai);
+  const texts = interpret(search, ai, o.lang);
   search.interpretation = texts.search;
   ai.interpretation = texts.ai;
 
@@ -546,6 +679,8 @@ export function scoreSite(manifest, opts = {}) {
   return {
     findings_count: list.length,
     pages_count: scoredPages.length,
+    pages_scored: scoredPages.length - unscorablePages.length,
+    unscored_pages: unscorablePages,
     method: 'role_weights',
     weights: { ...ROLE_WEIGHTS },
     search_seo: search,

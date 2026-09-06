@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { flattenNodes, collectTypes, validateNode, checkProps, isEmptyValue, typesOf } from '../../scripts/lib/jsonld.mjs';
+import { flattenNodes, collectTypes, validateNode, checkProps, isEmptyValue, typesOf, isBackReference, isReferenceStub, ownProps, pathProperty } from '../../scripts/lib/jsonld.mjs';
 import { SPEC, LOCAL_BUSINESS_TYPES, main } from '../../scripts/validate-jsonld.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,5 +129,48 @@ describe('validate-jsonld.mjs on nested-jsonld.html', () => {
     const bad = r.nodes.find((n) => n.valid_json === false);
     assert.equal(typeof bad.error, 'string');
     assert.deepEqual(r.types_present, ['Organization', 'WebSite']);
+  });
+});
+
+describe('references vs declarations', () => {
+  const page = {
+    '@context': 'https://schema.org', '@type': 'ProductGroup', name: 'Wool Runners',
+    offers: { '@type': 'Offer', price: 110, priceCurrency: 'USD' },
+    hasVariant: [{ '@type': 'Product', url: 'https://e.test/p?size=8' }, { '@type': 'Product', url: 'https://e.test/p?size=9', name: 'Size 9' }],
+    aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.6', itemReviewed: { '@type': 'Product', name: 'Wool Runners', image: 'https://e.test/i.png' } },
+    isSimilarTo: { '@type': 'Product', name: 'Tree Runners', image: 'https://e.test/t.png', description: 'The other one' },
+  };
+  const at = (path) => flattenNodes(page).find((n) => n.path === path);
+
+  it('pathProperty reads the property a node hangs off, index or not', () => {
+    assert.equal(pathProperty('AggregateRating.itemReviewed'), 'itemReviewed');
+    assert.equal(pathProperty('ProductGroup.hasVariant[1]'), 'hasVariant');
+    assert.equal(pathProperty('Product'), 'Product');
+    assert.equal(pathProperty(undefined), '');
+  });
+
+  it('a node reached through a back-reference property points elsewhere, however complete it is', () => {
+    assert.equal(isBackReference(at('ProductGroup.aggregateRating.itemReviewed')), true);
+    assert.equal(isBackReference(at('ProductGroup.isSimilarTo')), true);
+    assert.equal(isBackReference(at('ProductGroup')), false);
+    assert.equal(isBackReference(at('ProductGroup.hasVariant[0]')), false, 'a variant entry is judged by what it carries, not by its property');
+    // mainEntity is a declaration on a page and a pointer under a review node.
+    assert.equal(isBackReference({ path: 'WebPage.mainEntity', parent_types: ['WebPage'] }), false);
+    assert.equal(isBackReference({ path: 'Review.mainEntity', parent_types: ['Review'] }), true);
+  });
+
+  it('a nested node carrying only naming properties is a stub; a top-level one is a declaration', () => {
+    assert.equal(isReferenceStub(at('ProductGroup.hasVariant[0]')), true, 'url only');
+    assert.equal(isReferenceStub(at('ProductGroup.hasVariant[1]')), true, 'url + name only');
+    assert.equal(isReferenceStub(at('ProductGroup.isSimilarTo')), false, 'it also carries a description and an image');
+    assert.equal(isReferenceStub(at('ProductGroup')), false);
+    assert.equal(isReferenceStub(flattenNodes({ '@type': 'Product', name: 'Thing' })[0]), false,
+      'a root Product with just a name is a thin declaration, not a pointer');
+    assert.equal(isReferenceStub(flattenNodes({ '@type': 'Product', '@id': '#p' })[0]), true);
+  });
+
+  it('ownProps ignores the @-keywords and empty values', () => {
+    assert.deepEqual(ownProps({ '@type': 'Product', '@id': '#p', name: 'A', image: [], sku: '', price: 0 }), ['name', 'price']);
+    assert.deepEqual(ownProps('not a node'), []);
   });
 });

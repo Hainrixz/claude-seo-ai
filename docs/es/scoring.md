@@ -176,6 +176,8 @@ Alta = `value ≥ 75`, baja = `value < 60`. Cada puntuación lleva **su propia**
 
 Las puntuaciones entre 60 y 75 no son ni altas ni bajas, así que un par que no encaja claramente en un cuadrante es **mixto**. Cuando un eje está sin puntuar, el otro se interpreta según su propio nivel.
 
+La tabla de arriba es la redacción en inglés. `report.mjs --lang es` (y `scoreFindings(..., { lang: 'es' })`) escribe esa misma línea, y todos los avisos que emite el puntuador, en español — un informe en español no debe imprimir frases en inglés bajo encabezados en español. El texto de los hallazgos (título, evidencia, recomendación) sigue en inglés: viene de las verificaciones, no del puntuador.
+
 ## Agregado de sitio (`--manifest`)
 
 Con un manifiesto de rastreo (`crawl.json`), el scorer puntúa cada página muestreada y agrega los resultados en una puntuación de sitio:
@@ -183,8 +185,10 @@ Con un manifiesto de rastreo (`crawl.json`), el scorer puntúa cada página mues
 1. Los hallazgos se deduplican (`id` + alcance + ubicación), de modo que un hallazgo de todo el sitio emitido por varias ejecuciones de página cuenta **una sola vez**.
 2. Los hallazgos se asocian a páginas mediante `location.url` (host en minúsculas, sin hash, sin barra final), `location.file` / el `slug` de la página, o una pista `page` (url o slug; es una clave solo para el agregado y se elimina antes de validar). Los hallazgos con `scope: site` aplican a todas las páginas, los de `scope: template` a todas las páginas de esa plantilla; los hallazgos de página sin correspondencia se tratan como de todo el sitio, con un aviso.
 3. Cada página recibe sus dos puntuaciones (así un tope de todo el sitio topa todas las páginas).
-4. `valor del sitio = Σ w_página × valor_página / Σ w_página` sobre las páginas puntuadas. `w_página` sale de `manifest.pages[].weight` cuando existe y, si no, del rol de la página: **portada 3 · página objetivo 2 · primera muestra de cada plantilla 2 · cola larga 1**. Es el `method: "role_weights"`; la ponderación por impresiones de Search Console está prevista como `method: "gsc_impressions"`.
-5. El agregado está `capped` solo cuando todas las páginas puntuadas están topadas (un tope de todo el sitio); los topes de una sola página se cuentan en un aviso. `pages[]` lista el rol, el peso y las dos puntuaciones de cada página, y `worst_pages` da las tres páginas peores por eje.
+4. Una página que **no** respondió 2xx (404, 429, un 5xx) nunca se puntúa. Las verificaciones on-page se saltan una página que no es contenido, así que apenas acumularía hallazgos negativos y terminaría puntuando más alto que una página real. Se queda en `pages[]` con su `status`, `scorable: false` y `unscored_reason: "non_2xx_status"`, aparece en `unscored_pages[]` y en un aviso, no aporta peso al agregado y nunca sale en `worst_pages`. Un `status` en `null` (un archivo local) se puntúa con normalidad.
+5. `valor del sitio = Σ w_página × valor_página / Σ w_página` sobre las páginas puntuadas. `w_página` sale de `manifest.pages[].weight` cuando existe y, si no, del rol de la página: **portada 3 · página objetivo 2 · primera muestra de cada plantilla 2 · cola larga 1**. Es el `method: "role_weights"`; la ponderación por impresiones de Search Console está prevista como `method: "gsc_impressions"`.
+6. Una ejecución de **una sola página** no tiene agregado, así que una única URL auditada que respondió 404/429/5xx sigue reportando los dos ejes, pero solo a partir de hallazgos de nivel de sitio. El informe lleva entonces un aviso que lo dice tal cual: las puntuaciones no describen ninguna página.
+7. El agregado está `capped` solo cuando todas las páginas puntuadas están topadas (un tope de todo el sitio); los topes de una sola página se cuentan en un aviso. `pages[]` lista el rol, el peso, el estado HTTP y las dos puntuaciones de cada página; `pages_scored` dice cuántas de `pages_count` entraron realmente en la media, y `worst_pages` da las tres páginas puntuadas más bajas por eje.
 
 ## Ejecutar el scorer
 
@@ -236,4 +240,4 @@ La entrada es un array JSON de hallazgos, o `{ "findings": [...] }`, donde cada 
 }
 ```
 
-Las claves heredadas (`value`, `band`, `capped`, `needs_api_count`, `categories[].name/weight/value/active`, `interpretation`) no cambian; todo lo demás es aditivo. Con `--manifest` el resultado incluye además `method`, `weights`, `pages_count`, `pages[]`, `worst_pages` y `unassigned_count`. Ambos objetos de eje validan contra `$defs.score` en `schema/audit-report.schema.json`.
+Las claves heredadas (`value`, `band`, `capped`, `needs_api_count`, `categories[].name/weight/value/active`, `interpretation`) no cambian; todo lo demás es aditivo. Con `--manifest` el resultado incluye además `method`, `weights`, `pages_count`, `pages_scored`, `pages[]`, `unscored_pages[]`, `worst_pages` y `unassigned_count`. Ambos objetos de eje validan contra `$defs.score` en `schema/audit-report.schema.json`.

@@ -257,6 +257,77 @@ test('pageDeltas matches pages by path across hosts and flags the unmatched ones
   assert.equal(rows.find((r) => r.path === '/c').status, 'only_b');
 });
 
+/**
+ * The same site audited twice with the same findings, except that the one sampled page answered
+ * 429 the second time — so the rollup averaged nothing and the axis scores "rose". The real
+ * allbirds case: the site did not change, one page was rate-limited.
+ */
+const rateLimited = () => {
+  const a = { ...reportA, pages: [reportA.pages[0]] };
+  const b = {
+    ...reportA, run_id: 'run-b',
+    scores: {
+      search_seo: { ...reportA.scores.search_seo, value: 78 },
+      ai_visibility: { ...reportA.scores.ai_visibility, value: 72 },
+    },
+    pages: [{
+      ...reportA.pages[0], status: 429, scorable: false, unscored_reason: 'non_2xx_status',
+      search: { value: null, raw_value: null, band: 'unscored', state: 'unscored', capped: false },
+      ai: { value: null, raw_value: null, band: 'unscored', state: 'unscored', capped: false },
+    }],
+  };
+  return [sideOf(a), sideOf(b, { run_id: 'run-b' })];
+};
+
+test('a page that stopped answering 2xx is a coverage change, never a score move', () => {
+  const [a, b] = rateLimited();
+  const rows = pageDeltas(a, b);
+  const row = rows.find((r) => r.path === '/a');
+  assert.equal(row.status, 'matched');
+  assert.equal(row.coverage_change, true);
+  assert.deepEqual(row.delta, { search: null, ai: null }, 'no delta can be computed against a page that was not scored');
+  assert.equal(row.b.http_status, 429);
+  assert.equal(row.b.scored, false);
+  assert.match(row.coverage_note, /HTTP 429/);
+
+  const doc = compareRuns(a, b, { mode: 'baseline' });
+  assert.equal(doc.page_coverage.same_pages, false);
+  assert.deepEqual(doc.page_coverage.changes.map((c) => [c.path, c.kind, c.status_b]), [['/a', 'dropped_from_scoring', 429]]);
+  assert.deepEqual([doc.page_coverage.scored_a, doc.page_coverage.scored_b], [1, 0]);
+  assert.ok(doc.warnings.some((w) => /did not score the same pages/.test(w)), doc.warnings.join(' | '));
+  assert.deepEqual([doc.scores.search_seo.delta, doc.scores.ai_visibility.delta], [8, 12], 'the axis numbers are still reported…');
+  assert.deepEqual([doc.findings.fixed.length, doc.findings.regressed.length, doc.findings.new.length], [0, 0, 0]);
+  assert.equal(doc.verdict, 'unchanged', '…but a rollup over a different page set never reads as an improvement');
+  const md = renderMarkdown(doc);
+  assert.match(md, /Pages that changed coverage/);
+  assert.equal(/## Pages that moved/.test(md), false, 'an unmeasured page never appears as a page that moved');
+});
+
+test('two runs that scored the same pages keep the axis deltas in the verdict', () => {
+  const a = sideOf({ ...reportA, pages: [reportA.pages[0]] });
+  const b = sideOf({ ...reportB, pages: [reportB.pages[0]] });
+  const doc = compareRuns(a, b, { mode: 'staging', map: STAGING_MAP });
+  assert.equal(doc.page_coverage.same_pages, true);
+  assert.deepEqual(doc.page_coverage.changes, []);
+  assert.equal(doc.warnings.some((w) => /did not score the same pages/.test(w)), false);
+});
+
+test('the presence matrix never lists an endpoint that answered 200 with an HTML app shell', () => {
+  const disc = (found, probes) => ({ summary: { found, statuses: {} }, probes });
+  const withShell = sideOf(reportA, {
+    label: 'rival.example', data_available: true,
+    // A run captured before the soft-404 rule: summary.found still lists both paths.
+    site: { robots: null, sitemaps: null, discovery: disc(['/llms.txt', '/llms-full.txt'], {
+      '/llms.txt': { ok: true, looks_like_html: false, content_type: 'text/plain' },
+      '/llms-full.txt': { ok: true, looks_like_html: true, content_type: 'text/html; charset=utf-8' },
+    }) },
+  });
+  const plain = sideOf(reportB, { label: 'me.example', data_available: true, site: { robots: null, sitemaps: null, discovery: null } });
+  const rows = presenceMatrix([withShell, plain]);
+  const features = rows.filter((r) => r.kind === 'agentic_endpoint').map((r) => r.feature);
+  assert.deepEqual(features, ['endpoint:/llms.txt'], 'the app shell at /llms-full.txt is not a published endpoint');
+});
+
 test('verdictOf blends the two kinds of evidence', () => {
   const none = { search_seo: { delta: 0 }, ai_visibility: { delta: 0 } };
   const empty = { fixed: [], new: [], regressed: [], improved: [] };
@@ -265,6 +336,8 @@ test('verdictOf blends the two kinds of evidence', () => {
   assert.equal(verdictOf(none, { ...empty, regressed: [1] }), 'regressed');
   assert.equal(verdictOf(none, { ...empty, fixed: [1], new: [1] }), 'mixed');
   assert.equal(verdictOf({ search_seo: { delta: -9 }, ai_visibility: { delta: null } }, empty), 'regressed');
+  assert.equal(verdictOf({ search_seo: { delta: -9 }, ai_visibility: { delta: null } }, empty, { samePages: false }), 'unchanged',
+    'a rollup over a different page set is a coverage change, not a regression');
 });
 
 test('compareRuns assembles the whole document and its coverage warning', () => {

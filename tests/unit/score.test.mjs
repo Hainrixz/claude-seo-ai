@@ -14,7 +14,7 @@ const FIX = join(ROOT, 'tests', 'fixtures');
 const SCRIPT = join(ROOT, 'scripts', 'score.mjs');
 const lib = (name) => import(pathToFileURL(join(ROOT, 'scripts', 'lib', name)).href);
 const score = await import(pathToFileURL(SCRIPT).href);
-const { scoreFindings, scoreSite, interpret, SEARCH, AI, INTERPRETATIONS, ROLE_WEIGHTS, VERTICALS, ENVIRONMENTS } = score;
+const { scoreFindings, scoreSite, interpret, interpretKeys, message, SEARCH, AI, INTERPRETATIONS, INTERPRETATIONS_ES, ROLE_WEIGHTS, VERTICALS, ENVIRONMENTS } = score;
 const { validate } = await lib('schema-lite.mjs');
 const bands = await lib('bands.mjs');
 const finding = await lib('finding.mjs');
@@ -483,6 +483,35 @@ describe('site rollup (scoreSite)', () => {
     assert.deepEqual([rr.search_seo.value, rr.search_seo.band, rr.search_seo.capped], [76, 'C', false]);
     assert.ok(rr.search_seo.warnings.some((w) => /1 of 2 scored pages are capped/.test(w)));
   });
+  it('a sampled page that did not answer 2xx is never scored (a 429 must not out-score a real page)', () => {
+    const m = { pages: [
+      { url: 'https://s.test/', role: 'homepage', status: 200 },
+      { url: 'https://s.test/careers', role: 'sample', template: 'pages/*', status: 429 },
+      { url: 'https://s.test/about', role: 'sample', template: 'pages/*', status: 200 },
+    ] };
+    const fs = [
+      F('M7.title.missing', { status: 'fail', location: { url: 'https://s.test/' }, expected_impact: imp('search', 'established') }),
+      F('M7.title.missing', { status: 'fail', location: { url: 'https://s.test/about' }, expected_impact: imp('search', 'established') }),
+    ];
+    const rr = scoreSite(m, { findings: fs });
+    const careers = rr.pages.find((p) => p.url === 'https://s.test/careers');
+    assert.deepEqual([careers.status, careers.scorable, careers.unscored_reason], [429, false, 'non_2xx_status']);
+    assert.deepEqual([careers.search.value, careers.search.state, careers.ai.value], [null, 'unscored', null]);
+    assert.deepEqual([rr.pages_count, rr.pages_scored], [3, 2]);
+    assert.deepEqual(rr.unscored_pages, [{ url: 'https://s.test/careers', status: 429, role: 'template-sample' }]);
+    assert.ok(rr.warnings.some((w) => /did not return 2xx/.test(w) && /\/careers \(429\)/.test(w)), rr.warnings.join(' | '));
+    assert.equal(rr.worst_pages.search.some((p) => /careers/.test(p.url)), false, 'an unscored page is never a "weakest page"');
+    // Both scored pages fail the same check, so the rollup is 0 either way: the 429 page neither
+    // lifts it nor takes the template-sample weight away from the page that was measured.
+    assert.equal(rr.search_seo.value, 0);
+    assert.equal(rr.pages.find((p) => p.url === 'https://s.test/about').weight, ROLE_WEIGHTS['template-sample']);
+    const pr = validate(REPORT.properties.pages, rr.pages, { root: REPORT });
+    assert.equal(pr.ok, true, JSON.stringify(pr.errors));
+  });
+  it('a manifest with no status at all (local files) is scored exactly as before', () => {
+    assert.equal(r.pages.every((p) => p.scorable === true && p.status === null), true);
+    assert.deepEqual([r.pages_count, r.pages_scored, r.unscored_pages.length], [5, 5, 0]);
+  });
   it('an empty manifest yields an unscored rollup with a warning', () => {
     const rr = scoreSite({});
     assert.deepEqual([rr.pages_count, rr.search_seo.state], [0, 'unscored']);
@@ -633,5 +662,46 @@ describe('lib/finding.mjs', () => {
     assert.equal(finding.isTestMode(), expected);
     if (!expected) return;
     assert.throws(() => finding.makeFinding({ id: 'M5.x.y' }));
+  });
+});
+
+describe('language: the score chrome follows the report language', () => {
+  // One category of the search axis: high enough to band A, narrow enough to trip the coverage floor.
+  const narrow = () => [F('M1.robots.ok', { expected_impact: imp('search', 'established') })];
+
+  it('interpret() keys both axes the same way in either language', () => {
+    assert.deepEqual(interpretKeys({ value: 90 }, { value: 40 }), { search: 'hi_search_lo_ai', ai: 'hi_search_lo_ai' });
+    assert.deepEqual(interpretKeys({ value: null }, { value: 90 }), { search: 'unscored', ai: 'both_high' });
+    assert.deepEqual(interpret({ value: 70 }, { value: 70 }, 'es'), INTERPRETATIONS_ES.mixed);
+    assert.deepEqual(interpret({ value: 70 }, { value: 70 }), INTERPRETATIONS.mixed, 'English stays the default');
+    assert.deepEqual(interpret({ value: 70 }, { value: 70 }, 'fr'), INTERPRETATIONS.mixed, 'an unknown language falls back to English');
+  });
+
+  it('lang: "es" writes the interpretation and every score warning in Spanish', () => {
+    const es = scoreFindings(narrow(), { lang: 'es', vertical: 'shoes' });
+    assert.equal(es.search_seo.interpretation, INTERPRETATIONS_ES.both_high.search);
+    assert.equal(es.ai_visibility.interpretation, INTERPRETATIONS_ES.unscored.ai);
+    const coverage = es.search_seo.warnings.find((w) => /^cobertura /.test(w));
+    assert.match(coverage, /solo 22 de 100 del peso siempre activo del eje búsqueda/);
+    assert.match(coverage, /provisional/);
+    assert.ok(!es.search_seo.warnings.some((w) => /^coverage /.test(w)), JSON.stringify(es.search_seo.warnings));
+    assert.ok(es.warnings.some((w) => /vertical desconocida "shoes"/.test(w)), JSON.stringify(es.warnings));
+    validAxis(es.search_seo);
+  });
+
+  it('the site rollup translates its own warnings too, and English is untouched', () => {
+    const manifest = { pages: [{ url: 'https://example.test/', role: 'homepage' }, { url: 'https://example.test/gone', role: 'target', status: 429 }] };
+    const fs = [F('M1.robots.ok', { scope: 'site', expected_impact: imp('search', 'established') })];
+    const es = scoreSite(manifest, { findings: fs, lang: 'es' });
+    assert.ok(es.warnings.some((w) => /no respondieron 2xx/.test(w)), JSON.stringify(es.warnings));
+    assert.equal(es.search_seo.interpretation, INTERPRETATIONS_ES.both_high.search);
+    const en = scoreSite(manifest, { findings: fs });
+    assert.ok(en.warnings.some((w) => /did not return 2xx/.test(w)), JSON.stringify(en.warnings));
+    assert.equal(en.search_seo.interpretation, INTERPRETATIONS.both_high.search);
+  });
+
+  it('message() falls back to the English builder for a language it does not ship', () => {
+    assert.equal(message('de', 'no_pages'), message('en', 'no_pages'));
+    assert.equal(message('es', 'no_pages'), 'el manifiesto no tiene páginas; el agregado del sitio está vacío');
   });
 });

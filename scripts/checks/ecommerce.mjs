@@ -7,7 +7,7 @@
 // Nothing is reported twice.
 
 import { readFileSync } from 'node:fs';
-import { flattenNodes } from '../lib/jsonld.mjs';
+import { flattenNodes, isBackReference, isReferenceStub, ownProps } from '../lib/jsonld.mjs';
 import { detectFormat, parseFeed, canonicalizeRow, parsePrice } from '../acp-feed-lint.mjs';
 import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, isEcommerce, snapRepro, urlKey, numericPrice } from './_shared.mjs';
 
@@ -29,6 +29,45 @@ function productNodes(page) {
 }
 
 const first = (v) => (Array.isArray(v) ? v[0] : v);
+
+/** A node that DECLARES a product here — not a `hasVariant` pointer, not a review's itemReviewed. */
+const declaresProduct = (n) => n.types.some((t) => t === 'Product' || t === 'ProductGroup') && !isBackReference(n) && !isReferenceStub(n);
+
+/**
+ * The node this page is about, so title, price and availability all describe ONE product.
+ * Ranked: the ProductGroup a variant page hangs off, then a node whose url/@id is this page, then
+ * the node that declares the most properties. Index 0 of the flattened list is not that node: on a
+ * Shopify variant page it is `ProductGroup.hasVariant[0]`, a url-only stub, and quoting it beside
+ * another node's price produced a "title missing" claim about a product that has a title.
+ */
+export function primaryProduct(nodes, url) {
+  const key = url ? urlKey(url) : null;
+  const rank = (n) => (n.types.includes('ProductGroup') ? 4 : 0)
+    + ((key && (urlKey(first(n.node.url)) === key || urlKey(first(n.node['@id'])) === key)) ? 2 : 0);
+  let best = null, bestRank = -1, bestProps = -1;
+  for (const n of nodes) {
+    if (!declaresProduct(n)) continue;
+    const r = rank(n), props = ownProps(n.node).length;
+    if (r > bestRank || (r === bestRank && props > bestProps)) { best = n; bestRank = r; bestProps = props; }
+  }
+  return best;
+}
+
+/**
+ * The Offer that belongs to THIS node: its own `offers` (matched by identity, since two sibling
+ * root nodes share a flatten path). A page-wide Offer is borrowed only when the page has exactly
+ * one — quoting one node's price beside another node's title describes a product that does not exist.
+ * @returns {{offer: object|null, source: 'node'|'page'|'none'}}
+ */
+export function offerFor(product, offers) {
+  const own = first(product.node.offers);
+  if (own && typeof own === 'object') {
+    const match = offers.find((o) => o.node === own);
+    return { offer: match || { path: product.path + '.offers', node: own }, source: 'node' };
+  }
+  if (offers.length === 1) return { offer: offers[0], source: 'page' };
+  return { offer: null, source: 'none' };
+}
 
 /** Load the supplied feed into a URL -> row map, so a page can be joined to its feed entry. */
 function feedIndex(feedPath) {
@@ -90,11 +129,12 @@ export const check = {
       }
 
       /* ---- variants ------------------------------------------------------------------------- */
+      const declared = nodes.filter(declaresProduct);
       const hasGroup = nodes.some((n) => n.types.includes('ProductGroup')) || products.some((p) => p.node.hasVariant);
-      if (products.length >= 2 && !hasGroup) {
+      if (declared.length >= 2 && !hasGroup) {
         push(out, mk({
           id: 'M18.variants.no_productgroup', title: 'Several Product blocks on one URL instead of a ProductGroup', status: 'warn', severity: 3, scope: 'page', ...at,
-          evidence: { observed: products.length + ' separate Product nodes on ' + url + ' (' + listing(products.map((p) => p.path + ' "' + clip(p.node.name, 40) + '"'), 4) + ') and no ProductGroup/hasVariant.' },
+          evidence: { observed: declared.length + ' separate Product nodes on ' + url + ' (' + listing(declared.map((p) => p.path + ' "' + clip(p.node.name, 40) + '"'), 4) + ') and no ProductGroup/hasVariant.' },
           expected: 'A page with variants models them as one ProductGroup with hasVariant entries.',
           recommendation: 'Emit a ProductGroup carrying the shared attributes and a hasVariant array for the SKUs.',
           fixable: 'proposed',
@@ -105,9 +145,9 @@ export const check = {
       }
 
       /* ---- catalogue eligibility -------------------------------------------------------------- */
-      const p = products[0];
+      const p = primaryProduct(nodes, url);
       if (p) {
-        const offer = offers[0];
+        const { offer, source: offerSource } = offerFor(p, offers);
         const price = offer ? numericPrice(offer.node.price != null ? offer.node.price : offer.node.lowPrice) : null;
         const checks = {
           title: !!clip(p.node.name || '', 200),
@@ -120,7 +160,10 @@ export const check = {
         const status = missing.length === 0 ? 'pass' : missing.length === 1 ? 'warn' : 'fail';
         push(out, mk({
           id: 'M18.agentic.catalog_eligibility', title: 'Per-product catalogue eligibility', status, severity: 3, scope: 'page', ...at,
-          evidence: { observed: url + ': title=' + (checks.title ? '"' + clip(p.node.name, 50) + '"' : 'missing') + ', image=' + (checks.image ? 'present' : 'missing') + ', price=' + (price != null ? price : 'missing') + ', url=present, availability=' + (checks.availability ? clip(first(offer.node.availability), 40) : 'missing') + '.' },
+          evidence: { observed: url + ' — ' + p.path + ': title=' + (checks.title ? '"' + clip(p.node.name, 50) + '"' : 'missing')
+            + ', image=' + (checks.image ? 'present' : 'missing')
+            + ', price=' + (price != null ? price + ' (' + offer.path + (offerSource === 'page' ? ', the page\'s only Offer' : '') + ')' : 'missing')
+            + ', url=present, availability=' + (checks.availability ? clip(first(offer.node.availability), 40) : 'missing') + '.' },
           expected: 'A product an agent can list carries a title, an image, a price above zero, a stable URL and a visible availability state.',
           recommendation: missing.length ? 'Supply the missing field(s): ' + listing(missing, 5) + '.' : 'No action needed — the product carries everything an agent needs to list it.',
           fixable: 'proposed',

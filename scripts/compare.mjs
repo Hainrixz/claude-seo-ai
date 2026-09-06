@@ -33,6 +33,7 @@ import {
   sha1, writeJson, writeText,
 } from './lib/store.mjs';
 import { normalizeUrl } from './lib/urlnorm.mjs';
+import { isSoftHtml404 } from './lib/site.mjs';
 import { band } from './lib/bands.mjs';
 import { tokenize } from './lib/html.mjs';
 import { classifyNumbers, contentMask, passages, wordCount } from './lib/passages.mjs';
@@ -765,28 +766,57 @@ export function categoryDeltas(a, b) {
   return rows;
 }
 
-/** Per-page score deltas, matched on the normalized path. */
+/**
+ * Was this page scored in its run? report.json marks a sampled URL that did not answer 2xx with
+ * `scorable: false` (scripts/score.mjs isScorablePage); an older report has no such field, so a
+ * page with no score value counts as unscored too.
+ */
+function pageScored(p) {
+  if (!p) return false;
+  if (p.scorable === false) return false;
+  return num(p.search && p.search.value) !== null || num(p.ai && p.ai.value) !== null;
+}
+
+const httpStatusOf = (p) => (p && Number.isFinite(Number(p.status)) ? Number(p.status) : null);
+
+/**
+ * Per-page score deltas, matched on the normalized path. A page that was scored on one side and
+ * unscored on the other (a 200 that came back 429, say) is a COVERAGE change, not a score move:
+ * its delta stays null and `coverage_change` says why, so a rate-limited re-crawl can never read
+ * as an improvement.
+ */
 export function pageDeltas(a, b) {
   const keyA = (p) => pagePath(p.url, { stripPrefix: a.file_prefix });
   const keyB = (p) => pagePath(p.url, { stripPrefix: b.file_prefix });
   const mapA = new Map(); for (const p of a.pages_scored) { const k = keyA(p); if (k && !mapA.has(k)) mapA.set(k, p); }
   const mapB = new Map(); for (const p of b.pages_scored) { const k = keyB(p); if (k && !mapB.has(k)) mapB.set(k, p); }
+  const sideOf = (p) => ({ url: p.url, search: num(p.search && p.search.value), ai: num(p.ai && p.ai.value), http_status: httpStatusOf(p), scored: pageScored(p) });
   const rows = [];
   for (const [k, pa] of mapA) {
     const pb = mapB.get(k);
-    rows.push({
+    const comparable = !pb || (pageScored(pa) && pageScored(pb));
+    const row = {
       path: k, status: pb ? 'matched' : 'only_a',
       role: pa.role || (pb && pb.role) || null,
-      a: { url: pa.url, search: num(pa.search && pa.search.value), ai: num(pa.ai && pa.ai.value) },
-      b: pb ? { url: pb.url, search: num(pb.search && pb.search.value), ai: num(pb.ai && pb.ai.value) } : null,
-      delta: pb ? { search: delta(pa.search && pa.search.value, pb.search && pb.search.value), ai: delta(pa.ai && pa.ai.value, pb.ai && pb.ai.value) } : { search: null, ai: null },
-    });
+      a: sideOf(pa),
+      b: pb ? sideOf(pb) : null,
+      delta: pb && comparable
+        ? { search: delta(pa.search && pa.search.value, pb.search && pb.search.value), ai: delta(pa.ai && pa.ai.value, pb.ai && pb.ai.value) }
+        : { search: null, ai: null },
+    };
+    if (pb && !comparable) {
+      row.coverage_change = true;
+      const from = pageScored(pa) ? 'scored' : 'unscored (' + (httpStatusOf(pa) === null ? 'no status' : 'HTTP ' + httpStatusOf(pa)) + ')';
+      const to = pageScored(pb) ? 'scored' : 'unscored (' + (httpStatusOf(pb) === null ? 'no status' : 'HTTP ' + httpStatusOf(pb)) + ')';
+      row.coverage_note = from + ' → ' + to + ': the two runs did not measure the same page, so there is no score delta';
+    }
+    rows.push(row);
   }
   for (const [k, pb] of mapB) {
     if (mapA.has(k)) continue;
     rows.push({
       path: k, status: 'only_b', role: pb.role || null,
-      a: null, b: { url: pb.url, search: num(pb.search && pb.search.value), ai: num(pb.ai && pb.ai.value) },
+      a: null, b: sideOf(pb),
       delta: { search: null, ai: null },
     });
   }
@@ -802,10 +832,17 @@ export function pageDeltas(a, b) {
 
 const UNAVAILABLE = 'unavailable';
 
+/**
+ * The discovery endpoints a side actually publishes. `summary.found` already excludes an endpoint
+ * that answered 200 with an HTML app shell, but a run captured before that rule existed does not —
+ * so the probes are re-checked here too, and a soft 404 never reaches the presence matrix.
+ */
 function endpointsOf(side) {
   const d = side.site && side.site.discovery;
   if (!d || !d.summary) return null;
-  return uniq((d.summary.found || []).map(String)).sort();
+  const probes = d.probes && typeof d.probes === 'object' ? d.probes : null;
+  const found = (d.summary.found || []).map(String).filter((path) => !(probes && isSoftHtml404(probes[path])));
+  return uniq(found).sort();
 }
 
 function postureOf(side) {
@@ -881,12 +918,43 @@ function sideSummary(side) {
   };
 }
 
-/** Verdict of a pairwise comparison: improved / regressed / mixed / unchanged. */
-export function verdictOf(scores, findings) {
+/**
+ * Did the two runs score the same pages? The site score is a weighted mean over the pages that were
+ * scored, so a page that dropped out (a 429 interstitial, a URL the second crawl never sampled)
+ * moves the axis on its own. Every such page is listed here and the axis delta is marked as not
+ * like-for-like — never reported as the site getting better or worse.
+ */
+export function pageCoverageChanges(rows) {
+  const listed = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const aScored = !!(r.a && r.a.scored);
+    const bScored = !!(r.b && r.b.scored);
+    if (r.status === 'matched') {
+      if (aScored === bScored) continue;
+      listed.push({ path: r.path, kind: aScored ? 'dropped_from_scoring' : 'added_to_scoring', status_a: r.a.http_status, status_b: r.b.http_status, note: r.coverage_note || null });
+    } else if (r.status === 'only_a' && aScored) {
+      listed.push({ path: r.path, kind: 'only_a', status_a: r.a.http_status, status_b: null, note: 'scored in the first run only; the second run never sampled it' });
+    } else if (r.status === 'only_b' && bScored) {
+      listed.push({ path: r.path, kind: 'only_b', status_a: null, status_b: r.b.http_status, note: 'scored in the second run only; the first run never sampled it' });
+    }
+  }
+  const scored_a = (rows || []).filter((r) => r.a && r.a.scored).length;
+  const scored_b = (rows || []).filter((r) => r.b && r.b.scored).length;
+  return { same_pages: listed.length === 0, scored_a, scored_b, changes: listed };
+}
+
+/**
+ * Verdict of a pairwise comparison: improved / regressed / mixed / unchanged.
+ * With `opts.samePages === false` the axis deltas are left out: the two rollups averaged different
+ * page sets, so the movement says something about the sample, not about the site. The findings diff
+ * still decides — it is matched location by location and survives a changed sample.
+ */
+export function verdictOf(scores, findings, opts = {}) {
   let positive = findings.fixed.length + findings.improved.length;
   let negative = findings.new.length + findings.regressed.length;
+  const axesComparable = opts.samePages !== false;
   for (const [key] of AXES) {
-    const d = scores[key] ? scores[key].delta : null;
+    const d = axesComparable && scores[key] ? scores[key].delta : null;
     if (d === null) continue;
     if (d > 1) positive++;
     else if (d < -1) negative++;
@@ -913,6 +981,7 @@ export function compareRuns(a, b, opts = {}) {
   const findings = diffFindings(a.findings, b.findings, { map, hostNormalize, stripPrefixA: a.file_prefix, stripPrefixB: b.file_prefix });
   const gaps = structuralGaps(a, b);
   const pages = pageDeltas(a, b);
+  const pageCoverage = pageCoverageChanges(pages);
 
   let coverageWarning = null;
   if (a.coverage && b.coverage && a.coverage !== b.coverage) {
@@ -925,6 +994,13 @@ export function compareRuns(a, b, opts = {}) {
     if (s.provisional_a || s.provisional_b) warnings.push('the ' + shortName + ' axis is provisional on ' + (s.provisional_a && s.provisional_b ? 'both runs' : s.provisional_a ? 'the first run' : 'the second run') + ': its band rests on partial coverage, so the delta is indicative.');
   }
   if (mode === 'staging' && !Object.keys(map).length) warnings.push('staging mode without a host map: locations only match when both runs share a hostname.');
+  if (!pageCoverage.same_pages) {
+    const flips = pageCoverage.changes.filter((c) => c.kind === 'dropped_from_scoring' || c.kind === 'added_to_scoring');
+    warnings.push('the two runs did not score the same pages (' + pageCoverage.scored_a + ' vs ' + pageCoverage.scored_b + ' scored: '
+      + pageCoverage.changes.slice(0, 5).map((c) => c.path + ' ' + c.kind).join(', ') + (pageCoverage.changes.length > 5 ? ' and ' + (pageCoverage.changes.length - 5) + ' more' : '')
+      + '): the site scores average different page sets, so the axis deltas are a coverage change, not a site change — they do not count towards the verdict.'
+      + (flips.length ? ' A page that stopped answering 2xx is reported in `page_coverage`, never as a score move.' : ''));
+  }
 
   return {
     compare_version: COMPARE_VERSION,
@@ -941,7 +1017,8 @@ export function compareRuns(a, b, opts = {}) {
     findings,
     gaps,
     pages,
-    verdict: verdictOf(scores, findings),
+    page_coverage: pageCoverage,
+    verdict: verdictOf(scores, findings, { samePages: pageCoverage.same_pages }),
     warnings: uniq(warnings),
   };
 }
@@ -1281,10 +1358,16 @@ export function renderMarkdown(doc) {
   } else {
     out.push('## Structural differences', '', '_' + doc.gaps.reason + '_', '');
   }
-  const movedPages = doc.pages.filter((p) => p.status === 'matched' && ((p.delta.search !== null && p.delta.search !== 0) || (p.delta.ai !== null && p.delta.ai !== 0)));
+  const movedPages = doc.pages.filter((p) => p.status === 'matched' && !p.coverage_change && ((p.delta.search !== null && p.delta.search !== 0) || (p.delta.ai !== null && p.delta.ai !== 0)));
   if (movedPages.length) {
     out.push('## Pages that moved', '');
     out.push(mdTable(['Path', 'Search a→b', 'AI a→b'], movedPages.slice(0, 20).map((p) => [p.path, fmt(p.a.search) + ' → ' + fmt(p.b.search) + ' (' + signed(p.delta.search) + ')', fmt(p.a.ai) + ' → ' + fmt(p.b.ai) + ' (' + signed(p.delta.ai) + ')'])), '');
+  }
+  const pageCov = doc.page_coverage;
+  if (pageCov && pageCov.changes && pageCov.changes.length) {
+    out.push('## Pages that changed coverage (never counted as a score move)', '');
+    out.push(mdTable(['Path', 'Change', 'HTTP a', 'HTTP b'], pageCov.changes.slice(0, 20).map((c) => [c.path, c.kind, c.status_a === null ? '—' : c.status_a, c.status_b === null ? '—' : c.status_b])), '');
+    out.push('_' + pageCov.scored_a + ' page(s) scored in a, ' + pageCov.scored_b + ' in b — the axis deltas above average different page sets._', '');
   }
   if (doc.coverage_warning) out.push('## Coverage', '', doc.coverage_warning, '');
   if (doc.warnings.length) out.push('## Warnings', '', ...doc.warnings.map((w) => '- ' + w), '');
@@ -1304,9 +1387,18 @@ export function regressionGate(doc) {
   const reasons = [];
   const worse = doc.findings.regressed.length + doc.findings.new.length;
   if (worse) reasons.push({ gate: 'findings', regressed: doc.findings.regressed.length, new: doc.findings.new.length, ids: uniq([...doc.findings.regressed, ...doc.findings.new].map((f) => f.id)).slice(0, 10) });
+  const samePages = !doc.page_coverage || doc.page_coverage.same_pages !== false;
   for (const [key, name] of AXES) {
     const d = doc.scores[key] ? doc.scores[key].delta : null;
-    if (d !== null && d < REGRESSION_DELTA) reasons.push({ gate: 'axis', axis: name, delta: d, threshold: REGRESSION_DELTA });
+    if (d === null || d >= REGRESSION_DELTA) continue;
+    // The gate still trips (a drop nobody can explain is exactly what it is for), but it says so
+    // when the two runs did not score the same pages: the number may be the sample, not the site.
+    const reason = { gate: 'axis', axis: name, delta: d, threshold: REGRESSION_DELTA };
+    if (!samePages) {
+      reason.same_pages = false;
+      reason.note = 'the two runs did not score the same pages (see page_coverage): this delta may be a coverage change rather than a regression';
+    }
+    reasons.push(reason);
   }
   return { tripped: reasons.length > 0, reasons, applicable: true };
 }
@@ -1356,6 +1448,9 @@ function summarize(doc, paths, extra = {}) {
     },
     categories_moved: doc.categories.filter((c) => c.delta !== null && c.delta !== 0).length,
     pages_matched: doc.pages.filter((p) => p.status === 'matched').length,
+    page_coverage: doc.page_coverage
+      ? { same_pages: doc.page_coverage.same_pages, scored_a: doc.page_coverage.scored_a, scored_b: doc.page_coverage.scored_b, changes: doc.page_coverage.changes.length }
+      : null,
     gaps: doc.gaps.available ? 'available' : UNAVAILABLE,
     coverage_warning: doc.coverage_warning,
     warnings: doc.warnings,

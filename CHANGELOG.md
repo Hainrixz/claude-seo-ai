@@ -54,7 +54,9 @@ reversible.
   gates `--fail-under search=70,ai=60`, `--fail-on-gated`, `--fail-on-severity N`.
 - `scripts/report.mjs` — schema-validated merge of deterministic and agent findings, dedupe by id +
   normalized location keeping the most severe status, per-page scores plus a site rollup, bilingual
-  `report.md`, and the top-15 actions ranked by severity × magnitude ÷ effort.
+  `report.md` (`--lang` covers the headings, the interpretation line and every warning; finding text
+  stays English because it comes from the checks), and the top-15 actions ranked by severity ×
+  magnitude ÷ effort.
 - `scripts/check.mjs` — the cheap gate: `node --check` over every `.mjs`, JSON parse over every
   shipped manifest, skill/agent frontmatter lint, and version alignment across the three version
   locations.

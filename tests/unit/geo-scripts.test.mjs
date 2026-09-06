@@ -397,6 +397,37 @@ describe('ai-discovery (M21)', () => {
     assert.deepEqual(d.ucp.errors, []);
   });
 
+  it('an endpoint that answers 200 with the app shell is a soft 404, not a found endpoint', async () => {
+    const { fetchSiteArtifacts, isSoftHtml404 } = await import('../../scripts/lib/site.mjs');
+    const shell = '<!doctype html><html><head><title>Vercel</title></head><body><div id="__next"></div></body></html>';
+    const fetchImpl = async (url) => {
+      const path = new URL(url).pathname;
+      const html = path === '/llms-full.txt' || path === '/sitemap_agentic_discovery.xml';
+      const body = path === '/llms.txt' ? '# Site\n\n> real file\n' : shell;
+      const ok = path === '/llms.txt' || html;
+      return {
+        status: ok ? 200 : 404, ok, final_url: url, redirects: { hops: 0 },
+        headers: { 'content-type': ok && !html ? 'text/plain; charset=utf-8' : 'text/html; charset=utf-8' },
+        body: { text: ok ? body : shell, bytes: Buffer.byteLength(ok ? body : shell), truncated: false, sha256: null },
+        error: null,
+      };
+    };
+    const site = await fetchSiteArtifacts('https://a.example', { fetchImpl, artifacts: 'discovery' });
+    const d = site.discovery;
+    assert.deepEqual(d.summary.found, ['/llms.txt'], 'a text/html body at a machine endpoint is not the endpoint');
+    assert.deepEqual(d.summary.soft_404, ['/llms-full.txt', '/sitemap_agentic_discovery.xml']);
+    assert.deepEqual([d.summary.statuses['/llms-full.txt'], d.probes['/llms-full.txt'].looks_like_html], [200, true],
+      'the 200 is still recorded — the endpoint is dropped, the evidence is not');
+    assert.equal(isSoftHtml404(d.probes['/llms.txt']), false);
+
+    // analyzeDiscovery reaches the same conclusion from the same two fields.
+    const r = analyzeDiscovery(d, null);
+    assert.deepEqual(r.summary.found, ['/llms.txt']);
+    assert.deepEqual(r.summary.soft_404, ['/llms-full.txt', '/sitemap_agentic_discovery.xml']);
+    assert.ok(r.summary.missing.includes('/sitemap_agentic_discovery.xml'));
+    assert.equal(r.agentic_sitemap.present, false);
+  });
+
   it('robots cross-check flags a discovery file blocked for its own audience', () => {
     const robots = parseRobots('User-agent: PerplexityBot\nDisallow: /llms.txt\n\nUser-agent: *\nDisallow:\n');
     const r = discoveryRobotsCheck(['/llms.txt', '/agents.md'], robots, 'https://a.example');

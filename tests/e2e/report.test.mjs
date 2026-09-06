@@ -127,16 +127,60 @@ test('the merged report conforms to the schema and carries the site rollup', () 
   assert.ok(post.findings_count >= 3, 'site-scoped plus page-scoped findings reach the page score');
 });
 
-test('report.md is rendered in the requested language', async () => {
+test('report.md is rendered in the requested language, chrome and warnings included', async () => {
   const es = await reportMain({ _: [dir], merge: 'agents/*.json', lang: 'es' });
   assert.equal(es.code, EXIT.OK);
   const md = readFileSync(join(dir, 'report.md'), 'utf8');
   assert.match(md, /^# Auditoría SEO \+ búsqueda con IA/);
   assert.match(md, /## Acciones prioritarias/);
   assert.match(md, /## Muestreo/);
+  // The Interpretación column and the Avisos section come from the scorer and the report itself;
+  // both used to render English sentences under Spanish headings.
+  assert.match(md, /Mixto —|Problemas de base|SEO clásico sólido|Posiciona bien|Sin puntuar —/);
+  assert.doesNotMatch(md, /Mixed — see the prioritized actions|Foundational issues|Unscored — no scored findings/);
+  assert.match(md, /no se detectó ni se declaró ninguna vertical/);
+  assert.doesNotMatch(md, /no vertical was detected or declared/);
+  assert.ok(es.result.warnings.some((w) => /hallazgo\(s\) duplicados se fusionaron/.test(w)), JSON.stringify(es.result.warnings));
+
   const en = await reportMain({ _: [dir], merge: 'agents/*.json', lang: 'en' });
   assert.equal(en.code, EXIT.OK);
-  assert.match(readFileSync(join(dir, 'report.md'), 'utf8'), /^# SEO \+ AI-search audit/);
+  const enMd = readFileSync(join(dir, 'report.md'), 'utf8');
+  assert.match(enMd, /^# SEO \+ AI-search audit/);
+  assert.match(enMd, /no vertical was detected or declared/);
+  assert.ok(en.result.warnings.some((w) => /duplicate finding\(s\) merged/.test(w)), JSON.stringify(en.result.warnings));
+});
+
+test('the rollup line only calls pages "weakest" when one scores below the site value', async () => {
+  // Every page carries the same site-scoped finding, so every page scores the same as the site:
+  // "Weakest pages: / 100 · /blog/a 100" would be a defect claim about a run with no defects.
+  const flat = newRun({ agents: false, findings: [finding({
+    id: 'M1.robots.crawlable', module: 'M1', title: 'robots.txt allows the crawl', status: 'pass', scope: 'site',
+    location: { url: HOME },
+    evidence: { observed: 'robots.txt allows Googlebot at the root.' },
+  })] });
+  try {
+    assert.equal((await reportMain({ _: [flat], lang: 'en' })).code, EXIT.OK);
+    const md = readFileSync(join(flat, 'report.md'), 'utf8');
+    assert.match(md, /\*\*Pages by score \(Search SEO\):\*\* \/ 100 · \/blog\/a 100/);
+    assert.doesNotMatch(md, /Weakest pages/);
+    assert.equal((await reportMain({ _: [flat], lang: 'es' })).code, EXIT.OK);
+    assert.match(readFileSync(join(flat, 'report.md'), 'utf8'), /\*\*Páginas por puntuación \(SEO de búsqueda\):\*\*/);
+  } finally {
+    rmSync(flat, { recursive: true, force: true });
+  }
+
+  // The same line, on a run where the home page really is the weaker of the two.
+  const uneven = newRun({ agents: false, findings: [
+    finding({ id: 'M7.title.missing', status: 'fail', severity: 4, scope: 'page', location: { url: HOME } }),
+    finding({ id: 'M7.title.ok', title: 'The article title is present', status: 'pass', severity: 4, scope: 'page', location: { url: POST },
+      evidence: { observed: 'parse-html reported a 54-character title on the article snapshot.' } }),
+  ] });
+  try {
+    assert.equal((await reportMain({ _: [uneven], lang: 'en' })).code, EXIT.OK);
+    assert.match(readFileSync(join(uneven, 'report.md'), 'utf8'), /\*\*Weakest pages \(Search SEO\):\*\* \/ 0/);
+  } finally {
+    rmSync(uneven, { recursive: true, force: true });
+  }
 });
 
 test('--out-md writes a second copy, --lang and --environment are validated', async () => {
@@ -190,6 +234,40 @@ test('a single-page run reports without a rollup', async () => {
     assert.ok(!('pages' in report));
     assert.equal(report.target.pages_analyzed, 1);
     assert.ok(validateReport(report).ok);
+  } finally { rmSync(run, { recursive: true, force: true }); }
+});
+
+test('a sampled page that answered 429 is named in the rollup and never scored', async () => {
+  const manifest = {
+    ...MANIFEST,
+    pages: [MANIFEST.pages[0], { ...MANIFEST.pages[1], status: 429 }],
+  };
+  const run = newRun({ agents: false, manifest });
+  try {
+    const r = await reportMain({ _: [run], lang: 'en' });
+    assert.equal(r.code, EXIT.OK);
+    const report = JSON.parse(readFileSync(join(run, 'report.json'), 'utf8'));
+    assert.ok(validateReport(report).ok, validateReport(report).errors.join('; '));
+    const post = report.pages.find((p) => p.url === POST);
+    assert.deepEqual([post.status, post.scorable, post.search.value, post.ai.value], [429, false, null, null]);
+    assert.deepEqual([report.site_rollup.pages_count, report.site_rollup.pages_scored], [2, 1]);
+    assert.deepEqual(report.site_rollup.unscored_pages.map((p) => [p.url, p.status]), [[POST, 429]]);
+    assert.ok(report.site_rollup.warnings.some((w) => /did not return 2xx/.test(w)), report.site_rollup.warnings.join(' | '));
+    assert.equal(report.site_rollup.worst_pages.search.some((p) => p.url === POST), false);
+    const md = readFileSync(join(run, 'report.md'), 'utf8');
+    assert.match(md, /2 pages analyzed · 1 scored/);
+    assert.match(md, /Sampled but not scored \(no 2xx response\):\*\* \/blog\/a 429/);
+  } finally { rmSync(run, { recursive: true, force: true }); }
+});
+
+test('a one-page run of a URL that returned 404 says the scores describe no page', async () => {
+  const run = newRun({ agents: false, manifest: { ...MANIFEST, pages: [{ ...MANIFEST.pages[0], status: 404 }] } });
+  try {
+    const r = await reportMain({ _: [run] });
+    assert.equal(r.code, EXIT.OK);
+    const report = JSON.parse(readFileSync(join(run, 'report.json'), 'utf8'));
+    assert.ok(!('site_rollup' in report), 'one page is still not a rollup');
+    assert.ok(report.warnings.some((w) => /returned HTTP 404/.test(w) && /describe no page/.test(w)), JSON.stringify(report.warnings));
   } finally { rmSync(run, { recursive: true, force: true }); }
 });
 

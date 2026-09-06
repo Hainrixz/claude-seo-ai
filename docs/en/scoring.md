@@ -176,6 +176,8 @@ High = `value ≥ 75`, low = `value < 60`. Each score carries **its own** one-li
 
 Scores between 60 and 75 are neither high nor low, so a pair that isn't squarely in one quadrant is **mixed**. When one axis is unscored, the other is interpreted on its own level.
 
+The table above is the English wording. `report.mjs --lang es` (and `scoreFindings(..., { lang: 'es' })`) writes the same line, and every warning the scorer emits, in Spanish — a Spanish report must not print English sentences under Spanish headings. Finding text (title, evidence, recommendation) stays English: it comes from the checks, not from the scorer.
+
 ## Site rollup (`--manifest`)
 
 With a crawl manifest (`crawl.json`), the scorer scores every sampled page and rolls the results up to a site score:
@@ -183,8 +185,10 @@ With a crawl manifest (`crawl.json`), the scorer scores every sampled page and r
 1. Findings are deduplicated (`id` + scope + location) so a site-wide finding emitted by several page runs counts **once**.
 2. Findings attach to pages through `location.url` (host lower-cased, no hash, no trailing slash), `location.file` / the page `slug`, or a `page` hint (url or slug — a rollup-only key, stripped before validation). `scope: site` findings apply to every page, `scope: template` findings to every page of that template; unmatched page findings are treated as site-wide, with a warning.
 3. Each page gets its own two scores (so a site-wide cap caps every page).
-4. `site value = Σ w_page × page_value / Σ w_page` over scored pages. `w_page` comes from `manifest.pages[].weight` when present, otherwise from the page role: **homepage 3 · target 2 · first sample of each template 2 · long-tail 1**. This is `method: "role_weights"`; weighting by Search Console impressions is planned as `method: "gsc_impressions"`.
-5. The rollup is `capped` only when every scored page is capped (a site-wide gate); page-only caps are counted in a warning. `pages[]` lists each page's role, weight, both scores and `worst_pages` gives the three lowest pages per axis.
+4. A page that did **not** answer 2xx (404, 429, a 5xx) is never scored. The on-page checks skip a non-content page, so it would collect almost no negative findings and end up scoring higher than a real page. It stays in `pages[]` with its `status`, `scorable: false` and `unscored_reason: "non_2xx_status"`, appears in `unscored_pages[]` and in a warning, carries no weight in the rollup, and never shows up under `worst_pages`. A `status` of `null` (a local file) is scored normally.
+5. `site value = Σ w_page × page_value / Σ w_page` over scored pages. `w_page` comes from `manifest.pages[].weight` when present, otherwise from the page role: **homepage 3 · target 2 · first sample of each template 2 · long-tail 1**. This is `method: "role_weights"`; weighting by Search Console impressions is planned as `method: "gsc_impressions"`.
+6. A **one-page** run has no rollup at all, so a single audited URL that answered 404/429/5xx still reports the two axes — from site-level findings only. The report then carries a warning saying exactly that: the scores describe no page.
+7. The rollup is `capped` only when every scored page is capped (a site-wide gate); page-only caps are counted in a warning. `pages[]` lists each page's role, weight, HTTP status and both scores; `pages_scored` says how many of `pages_count` actually entered the mean, and `worst_pages` gives the three lowest scored pages per axis.
 
 ## Running the scorer
 
@@ -236,4 +240,4 @@ Input is a JSON array of findings, or `{ "findings": [...] }`, each conforming t
 }
 ```
 
-The legacy keys (`value`, `band`, `capped`, `needs_api_count`, `categories[].name/weight/value/active`, `interpretation`) are unchanged; everything else is additive. With `--manifest` the result also carries `method`, `weights`, `pages_count`, `pages[]`, `worst_pages`, `unassigned_count`. Both axis objects validate against `$defs.score` in `schema/audit-report.schema.json`.
+The legacy keys (`value`, `band`, `capped`, `needs_api_count`, `categories[].name/weight/value/active`, `interpretation`) are unchanged; everything else is additive. With `--manifest` the result also carries `method`, `weights`, `pages_count`, `pages_scored`, `pages[]`, `unscored_pages[]`, `worst_pages`, `unassigned_count`. Both axis objects validate against `$defs.score` in `schema/audit-report.schema.json`.

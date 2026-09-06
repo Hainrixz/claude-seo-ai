@@ -132,14 +132,17 @@ High = `value ≥ 75`, low = `value < 60`. Each axis carries **its own** sentenc
 
 When one axis is unscored, the other is interpreted on its own level (high → "Strong …", low → "Foundational …", else mixed).
 
+The table is the English wording (`INTERPRETATIONS`). `INTERPRETATIONS_ES` is keyed identically, and every warning the scorer emits has both languages in `MESSAGES`; `scoreFindings`/`scoreSite` take an optional `lang` and `report.mjs --lang` passes it through, so a Spanish report carries a Spanish interpretation and Spanish warnings. Finding text stays English — it comes from the checks, not from the scorer.
+
 ## Site-level rollup (`scoreSite`, `--manifest crawl.json`)
 
 1. Findings are deduplicated by `id | scope | location.url | location.file | location.resource | location.selector` (worst status, then highest severity wins) so a site-scoped finding emitted by several page runs is **scored once**.
 2. Each finding is attached to a page via `location.url` (normalized: lower-case host, no hash, no trailing slash), `location.file`/page `slug`/`snapshot`, or a non-schema `page` hint (url or slug; stripped before validation). `scope: site` findings apply to every page; `scope: template` findings apply to every page of that template; unmatched page findings are treated as site-wide with a warning.
 3. Each page is scored with `scoreFindings(site ∪ template ∪ own)` — a site-wide cap therefore caps every page.
-4. Rollup per axis: `value = Σ w_page × page_value / Σ w_page` over pages with a scored value; unscored if none. `w_page` = `manifest.pages[].weight` when present, else by role: **homepage 3 · target 2 · first sample of each template 2 · other pages (long-tail) 1**. `method: "role_weights"`; `weights` echoes the table. The site is `capped` only when every scored page is capped (i.e. the cap is site-wide); page-only caps are counted in a warning.
-5. Output adds `pages[] {url, slug, role, template, weight, weight_source, findings_count, search{value, raw_value, band, state, capped}, ai{…}}` and `worst_pages {search[3], ai[3]}`. Category values in the rollup are the page-weighted means; counts come from the deduplicated set.
-6. When Search Console impressions are available (Tier 2) a future `method: "gsc_impressions"` weights pages by impressions instead.
+4. A sampled page whose `status` is outside 2xx (404, 429, 5xx) is **never scored**: the on-page checks skip a non-content page, so it would collect almost no negative findings and out-score a real page. It stays in `pages[]` with `status`, `scorable: false` and `unscored_reason: "non_2xx_status"`, is listed in `unscored_pages[]`, is named in a warning, carries no weight in the rollup and never appears in `worst_pages`. It also does not consume the "first sample of this template" weight slot. A `status` of `null` (a local file) is scorable.
+5. Rollup per axis: `value = Σ w_page × page_value / Σ w_page` over pages with a scored value; unscored if none. `w_page` = `manifest.pages[].weight` when present, else by role: **homepage 3 · target 2 · first sample of each template 2 · other pages (long-tail) 1**. `method: "role_weights"`; `weights` echoes the table. The site is `capped` only when every scored page is capped (i.e. the cap is site-wide); page-only caps are counted in a warning.
+6. Output adds `pages[] {url, slug, role, template, status, scorable, weight, weight_source, findings_count, search{value, raw_value, band, state, capped}, ai{…}}`, `pages_scored`, `unscored_pages[] {url, status, role}` and `worst_pages {search[3], ai[3]}`. Category values in the rollup are the page-weighted means; counts come from the deduplicated set.
+7. When Search Console impressions are available (Tier 2) a future `method: "gsc_impressions"` weights pages by impressions instead.
 
 ## Output shape (per axis)
 

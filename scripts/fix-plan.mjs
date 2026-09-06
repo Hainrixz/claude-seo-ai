@@ -261,24 +261,41 @@ export function buildCoverage({ findings = [], category = null, includeProposed 
     planned: planned.size,
     planned_auto: plannedAuto.size,
     planned_proposed: plannedProposed.size,
+    // `count` counts finding occurrences, `ids`/`id_count` the distinct ids behind them: the same
+    // id fires on many pages, so 24 findings can be 15 ids. Both numbers are printed, because a
+    // count with a shorter list under it reads as dropped items.
     skipped_proposed: {
       count: buckets.withheld_proposed.length,
+      id_count: idsOf(buckets.withheld_proposed).length,
       ids: idsOf(buckets.withheld_proposed),
       hint: buckets.withheld_proposed.length ? INCLUDE_PROPOSED_HINT : null,
     },
     advisory: {
       count: buckets.advisory.length,
+      id_count: advisoryIds.size,
       ids: [...advisoryIds],
       rendered_as_instructions: idsOf(advisoryRendered),
       note: 'advisory findings are never written by this tool; a person decides what to do with them',
     },
     unroutable: {
       count: unroutable.length,
+      id_count: idsOf(unroutable).length,
       ids: idsOf(unroutable),
       note: unroutable.length ? 'no adapter available for this profile owns these findings — they stay in the report, unplanned' : null,
     },
     by_adapter,
   };
+}
+
+/**
+ * "24 across 15 id(s)" — or just "15" when every occurrence has its own id. `count` counts finding
+ * occurrences and `ids` the distinct ids under them; printing a bare 24 above a list of 15 ids
+ * reads as a truncated list, which it is not.
+ */
+export function countPhrase(count, ids, noun = '') {
+  const distinct = Array.isArray(ids) ? ids.length : count;
+  const head = noun ? count + ' ' + noun : String(count);
+  return distinct && distinct !== count ? head + ' across ' + distinct + ' id(s)' : head;
 }
 
 /** The coverage block the dry-run summary prints. */
@@ -290,16 +307,16 @@ export function renderCoverage(coverage) {
     coverage.planned_proposed + ' proposed).');
   const sp = coverage.skipped_proposed;
   if (sp && sp.count) {
-    L.push('  held back as proposed (' + sp.count + '): ' + sp.ids.join(', '));
+    L.push('  held back as proposed (' + countPhrase(sp.count, sp.ids) + '): ' + sp.ids.join(', '));
     L.push('  → ' + sp.hint);
   }
   if (coverage.advisory && coverage.advisory.count) {
     const rendered = coverage.advisory.rendered_as_instructions || [];
-    L.push('  advisory, never written (' + coverage.advisory.count + '): ' + coverage.advisory.ids.join(', ') +
+    L.push('  advisory, never written (' + countPhrase(coverage.advisory.count, coverage.advisory.ids) + '): ' + coverage.advisory.ids.join(', ') +
       (rendered.length ? ' — ' + rendered.length + ' of them rendered as an instruction card' : ''));
   }
   if (coverage.unroutable && coverage.unroutable.count) {
-    L.push('  no adapter for this profile (' + coverage.unroutable.count + '): ' + coverage.unroutable.ids.join(', '));
+    L.push('  no adapter for this profile (' + countPhrase(coverage.unroutable.count, coverage.unroutable.ids) + '): ' + coverage.unroutable.ids.join(', '));
     L.push('  → ' + coverage.unroutable.note);
   }
   return L;
@@ -459,11 +476,13 @@ export async function main(args) {
     findings: allFindings, category: options.category, includeProposed: options.includeProposed, groups,
   });
   if (coverage.skipped_proposed.count) {
-    notes.push(coverage.skipped_proposed.count + ' fixable finding(s) are classed "proposed" and were not planned: '
+    notes.push(countPhrase(coverage.skipped_proposed.count, coverage.skipped_proposed.ids, 'fixable finding(s)')
+      + ' are classed "proposed" and were not planned: '
       + coverage.skipped_proposed.ids.join(', ') + ' — ' + coverage.skipped_proposed.hint + '.');
   }
   if (coverage.unroutable.count) {
-    notes.push(coverage.unroutable.count + ' finding(s) reached no adapter in this run: '
+    notes.push(countPhrase(coverage.unroutable.count, coverage.unroutable.ids, 'finding(s)')
+      + ' reached no adapter in this run: '
       + coverage.unroutable.ids.join(', ') + ' — ' + coverage.unroutable.note + '.');
   }
 

@@ -35,7 +35,8 @@ A `<ref>` is a run directory, a `report.json`, `latest[:<host>]`, `baseline[:<ho
    - **Findings**: `regressed` and `new` first (these are what broke), then `fixed` and `improved`, then the `unchanged` count. Quote the `from → to` status and the location of each.
    - **Coverage changes** as their own list, with the sentence that they are *not* results: a `needs_api` / `manual_review` transition and a location the other run never visited say the two runs measured different things.
    - **Structural gaps** (`gaps`): schema types, agentic/discovery endpoints, AI-crawler posture, heading-topic overlap, answer blocks, entity links, word count, render mode, hreflang. When `gaps.available` is false, say which side had no page snapshots instead of showing zeros.
-   - **Pages that moved**, by normalized path, and the `only_a` / `only_b` paths.
+   - **Pages that moved**, by normalized path, and the `only_a` / `only_b` paths. A page whose row carries `coverage_change: true` moved *coverage*, not score — one of the two runs did not score it (a 429 or 404 the second time round, for instance). Read those from `page_coverage.changes` as their own list.
+   - **Page coverage** (`page_coverage`): when `same_pages` is false the two rollups averaged different page sets, the axis deltas do not count towards the verdict, and the warning says so. Say it out loud instead of presenting the axis movement as a change in the site.
    - In competitor mode there is **no findings diff** (`findings: null`): show the score/category table, the presence matrix and the "subject vs best in set" gaps, and say why a finding on one site is not the same fact on another.
 4. **Offer next steps**: `--set-baseline` to make this run the reference for later comparisons, `/claude-seo-ai:fix <target>` for what regressed, and `--fail-on-regression` in CI.
 
@@ -54,7 +55,7 @@ A `<ref>` is a run directory, a `report.json`, `latest[:<host>]`, `baseline[:<ho
 
 - **A comparison is two measurements, not a ranking.** Scores describe the structure of the pages that were crawled. A higher score is not a prediction that one site outranks another.
 - **`WebSearch` is one engine at one moment.** The comparison set is a snapshot of one result page, not rank tracking, and not a sample of anything. Say so whenever you present a gap matrix, and repeat it if the user asks "so will this rank?".
-- **Not measured is never a pass.** `needs_api` and `manual_review` transitions live in `coverage_changes` and are excluded from `fixed`/`regressed` by construction — present them that way, and never describe a page the other run did not visit as fixed.
+- **Not measured is never a pass.** `needs_api` and `manual_review` transitions live in `coverage_changes` and are excluded from `fixed`/`regressed` by construction — present them that way, and never describe a page the other run did not visit as fixed. A page that stopped answering 2xx is the same class of event: it leaves the rollup, lands in `page_coverage`, and is never reported as a score improvement.
 - **Label the coverage.** When `coverage` is `deterministic` on either side, say the model-judged modules were not evaluated; when `coverage_warning` is set, read it out. A provisional band (`state: "partial"`) is reported with its coverage percentage in the same sentence.
 - **Directional stays directional.** Every gap row is a structural difference between pages, so it carries `directional` confidence — never promote one to "this will improve rankings".
 - Reply in the user's language (EN/ES). Nothing here writes to the user's project: run artifacts and comparisons live under `${CLAUDE_PLUGIN_DATA}`.

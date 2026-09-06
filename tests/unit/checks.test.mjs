@@ -46,7 +46,7 @@ import { check as ecommerce } from '../../scripts/checks/ecommerce.mjs';
 import { check as agentReadiness } from '../../scripts/checks/agent-readiness.mjs';
 import { check as cwv } from '../../scripts/checks/cwv.mjs';
 import { check as platformShopify } from '../../scripts/checks/platform-shopify.mjs';
-import { check as platformWordpress } from '../../scripts/checks/platform-wordpress.mjs';
+import { check as platformWordpress, THIN_ARCHIVE_RE } from '../../scripts/checks/platform-wordpress.mjs';
 import { check as platformFrameworks } from '../../scripts/checks/platform-frameworks.mjs';
 import { check as hostingEnvironment } from '../../scripts/checks/hosting-environment.mjs';
 
@@ -1205,4 +1205,71 @@ test('drops past the entry cap are still counted, so the total can never under-r
   assert.equal(drops.entries.length, 100, 'the named list stays bounded');
   assert.equal(drops.total, 130, 'the count is exact — a silent under-report is the bug this log exists to prevent');
   assert.deepEqual(shared.takeDropped(), { entries: [], total: 0 }, 'the counter is zeroed with the entries');
+});
+
+/* ------------------------------------------------------------------ pointers vs declarations */
+
+test('M5 leaves a review widget\'s itemReviewed alone: a back-reference is not a Product missing its Offer', async () => {
+  const page = mkPage(ORIGIN + '/p/wool-runners', HTML(
+    '<title>A variant page carrying a review widget</title>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProductGroup","name":"Wool Runners",'
+    + '"image":"' + ORIGIN + '/i.png","offers":{"@type":"Offer","price":"110.00","priceCurrency":"USD","availability":"https://schema.org/InStock"},'
+    + '"hasVariant":[{"@type":"Product","url":"' + ORIGIN + '/p/wool-runners?size=8"},{"@type":"Product","url":"' + ORIGIN + '/p/wool-runners?size=9"}]}</script>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"AggregateRating","ratingValue":"4.6","reviewCount":"812",'
+    + '"itemReviewed":{"@type":"Product","name":"Wool Runners","image":"' + ORIGIN + '/i.png","brand":{"@type":"Brand","name":"Acme"}}}</script>',
+    '<main><h1>Wool Runners</h1><p>Buy the Wool Runners for $110.00 today, in every size we stock.</p></main>',
+  ));
+  const out = await run(schema, mkCtx({ pages: [page] }));
+  assert.equal(byId(out, 'M5.product.missing_offer_price').length, 0,
+    'the ProductGroup carries the offer and the itemReviewed node points at it — neither is a Product short of a price');
+
+  // The same node OUTSIDE a back-reference property is a declaration and is still reported.
+  const bare = mkPage(ORIGIN + '/p/bare', HTML('<title>A product declared with no offer at all</title>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Wool Runners","image":"/i.png"}</script>'));
+  assert.equal(one(await run(schema, mkCtx({ pages: [bare] })), 'M5.product.missing_offer_price').status, 'fail');
+});
+
+test('M18 catalogue eligibility describes the primary node, not a url-only hasVariant stub', async () => {
+  const page = mkPage(ORIGIN + '/p/runners', HTML(
+    '<title>A product group with variant stubs</title>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProductGroup","name":"Wool Runners",'
+    + '"image":"' + ORIGIN + '/i.png","offers":{"@type":"Offer","price":"110.00","priceCurrency":"USD","availability":"https://schema.org/InStock"},'
+    + '"hasVariant":[{"@type":"Product","url":"' + ORIGIN + '/p/runners?size=8"},{"@type":"Product","url":"' + ORIGIN + '/p/runners?size=9"}]}</script>',
+    '<main><h1>Wool Runners</h1><p>Buy the Wool Runners for $110.00 today.</p></main>',
+  ));
+  const out = await run(ecommerce, mkCtx({ pages: [page], vertical: { primary: 'ecommerce' } }));
+  const elig = one(out, 'M18.agentic.catalog_eligibility');
+  assert.equal(elig.status, 'pass', elig.evidence.observed);
+  assert.match(elig.evidence.observed, /ProductGroup: title="Wool Runners"/);
+  assert.match(elig.evidence.observed, /price=110 \(ProductGroup\.offers\)/);
+  assert.ok(!/missing/.test(elig.evidence.observed), elig.evidence.observed);
+  assert.equal(byId(out, 'M18.variants.no_productgroup').length, 0, 'variant stubs are not "several Product blocks"');
+});
+
+test('WordPress thin-archive detection matches date archives and never a dated post permalink', async () => {
+  for (const p of ['/2026/', '/2026', '/2026/09/', '/2026/09/05/', '/category/news/', '/tag/seo/', '/author/jo/', '/page/2/']) {
+    assert.ok(THIN_ARCHIVE_RE.test(p), p + ' is an archive path');
+  }
+  for (const p of ['/2026/09/05/seattle-times-and-newsday-partner/', '/2026/09/05/slug', '/2026/09/post/', '/blog/2026/09/', '/about/']) {
+    assert.ok(!THIN_ARCHIVE_RE.test(p), p + ' is a post permalink, not an archive');
+  }
+
+  const post = mkPage(ORIGIN + '/2026/09/05/a-real-article/', HTML('<title>A dated post permalink on WordPress</title>',
+    '<main><h1>A real article</h1><p>The permalink structure is /%year%/%monthnum%/%day%/%postname%/.</p></main>'));
+  const archive = mkPage(ORIGIN + '/2026/09/', HTML('<title>The September 2026 date archive</title>',
+    '<main><h1>September 2026</h1><p>Everything published that month.</p></main>'));
+  const base = mkCtx({
+    crawl: { origin: ORIGIN, target: ORIGIN + '/' },
+    site: { robots: robotsArtifact('User-agent: *\nAllow: /\n'), sitemaps: { found: 1, files: [] } },
+    profile: { platform: { id: 'wordpress', confidence: 'high' }, cms_plugins: [], target: {} },
+  });
+
+  const postOnly = await run(platformWordpress, { ...base, pages: [post] });
+  assert.equal(byId(postOnly, 'M2.wordpress.thin_archives_indexable').length, 0,
+    'noindexing this URL would noindex the article itself');
+
+  const withArchive = await run(platformWordpress, { ...base, pages: [post, archive] });
+  const thin = one(withArchive, 'M2.wordpress.thin_archives_indexable');
+  assert.match(thin.evidence.observed, /\/2026\/09\//);
+  assert.ok(!thin.evidence.observed.includes('a-real-article'), thin.evidence.observed);
 });

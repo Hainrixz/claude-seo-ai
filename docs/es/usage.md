@@ -208,6 +208,13 @@ puntos) · `--set-baseline` (escribe `runs/<host>/baseline.json`, que queda exen
 Las transiciones que involucran `needs_api` / `manual_review` se listan por separado y **nunca**
 cuentan como corregidas ni como regresión: perder una clave de API no es una regresión de tu sitio.
 
+La misma regla cubre la muestra de páginas. Cuando una página que una ejecución puntuó queda sin
+puntuar en la otra —volvió con 429 o 404, o ese rastreo nunca la muestreó—, las dos puntuaciones de
+sitio son medias sobre conjuntos de páginas distintos. Esas páginas se listan en `page_coverage`, sus
+filas por página se marcan con `coverage_change` en lugar de llevar un delta, los deltas de eje dejan
+de contar para el veredicto y un aviso explica por qué. Un rastreo con límite de tasa nunca puede
+leerse como una mejora.
+
 Notas de honestidad que la skill te repite: `WebSearch` en modo gap es un motor en un momento
 concreto, no seguimiento de posiciones; las puntuaciones de competidores describen estructura, no
 posiciones previstas; y una ejecución solo determinista se etiqueta como tal.
@@ -251,6 +258,10 @@ orden:
 archivos); los objetivos locales se convierten en `local/<basename>-<hash>`. Los ids de ejecución son
 marcas de tiempo UTC, así que ordenan cronológicamente. La retención conserva las últimas 20
 ejecuciones por host (5 para hosts de análisis de brechas); la línea base nunca se purga.
+
+`--lang en|es` fija el idioma de `report.md` y de todo lo que se escribe alrededor de los números:
+encabezados, etiquetas de tabla, la línea de interpretación y cada aviso. El texto de los hallazgos
+—título, evidencia, recomendación— sigue en inglés, porque viene de las verificaciones.
 
 El flujo de corrección usa un segundo árbol bajo el directorio de datos:
 

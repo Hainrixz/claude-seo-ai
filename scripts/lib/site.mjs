@@ -58,6 +58,20 @@ export function looksLikeHtml(body) {
 }
 const looksHtml = looksLikeHtml;
 
+/**
+ * A discovery probe that answered 200 with an HTML page is a soft 404: none of these endpoints is
+ * an HTML document, so a catch-all app shell at /llms.txt means the file is NOT published. The
+ * status alone would say "found" and put a factually false row in the report and in the competitor
+ * matrix, so `summary.found` uses this and `summary.soft_404` lists what it dropped — exactly the
+ * conclusion ai-discovery.mjs's validators already reach from the same two fields.
+ * @param {{ok?: boolean, looks_like_html?: boolean, content_type?: string|null}} probe
+ */
+export function isSoftHtml404(probe) {
+  if (!probe || probe.ok !== true) return false;
+  if (probe.looks_like_html === true) return true;
+  return typeof probe.content_type === 'string' && /\btext\/html\b/i.test(probe.content_type);
+}
+
 /** Media types a fetched URL must declare to count as an HTML page. */
 export const HTML_MEDIA_TYPES = Object.freeze(new Set(['text/html', 'application/xhtml+xml']));
 
@@ -210,7 +224,14 @@ async function probeDiscovery(base, { fetchImpl, common, siteDir }) {
 
   const statuses = {};
   for (const [k, v] of Object.entries(probes)) statuses[k] = v.status;
-  return { origin: base, fetched_at: new Date().toISOString(), source: 'http', probes, https_enforcement, summary: { statuses, found: Object.keys(probes).filter((k) => probes[k].ok) } };
+  return {
+    origin: base, fetched_at: new Date().toISOString(), source: 'http', probes, https_enforcement,
+    summary: {
+      statuses,
+      found: Object.keys(probes).filter((k) => probes[k].ok && !isSoftHtml404(probes[k])),
+      soft_404: Object.keys(probes).filter((k) => isSoftHtml404(probes[k])),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +366,15 @@ export function localSiteArtifacts(dir, opts = {}) {
     }
     const statuses = {};
     for (const [k, v] of Object.entries(probes)) statuses[k] = v.status;
-    out.discovery = { origin: null, fetched_at: new Date().toISOString(), source: 'local', probes, https_enforcement: { applicable: false, url: null, reason: 'local directory' }, summary: { statuses, found: Object.keys(probes).filter((k) => probes[k].ok) } };
+    out.discovery = {
+      origin: null, fetched_at: new Date().toISOString(), source: 'local', probes,
+      https_enforcement: { applicable: false, url: null, reason: 'local directory' },
+      summary: {
+        statuses,
+        found: Object.keys(probes).filter((k) => probes[k].ok && !isSoftHtml404(probes[k])),
+        soft_404: Object.keys(probes).filter((k) => isSoftHtml404(probes[k])),
+      },
+    };
     if (siteDir) out.files.discovery_json = writeJson(join(siteDir, SITE_FILES.discovery_json), out.discovery);
   }
   return out;

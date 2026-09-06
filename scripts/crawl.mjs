@@ -375,8 +375,27 @@ export function manifestFromSinglePage(runDir, opts = {}) {
 // ---------------------------------------------------------------------------
 // The crawl
 
-function skipLog() { return { count: 0, urls: [], truncated: false }; }
+/**
+ * A skip bucket counts DISTINCT URLs. The same URL is discovered from many pages, so counting every
+ * discovery would report "cap 97" for a few dozen real URLs and the listed urls[] would repeat.
+ * `_seen` is non-enumerable, so it never reaches crawl.json.
+ */
+function skipLog() {
+  const bucket = { count: 0, urls: [], truncated: false };
+  Object.defineProperty(bucket, '_seen', { value: new Set(), enumerable: false, writable: false });
+  return bucket;
+}
+/**
+ * A skip is identified by its URL and its reason: /blog/a excluded as a link and again after a
+ * redirect are two different facts; the same URL hitting the frontier cap ten times is one.
+ */
+const skipKey = (entry) => [entry.url, entry.filter || entry.rule || entry.reason || '', entry.via || ''].join('|');
 function logSkip(bucket, entry) {
+  const key = entry && entry.url ? skipKey(entry) : null;
+  if (key && bucket._seen) {
+    if (bucket._seen.has(key)) return;
+    bucket._seen.add(key);
+  }
   bucket.count++;
   if (bucket.urls.length < MAX_SKIP_LOG) bucket.urls.push(entry);
   else bucket.truncated = true;
@@ -712,7 +731,10 @@ export async function crawlSite(target, options = {}) {
   sampling.discovered = order.length;
 
   // --- templates ------------------------------------------------------------
-  const templateEntries = order.map((n) => ({
+  // A URL that answered with something other than an HTML document (/agents.md, llms.txt, a feed)
+  // was never a candidate page: it is logged under sampling.skipped_by_filter with its content type
+  // and must not appear as a page template whose "Discovered 1 / Sampled 0" reads like a miss.
+  const templateEntries = order.filter((n) => !n.non_html).map((n) => ({
     url: n.final_url || n.url, key: n.template || n.url_template, sampled: !!n.page,
     evidence: n.template_info ? n.template_info.evidence : null,
   }));

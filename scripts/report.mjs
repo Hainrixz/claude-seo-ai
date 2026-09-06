@@ -28,7 +28,7 @@ import { EXIT, isMain, runCli } from './lib/util.mjs';
 import { pluginVersion, readJson, writeJson, writeText } from './lib/store.mjs';
 import { FINDING_SCHEMA, PLUGIN_ROOT, validateFinding } from './lib/validate-finding.mjs';
 import { formatErrors, validate } from './lib/schema-lite.mjs';
-import { AI, ENVIRONMENTS, SEARCH, VERTICALS, scoreFindings, scoreSite } from './score.mjs';
+import { AI, ENVIRONMENTS, SEARCH, VERTICALS, isScorablePage, message, normalizeLang, scoreFindings, scoreSite } from './score.mjs';
 import { knownIds } from './checks/index.mjs';
 
 /** How many prioritized actions the markdown report lists. */
@@ -153,26 +153,81 @@ export function outranks(a, b) {
 }
 
 /**
+ * Warnings the report itself emits, in both shipped languages: the Avisos section must not print
+ * Spanish headings over English sentences. Score-level warnings and the interpretation line are
+ * translated at their source (score.mjs MESSAGES / INTERPRETATIONS_ES); finding text stays English,
+ * because it comes from the checks. Every builder takes one params object so the two cannot drift.
+ */
+export const REPORT_MESSAGES = Object.freeze({
+  en: {
+    no_deterministic: (p) => 'no findings.deterministic.json in ' + p.dir + ' — run audit.mjs first for the deterministic pass',
+    merge_needs_path: () => '--merge needs a path or glob (e.g. --merge "agents/*.json")',
+    merge_error: (p) => '--merge "' + p.pattern + '": ' + p.error,
+    merge_no_match: (p) => '--merge "' + p.pattern + '" matched no files',
+    file_dropped: (p) => p.label + ': ' + p.count + ' finding(s) failed schema validation and were dropped (see dropped_findings)',
+    duplicates_merged: (p) => p.count + ' duplicate finding(s) merged (same id and location; most severe kept)',
+    vertical_inferred: (p) => 'vertical inferred from the platform profile hints (' + p.hints + '); pass --vertical to declare it',
+    vertical_none: () => 'no vertical was detected or declared; scoring with "generic" (conditional categories stay inactive)',
+    multilingual_inferred: (p) => 'multilingual inferred from hreflang annotations on ' + p.count + ' of ' + p.total + ' sampled page(s)',
+    unknown_environment: (p) => 'unknown environment "' + p.environment + '"; scoring as production',
+    page_not_2xx: (p) => 'the audited page returned HTTP ' + p.status
+      + ': the on-page checks skipped it, so these scores rest on site-level findings only and describe no page.',
+    checks_dropped: (p) => p.count + ' finding(s) built by the checks pass failed schema validation and were dropped'
+      + (p.named ? ' (' + p.named + ')' : '') + ' — see checks.json stats.dropped_findings',
+    check_failed: (p) => 'check "' + p.check + '"' + (p.page ? ' on ' + p.page : '') + ' failed: ' + p.message,
+    more_check_errors: (p) => 'and ' + p.count + ' more check error(s) — see checks.json',
+    no_crawl: () => 'no crawl.json in the run: the sampling table and the site rollup are unavailable',
+  },
+  es: {
+    no_deterministic: (p) => 'no hay findings.deterministic.json en ' + p.dir + ' — ejecuta audit.mjs primero para la pasada determinista',
+    merge_needs_path: () => '--merge necesita una ruta o un glob (por ejemplo --merge "agents/*.json")',
+    merge_error: (p) => '--merge "' + p.pattern + '": ' + p.error,
+    merge_no_match: (p) => '--merge "' + p.pattern + '" no coincidió con ningún archivo',
+    file_dropped: (p) => p.label + ': ' + p.count + ' hallazgo(s) no pasaron la validación de esquema y se descartaron (ver dropped_findings)',
+    duplicates_merged: (p) => p.count + ' hallazgo(s) duplicados se fusionaron (mismo id y ubicación; se conserva el más severo)',
+    vertical_inferred: (p) => 'vertical inferida de las pistas del perfil de plataforma (' + p.hints + '); pasa --vertical para declararla',
+    vertical_none: () => 'no se detectó ni se declaró ninguna vertical; se puntúa como "generic" (las categorías condicionales quedan inactivas)',
+    multilingual_inferred: (p) => 'multilingüe inferido de las anotaciones hreflang en ' + p.count + ' de ' + p.total + ' página(s) muestreadas',
+    unknown_environment: (p) => 'entorno desconocido "' + p.environment + '"; se puntúa como production',
+    page_not_2xx: (p) => 'la página auditada devolvió HTTP ' + p.status
+      + ': las verificaciones de página la omitieron, así que estas puntuaciones se apoyan solo en hallazgos del sitio y no describen ninguna página.',
+    checks_dropped: (p) => p.count + ' hallazgo(s) construidos por la pasada de checks no pasaron la validación de esquema y se descartaron'
+      + (p.named ? ' (' + p.named + ')' : '') + ' — ver checks.json stats.dropped_findings',
+    check_failed: (p) => 'la verificación "' + p.check + '"' + (p.page ? ' en ' + p.page : '') + ' falló: ' + p.message,
+    more_check_errors: (p) => 'y ' + p.count + ' error(es) más de verificaciones — ver checks.json',
+    no_crawl: () => 'esta ejecución no tiene crawl.json: la tabla de muestreo y el agregado del sitio no están disponibles',
+  },
+});
+
+/** Build one report-level warning in `lang`; falls back to the English builder for a missing key. */
+export function reportMessage(lang, key, params = {}) {
+  const table = REPORT_MESSAGES[normalizeLang(lang)] || REPORT_MESSAGES.en;
+  const build = table[key] || REPORT_MESSAGES.en[key];
+  return typeof build === 'function' ? build(params) : '';
+}
+
+/**
  * Load, validate, dedupe. Findings arrive in source order (deterministic first, then each --merge
  * glob), so a tie between an agent and a check keeps the check.
  * @returns {{entries: object[], dropped: object[], sources: object[], duplicates: number, warnings: string[]}}
  */
 export function collectFindings(runDir, opts = {}) {
   const dir = resolve(runDir);
+  const lang = normalizeLang(opts.lang);
   const warnings = [];
   const sources = [];
   const files = [];
 
   const deterministic = join(dir, 'findings.deterministic.json');
   if (existsSync(deterministic)) files.push({ label: 'findings.deterministic.json', path: deterministic, kind: 'deterministic' });
-  else warnings.push('no findings.deterministic.json in ' + dir + ' — run audit.mjs first for the deterministic pass');
+  else warnings.push(reportMessage(lang, 'no_deterministic', { dir }));
 
   const patterns = [].concat(opts.merge === undefined ? [] : opts.merge).filter((p) => p !== false);
   for (const pattern of patterns) {
-    if (pattern === true) { warnings.push('--merge needs a path or glob (e.g. --merge "agents/*.json")'); continue; }
+    if (pattern === true) { warnings.push(reportMessage(lang, 'merge_needs_path')); continue; }
     const { files: found, error } = expandGlob(pattern, dir);
-    if (error) { warnings.push('--merge "' + pattern + '": ' + error); continue; }
-    if (!found.length) { warnings.push('--merge "' + pattern + '" matched no files'); continue; }
+    if (error) { warnings.push(reportMessage(lang, 'merge_error', { pattern, error })); continue; }
+    if (!found.length) { warnings.push(reportMessage(lang, 'merge_no_match', { pattern })); continue; }
     for (const p of found) {
       if (files.some((f) => f.path === p)) continue;
       files.push({ label: basename(p), path: p, kind: 'agent' });
@@ -205,7 +260,7 @@ export function collectFindings(runDir, opts = {}) {
       index++;
     }
     sources.push({ label: file.label, kind: file.kind, total: list.length, valid, dropped: bad, error: null });
-    if (bad) warnings.push(file.label + ': ' + bad + ' finding(s) failed schema validation and were dropped (see dropped_findings)');
+    if (bad) warnings.push(reportMessage(lang, 'file_dropped', { label: file.label, count: bad }));
   }
 
   // Dedupe by id + normalized location, most severe wins.
@@ -218,7 +273,7 @@ export function collectFindings(runDir, opts = {}) {
     duplicates++;
     if (outranks(entry.f, prev.f)) byKey.set(key, entry);
   }
-  if (duplicates) warnings.push(duplicates + ' duplicate finding(s) merged (same id and location; most severe kept)');
+  if (duplicates) warnings.push(reportMessage(lang, 'duplicates_merged', { count: duplicates }));
 
   return { entries: [...byKey.values()], dropped, sources, duplicates, warnings };
 }
@@ -227,12 +282,13 @@ export function collectFindings(runDir, opts = {}) {
 
 /** Vertical for the score: --vertical > profile.vertical > profile.vertical_hints > generic. */
 export function resolveVertical(opts = {}, profile = null, crawl = null) {
+  const lang = normalizeLang(opts.lang);
   const warnings = [];
   const push = (out, value) => {
     for (const part of String(value == null ? '' : value).split(',')) {
       const id = part.trim().toLowerCase();
       if (!id) continue;
-      if (!VERTICALS.includes(id)) { warnings.push('unknown vertical "' + id + '" ignored (known: ' + VERTICALS.join(', ') + ')'); continue; }
+      if (!VERTICALS.includes(id)) { warnings.push(message(lang, 'unknown_vertical', { id, known: VERTICALS.join(', ') })); continue; }
       if (!out.includes(id)) out.push(id);
     }
   };
@@ -260,19 +316,19 @@ export function resolveVertical(opts = {}, profile = null, crawl = null) {
   } else if (profile && Array.isArray(profile.vertical_hints) && profile.vertical_hints.length) {
     source = 'inferred';
     profile.vertical_hints.forEach((h) => push(ids, h));
-    warnings.push('vertical inferred from the platform profile hints (' + profile.vertical_hints.join(', ') + '); pass --vertical to declare it');
+    warnings.push(reportMessage(lang, 'vertical_inferred', { hints: profile.vertical_hints.join(', ') }));
   }
 
   if (!ids.length) {
     ids.push('generic');
-    if (source !== 'declared') warnings.push('no vertical was detected or declared; scoring with "generic" (conditional categories stay inactive)');
+    if (source !== 'declared') warnings.push(reportMessage(lang, 'vertical_none'));
   }
 
   if (multilingual === undefined && crawl && Array.isArray(crawl.pages)) {
     const withHreflang = crawl.pages.filter((p) => Number(p.hreflang_count) > 0).length;
     if (withHreflang > 0) {
       multilingual = true;
-      warnings.push('multilingual inferred from hreflang annotations on ' + withHreflang + ' of ' + crawl.pages.length + ' sampled page(s)');
+      warnings.push(reportMessage(lang, 'multilingual_inferred', { count: withHreflang, total: crawl.pages.length }));
     } else multilingual = false;
   }
 
@@ -317,7 +373,10 @@ function siteSummary(artifacts, crawl) {
   if (sm) out.sitemaps = { files: Array.isArray(sm.files) ? sm.files.length : null, urls: sm.url_count == null ? null : sm.url_count, errors_total: sm.errors_total == null ? null : sm.errors_total, probe_misses: sm.probe_misses == null ? null : sm.probe_misses };
   else if (crawl && crawl.sitemaps) out.sitemaps = { files: crawl.sitemaps.files, urls: crawl.sitemaps.urls, errors_total: null, probe_misses: null };
   const disc = artifacts.discovery;
-  if (disc && disc.summary) out.discovery = { found: disc.summary.found || [], statuses: disc.summary.statuses || {} };
+  // `found` already excludes endpoints that answered 200 with an HTML app shell (lib/site.mjs
+  // isSoftHtml404); they are listed separately so the report can say "answered 200, served HTML"
+  // instead of claiming a third party publishes a file it does not.
+  if (disc && disc.summary) out.discovery = { found: disc.summary.found || [], soft_404: disc.summary.soft_404 || [], statuses: disc.summary.statuses || {} };
   return Object.keys(out).length ? out : null;
 }
 
@@ -385,6 +444,7 @@ export function buildReport(runDir, opts = {}) {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) {
     return { ok: false, code: EXIT.USAGE, error: 'run directory not found: ' + dir, warnings: [], sources: [], dropped: [] };
   }
+  const lang = normalizeLang(opts.lang);
   const warnings = [];
   const crawl = readJson(join(dir, 'crawl.json'), null);
   const profile = readJson(join(dir, 'profile.json'), null);
@@ -395,7 +455,7 @@ export function buildReport(runDir, opts = {}) {
   };
   const checks = readJson(join(dir, 'checks.json'), null);
 
-  const collected = collectFindings(dir, { merge: opts.merge });
+  const collected = collectFindings(dir, { merge: opts.merge, lang });
   warnings.push(...collected.warnings);
   if (!collected.entries.length && !collected.dropped.length) {
     return { ok: false, code: EXIT.USAGE, error: 'no findings to report in ' + dir + ' (looked for findings.deterministic.json and every --merge glob)', warnings, sources: collected.sources, dropped: collected.dropped };
@@ -404,13 +464,13 @@ export function buildReport(runDir, opts = {}) {
   const hinted = collected.entries.map((e) => (e.page ? { ...e.f, page: e.page } : e.f));
   const hasAgentFindings = collected.entries.some((e) => e.kind === 'agent');
 
-  const { vertical, warnings: verticalWarnings } = resolveVertical(opts, profile, crawl);
+  const { vertical, warnings: verticalWarnings } = resolveVertical({ ...opts, lang }, profile, crawl);
   warnings.push(...verticalWarnings);
 
   let environment = typeof opts.environment === 'string' ? opts.environment.toLowerCase() : null;
   if (!environment && profile && profile.environment && typeof profile.environment.kind === 'string') environment = profile.environment.kind;
   if (environment && !ENVIRONMENTS.includes(environment)) {
-    warnings.push('unknown environment "' + environment + '"; scoring as production');
+    warnings.push(reportMessage(lang, 'unknown_environment', { environment }));
     environment = 'production';
   }
 
@@ -418,11 +478,17 @@ export function buildReport(runDir, opts = {}) {
     vertical: { primary: vertical.primary, also: vertical.also },
     multilingual: vertical.multilingual === undefined ? undefined : vertical.multilingual,
     environment: environment || 'production',
+    lang,
     validate: false,
   };
   const flat = scoreFindings(findings, scoreOpts);
   const manifestPages = crawl && Array.isArray(crawl.pages) ? crawl.pages : [];
   const rollup = manifestPages.length > 1 ? scoreSite(crawl, { ...scoreOpts, findings: hinted }) : null;
+  // One page, and it did not answer 2xx: there is no rollup to drop it from, so the scores below
+  // rest on site-level findings alone. Say so rather than presenting them as a page score.
+  if (!rollup && manifestPages.length === 1 && !isScorablePage(manifestPages[0])) {
+    warnings.push(reportMessage(lang, 'page_not_2xx', { status: manifestPages[0].status }));
+  }
 
   const scores = rollup
     ? { search_seo: rollup.search_seo, ai_visibility: rollup.ai_visibility }
@@ -452,6 +518,8 @@ export function buildReport(runDir, opts = {}) {
       weights: rollup.weights,
       worst_pages: rollup.worst_pages,
       pages_count: rollup.pages_count,
+      pages_scored: rollup.pages_scored,
+      unscored_pages: rollup.unscored_pages,
       findings_count: rollup.findings_count,
       unassigned_count: rollup.unassigned_count,
       flat_scores: {
@@ -472,14 +540,13 @@ export function buildReport(runDir, opts = {}) {
     // A check that builds a schema-invalid finding drops it silently at the mk() boundary; the
     // count is the only way an operator can tell that apart from a clean site.
     const named = (checks.stats.dropped_findings || []).map((d) => d.id || d.check).filter(Boolean).slice(0, 5);
-    warnings.push(checks.stats.dropped + ' finding(s) built by the checks pass failed schema validation and were dropped'
-      + (named.length ? ' (' + named.join(', ') + ')' : '') + ' — see checks.json stats.dropped_findings');
+    warnings.push(reportMessage(lang, 'checks_dropped', { count: checks.stats.dropped, named: named.join(', ') }));
   }
   if (checks && checks.stats && Array.isArray(checks.stats.errors)) {
-    for (const e of checks.stats.errors.slice(0, 10)) warnings.push('check "' + e.check + '"' + (e.page ? ' on ' + e.page : '') + ' failed: ' + e.message);
-    if (checks.stats.errors.length > 10) warnings.push('and ' + (checks.stats.errors.length - 10) + ' more check error(s) — see checks.json');
+    for (const e of checks.stats.errors.slice(0, 10)) warnings.push(reportMessage(lang, 'check_failed', { check: e.check, page: e.page, message: e.message }));
+    if (checks.stats.errors.length > 10) warnings.push(reportMessage(lang, 'more_check_errors', { count: checks.stats.errors.length - 10 }));
   }
-  if (!crawl) warnings.push('no crawl.json in the run: the sampling table and the site rollup are unavailable');
+  if (!crawl) warnings.push(reportMessage(lang, 'no_crawl'));
   if (warnings.length) report.warnings = warnings;
 
   const verdict = validateReport(report);
@@ -487,7 +554,7 @@ export function buildReport(runDir, opts = {}) {
     return { ok: false, code: EXIT.RUNTIME, error: 'assembled report does not conform to schema/audit-report.schema.json', schema_errors: verdict.errors.slice(0, 20), report, warnings, sources: collected.sources, dropped: collected.dropped };
   }
 
-  const markdown = renderMarkdown(report, { lang: opts.lang, crawl, sources: collected.sources });
+  const markdown = renderMarkdown(report, { lang, crawl, sources: collected.sources });
   return { ok: true, code: EXIT.OK, report, markdown, findings, warnings, sources: collected.sources, dropped: collected.dropped, duplicates: collected.duplicates, crawl };
 }
 
@@ -522,7 +589,8 @@ export const STRINGS = Object.freeze({
     unresolved: 'Unresolved', probes_h: 'Probes (never scored)', warnings: 'Warnings',
     files: 'Files', findings_total: 'Findings', dropped: 'dropped (schema-invalid)',
     action_note: 'Ranked by severity x impact magnitude / effort proxy. Effort proxy: auto 1, proposed 2, advisory 3.',
-    site_rollup: 'Site rollup', worst_pages: 'Weakest pages', page: 'Page',
+    site_rollup: 'Site rollup', worst_pages: 'Weakest pages', pages_by_score: 'Pages by score', page: 'Page',
+    pages_scored_lbl: 'scored', not_scored: 'Sampled but not scored (no 2xx response)',
   },
   es: {
     title: 'Auditoría SEO + búsqueda con IA',
@@ -552,7 +620,8 @@ export const STRINGS = Object.freeze({
     unresolved: 'Sin resolver', probes_h: 'Sondas (nunca puntúan)', warnings: 'Avisos',
     files: 'Archivos', findings_total: 'Hallazgos', dropped: 'descartados (esquema inválido)',
     action_note: 'Ordenadas por severidad x magnitud de impacto / esfuerzo estimado. Esfuerzo: auto 1, propuesto 2, consultivo 3.',
-    site_rollup: 'Agregado del sitio', worst_pages: 'Páginas más débiles', page: 'Página',
+    site_rollup: 'Agregado del sitio', worst_pages: 'Páginas más débiles', pages_by_score: 'Páginas por puntuación', page: 'Página',
+    pages_scored_lbl: 'puntuadas', not_scored: 'Muestreadas pero sin puntuar (sin respuesta 2xx)',
   },
 });
 
@@ -668,10 +737,26 @@ export function renderMarkdown(report, opts = {}) {
   // Site rollup
   if (report.site_rollup) {
     L.push('## ' + t.site_rollup, '');
-    L.push('- ' + report.site_rollup.method + ' · ' + report.site_rollup.pages_count + ' ' + t.pages_analyzed);
-    for (const [key, label] of [['search', t.search], ['ai', t.ai]]) {
+    const scoredCount = report.site_rollup.pages_scored;
+    const scoredNote = typeof scoredCount === 'number' && scoredCount !== report.site_rollup.pages_count
+      ? ' · ' + scoredCount + ' ' + t.pages_scored_lbl : '';
+    L.push('- ' + report.site_rollup.method + ' · ' + report.site_rollup.pages_count + ' ' + t.pages_analyzed + scoredNote);
+    // A sampled URL that answered 4xx/5xx is named here: the checks skip it, so it would score high
+    // on an empty finding set. It is excluded from the rollup, never silently averaged in.
+    const notScored = report.site_rollup.unscored_pages || [];
+    if (notScored.length) {
+      L.push('- **' + t.not_scored + ':** ' + notScored.slice(0, 10).map((p) => shortPath(p.url) + ' ' + (p.status == null ? '—' : p.status)).join(' · ')
+        + (notScored.length > 10 ? ' …' : ''));
+    }
+    // "Weakest" is a claim, and the list is just the sample sorted ascending: on a run where every
+    // page scores at or above the site value there is nothing weak to name, and the same three
+    // pages go out under a neutral label instead of reading as a defect report.
+    for (const [key, label, axisKey] of [['search', t.search, 'search_seo'], ['ai', t.ai, 'ai_visibility']]) {
       const worst = (report.site_rollup.worst_pages && report.site_rollup.worst_pages[key]) || [];
-      if (worst.length) L.push('- **' + t.worst_pages + ' (' + label + '):** ' + worst.map((w) => shortPath(w.url) + ' ' + num(w.value)).join(' · '));
+      if (!worst.length) continue;
+      const siteValue = report.scores[axisKey] ? report.scores[axisKey].value : null;
+      const anyBelow = typeof siteValue === 'number' && worst.some((w) => typeof w.value === 'number' && w.value < siteValue);
+      L.push('- **' + (anyBelow ? t.worst_pages : t.pages_by_score) + ' (' + label + '):** ' + worst.map((w) => shortPath(w.url) + ' ' + num(w.value)).join(' · '));
     }
     L.push('');
   }
