@@ -1,78 +1,130 @@
 # MCP y niveles de datos
 
-claude-seo-ai está diseñado para funcionar con **cero servidores MCP y cero claves de API**. Todo lo que vaya más allá de eso es opcional (opt-in). Cuando un nivel superior no está disponible, los hallazgos se degradan a `needs_api` de forma honesta: la herramienta nunca fabrica un valor medido ni devuelve un `pass` falso.
+`claude-seo-ai` está diseñado para funcionar con **cero servidores MCP y cero claves de API**. Todo lo
+que vaya más allá de eso es opcional (opt-in). Cuando un nivel superior no está disponible, los
+hallazgos se degradan a `needs_api` de forma honesta: la herramienta nunca fabrica un valor medido ni
+devuelve un `pass` falso.
 
 ## Los tres niveles de datos
 
 | Nivel | Requiere | Habilita | Si no está disponible |
 |---|---|---|---|
-| **0 — sin conexión (predeterminado)** | Nada — `WebFetch` + los scripts incluidos | Auditoría de HTML en bruto: cadena de estado/redirecciones, cabeceras, `robots.txt`, sitemaps, `llms.txt` y heurísticas de laboratorio | Este es el mínimo — siempre disponible |
-| **1 — renderizado + CWV de campo** | Un MCP de renderizado (Playwright/Firecrawl) o una clave de API de PageSpeed | DOM renderizado para páginas SPA/CSR; Core Web Vitals reales de campo (CrUX p75) mediante `scripts/psi-client.mjs` | Los hallazgos dependientes del renderizado y de los CWV de campo → `needs_api` |
-| **2 — autenticado** | MCP con OAuth de Search Console / Merchant (lo añades tú mismo) | Datos reales de consultas/cobertura/merchant | Los hallazgos de nivel 2 → `needs_api` |
+| **0 — por defecto** | Nada. Los scripts de Node sin dependencias incluidos son la capa de adquisición. | Peticiones reales: cadena de estado/redirecciones, cabeceras de respuesta, robots.txt, sitemaps (recursión de índices + gzip), endpoints de descubrimiento para IA, el HTML previo a JS y todas las comprobaciones sobre HTML estático | Este es el mínimo, siempre disponible |
+| **1 — DOM renderizado y/o CWV de campo** | Un Chrome/Chromium/Edge/Brave instalado (detectado automáticamente), o `playwright` ya resoluble, o un DOM que hayas capturado tú; y/o `PSI_API_KEY` | El DOM posterior a JS para páginas SPA/CSR; Core Web Vitals reales de campo (CrUX p75) | Los hallazgos dependientes del renderizado anotan `render.confidence = reduced`; los de CWV de campo → `needs_api` |
+| **2 — autenticado** | Search Console / Merchant Center (un MCP que añades tú), o una exportación manual de IA generativa de Search Console | Datos de consultas/cobertura/merchant; la importación de impresiones de IA generativa | Los hallazgos de nivel 2 → `needs_api` |
 
-La skill `seo-crawl-render` construye un único `PageSnapshot` compartido y registra el `tier` que realmente alcanzó. Las skills posteriores anotan cualquier hallazgo como `needs_api` cuando requiere un nivel superior al que se alcanzó.
+El nivel se **mide, no se declara**: `report.mjs` fija el nivel 1 cuando al menos una página se
+renderizó de verdad o se usó PSI de verdad, y el nivel 2 cuando hay presente una importación de Search
+Console. Aparece en `report.json` como `tier` y en el resumen de la auditoría.
 
-## Nivel 0 — qué funciona sin configuración
+## Nivel 0 — qué funciona sin ninguna configuración
 
-Construir el `PageSnapshot` una sola vez es lo que hace posible la auditoría sin conexión. En el nivel 0, el rastreador obtiene la página únicamente con `WebFetch` (`rendered_dom = null`) y aun así obtienes:
+No hay `WebFetch` en la ruta de adquisición. Dentro de Claude Code, `WebFetch` devuelve un resumen en
+markdown hecho por un modelo pequeño —nunca HTML en bruto, cabeceras ni códigos de estado—, así que
+`scripts/snapshot.mjs` y `scripts/crawl.mjs` hacen las peticiones con el propio `fetch` de Node. En el
+nivel 0 ya obtienes:
 
-- La cadena de estado y de redirecciones, las cabeceras de la respuesta final (incl. `X-Robots-Tag`, content-type, `Link` de hreflang).
-- `robots.txt`, los sitemaps referenciados y `/llms.txt`.
-- El HTML en bruto, previo a JS, que el rastreador y los bots de IA ven primero.
-- **Heurísticas de laboratorio** para Core Web Vitals: recuento de recursos que bloquean el renderizado, imágenes sin dimensiones (riesgo de CLS), bundles grandes (riesgo de INP/LCP). Estas se etiquetan claramente como **"datos de laboratorio — no es por lo que Google posiciona"** y nunca determinan por sí solas la puntuación de Search.
+- La cadena completa de estado y redirecciones, con los bucles y los truncamientos señalados.
+- Las cabeceras de respuesta, incluidas `X-Robots-Tag`, el content-type y la cabecera `Link:`
+  analizada (canonical y alternativas hreflang).
+- `robots.txt` analizado con las reglas de precedencia REP de Google, más `Content-Signal`, tanto en
+  su ubicación global como por grupo.
+- Los sitemaps, siguiendo los archivos de índice y gzip.
+- Los endpoints de descubrimiento para IA: `/llms.txt`, `/llms-full.txt`, `/agents.md`,
+  `/.well-known/ucp`, `/.well-known/ai-catalog.json`, `/sitemap_agentic_discovery.xml`, informados con
+  **peso 0**.
+- El HTML en bruto, previo a JS, que un rastreador y un obtenedor de IA ven primero, completamente
+  analizado.
+- Detección de plataforma en cuatro capas, y todas las comprobaciones deterministas que el registro
+  puede ejecutar sobre HTML estático.
+- **Heurísticas de laboratorio** para Core Web Vitals: recuento de recursos que bloquean el
+  renderizado, imágenes sin dimensiones (riesgo de CLS), bundles pesados (riesgo de INP/LCP). Se
+  etiquetan claramente como **«datos de laboratorio — no es por lo que Google posiciona»** y nunca
+  determinan por sí solas la puntuación de Search.
 
-Para una página solo CSR sin MCP de renderizado, el snapshot mantiene `rendered_dom = null`, establece `render.confidence = reduced` y emite un hallazgo que indica que la página se auditó a partir del HTML en bruto — nunca finge haber visto contenido renderizado que no vio.
+Para una página solo CSR sin renderizador, el snapshot mantiene `rendered_html_path: null`, fija
+`render.confidence = reduced`, registra la pista y emite un hallazgo M4 que indica que la página se
+auditó a partir del HTML en bruto. Nunca finge haber visto contenido renderizado.
 
-## Nivel 1a — activar un MCP de renderizado
+## Nivel 1a — renderizado
 
-Los MCP de renderizado son **opcionales** y **nunca los iniciamos automáticamente**. Activar el plugin nunca fuerza una descarga ni una solicitud de credenciales. Para habilitar el renderizado de JavaScript en sitios SPA/CSR, copia la entrada correspondiente de [`.mcp.json.example`](../../.mcp.json.example) a tu `.mcp.json` del proyecto (o a `mcpServers` en `~/.claude.json`) y apruébala:
+El renderizado es opcional por partida doble: pasas `--render auto` o `--render js` (el valor por
+defecto es `static`, así que una ejecución headless nunca abre un navegador) **y** además tiene que
+existir ya un renderizador. Este proyecto no instala nada.
+
+`findChrome()` busca, en este orden:
+
+1. `$CLAUDE_SEO_AI_CHROME`, `$CHROME_PATH`, `$PUPPETEER_EXECUTABLE_PATH`
+2. `google-chrome`, `google-chrome-stable`, `chromium`, `chromium-browser`, `chrome`, `msedge`,
+   `brave-browser` en el `PATH`
+3. una caché de navegadores de Playwright (`$PLAYWRIGHT_BROWSERS_PATH`,
+   `~/Library/Caches/ms-playwright`, `%LOCALAPPDATA%\ms-playwright`, `~/.cache/ms-playwright`)
+
+Si no encuentra ninguno, obtienes la pista textual: *"No Chrome/Chromium/Edge/Brave found. Install
+one, set `CLAUDE_SEO_AI_CHROME=<path to the browser binary>`, or pass `--rendered-file <dom.html>`."*
+
+Playwright solo se usa cuando el paquete `playwright` ya resuelve desde el directorio de trabajo o
+desde `$CLAUDE_PLUGIN_DATA/node_modules`; en caso contrario obtienes
+*"Install with: `npm i -D playwright && npx playwright install chromium` (~150 MB). Or pass
+`--rendered-file`."* Nada se descarga en tu nombre.
+
+```bash
+node scripts/snapshot.mjs https://example.com --render auto            # detect a browser, render if needed
+node scripts/snapshot.mjs https://example.com --render js --renderer chrome
+node scripts/audit.mjs   https://example.com --render auto --pages 5
+```
+
+### `--rendered-file` — trae tu propio DOM (aquí es donde encaja un MCP de renderizado)
+
+Dentro de los scripts no hay ningún cliente MCP. Si prefieres un MCP de renderizado (Playwright,
+Firecrawl) o tu propio script headless, captura el DOM con él y entrega el archivo:
+
+```bash
+node scripts/snapshot.mjs https://example.com --url https://example.com --rendered-file ./dom.html
+```
+
+El snapshot trata ese archivo como la pasada renderizada: se analiza en `parsed_rendered`, se calcula
+el delta de renderizado frente al HTML estático y todas las comprobaciones sensibles al renderizado lo
+leen. Este es el puente soportado entre un DOM capturado con MCP y la canalización determinista.
+
+Los MCP de renderizado son **opcionales** y **nunca se inician automáticamente**: activar el plugin
+jamás fuerza una descarga ni una solicitud de credenciales. Para añadir uno, copia la entrada
+correspondiente de [`.mcp.json.example`](../../.mcp.json.example) a tu `.mcp.json` del proyecto (o a
+`mcpServers` en `~/.claude.json`) y apruébala:
 
 ```jsonc
 {
   "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
-    },
-    "firecrawl": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "firecrawl-mcp"],
-      "env": { "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}" }
-    }
+    "playwright": { "type": "stdio", "command": "npx", "args": ["-y", "@playwright/mcp@latest"] },
+    "firecrawl":  { "type": "stdio", "command": "npx", "args": ["-y", "firecrawl-mcp"],
+                    "env": { "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}" } }
   }
 }
 ```
 
-Cuando se necesita un renderizado **y** hay un MCP de renderizado disponible, el rastreador lo descubre mediante la búsqueda de herramientas, captura el `rendered_dom` y establece `render.confidence = high`. Solo necesitas uno de los dos; Firecrawl, además, necesita `FIRECRAWL_API_KEY` en tu entorno.
+Solo necesitas uno. Firecrawl, además, necesita `FIRECRAWL_API_KEY` en tu entorno.
 
 ## Nivel 1b — Core Web Vitals reales mediante `PSI_API_KEY`
 
-Los CWV de campo (los datos CrUX p75 por los que Google realmente posiciona) provienen de `scripts/psi-client.mjs`, que llama a la API de Google PageSpeed Insights. La clave es **opcional pero recomendada**: sin clave o sin red, el cliente devuelve `status: "needs_api"` en lugar de adivinar.
+Los CWV de campo —los datos CrUX p75 por los que Google realmente posiciona— provienen de
+`scripts/psi-client.mjs`, que llama a la API de PageSpeed Insights. La clave es **opcional**: sin
+clave o sin red, el cliente devuelve `status: "needs_api"` en lugar de adivinar.
 
-Establece la clave una vez en tu entorno. El cliente la lee primero de
-`CLAUDE_PLUGIN_OPTION_PSI_API_KEY` (lo que exporta un `userConfig` del plugin) y
-después de `PSI_API_KEY`:
+El cliente lee primero `CLAUDE_PLUGIN_OPTION_PSI_API_KEY` (lo que exporta un `userConfig` del plugin)
+y después `PSI_API_KEY`:
 
 ```bash
 export PSI_API_KEY="<your-free-pagespeed-key>"
-```
-
-Deliberadamente **no existe una bandera `--key`**, ni aquí ni en `audit.mjs`: un
-secreto en la línea de comandos queda en `ps`, en el historial del shell y en
-cualquier registro de comandos, y estos scripts imprimen el comando para
-reproducir la ejecución. Para una clave puntual, antepónla a la invocación:
-
-```bash
 node scripts/psi-client.mjs --url https://example.com
 node scripts/psi-client.mjs --url https://example.com --strategy desktop
-PSI_API_KEY="<key>" node scripts/psi-client.mjs --url https://example.com
+PSI_API_KEY="<key>" node scripts/psi-client.mjs --url https://example.com     # one-off
 ```
 
-Banderas: `--url` (obligatoria), `--strategy mobile|desktop` (por defecto `mobile`). Informa de las métricas de campo evaluadas frente a los umbrales p75, con los datos de laboratorio devueltos por separado y marcados explícitamente como **"NO es por lo que Google posiciona."**
+Deliberadamente **no existe ninguna bandera `--key`**, ni aquí ni en `audit.mjs`: un secreto en la
+línea de comandos queda en `ps`, en el historial del shell y en cualquier registro de comandos, y
+estos scripts imprimen el comando para reproducir la ejecución.
 
-Umbrales p75 de campo (`references/cwv-thresholds.md`):
+Umbrales p75 de campo ([`references/cwv-thresholds.md`](../../references/cwv-thresholds.md)):
 
 | Métrica | Bueno | Necesita mejorar | Deficiente |
 |---|---|---|---|
@@ -80,16 +132,57 @@ Umbrales p75 de campo (`references/cwv-thresholds.md`):
 | **INP** (sustituyó a FID) | ≤ 200 ms | 200–500 ms | > 500 ms |
 | **CLS** | ≤ 0.1 | 0.1–0.25 | > 0.25 |
 
-Las tres deben superar el umbral en p75 para obtener una valoración de "bueno". Sin una clave de PSI, todos los hallazgos de CWV de campo se emiten como `needs_api` (severidad 4, `fixable: advisory`) — nunca como un `pass` falso. Los CWV son un factor de desempate real pero modesto: pesan mucho en la puntuación de Search y mínimamente en la puntuación de Visibilidad en IA, así que no esperes que una puntuación verde anule la relevancia o la calidad del contenido.
+Las tres deben superar el umbral en p75 para obtener una valoración de «bueno». Sin una clave, todos
+los hallazgos de CWV de campo se emiten como `needs_api`, nunca como un `pass` falso. Cuando PSI
+recurre a datos de nivel de origen porque la URL tiene poco tráfico, ese `origin_fallback` se muestra
+en lugar de presentarse como las cifras propias de la página.
 
-## Nivel 2 — OAuth de Search Console / Merchant
+Los CWV son un factor de desempate real pero modesto: pesan mucho en la puntuación de Search y
+mínimamente en la de Visibilidad en IA, así que una puntuación verde de CWV no anula la relevancia ni
+la calidad del contenido.
 
-El nivel 2 cubre fuentes de datos autenticadas (Search Console, Merchant) detrás de OAuth. Estos son **MCP independientes que añades tú mismo** — no vienen incluidos ni figuran en `.mcp.json.example`. Hasta que conectes uno, cualquier hallazgo que necesite datos de consultas, cobertura o merchant se degrada a `needs_api`.
+## Nivel 2 — Search Console / Merchant Center
+
+El nivel 2 cubre fuentes autenticadas detrás de OAuth. Son **MCP independientes que añades tú**: no
+vienen incluidos ni figuran en `.mcp.json.example`. Hasta que conectes uno, cualquier hallazgo que
+necesite datos de consultas, cobertura o merchant se degrada a `needs_api`.
+
+La única vía de nivel 2 que funciona sin ningún MCP es la importación **manual** de IA generativa: la
+Search Analytics API de Google no expone dimensiones de IA, y ninguna exportación separa las
+superficies de IA de la búsqueda ordinaria, así que descargas a mano el informe de **IA generativa**
+de Search Console y pasas el CSV:
+
+```bash
+node scripts/gsc-ai-import.mjs --csv ./search-console.csv --host example.com \
+  > "<run_dir>/probes/gsc-generative-ai.json"
+```
+
+Se aceptan cabeceras de columna en inglés y en español (con o sin BOM, comillas o delimitador de punto
+y coma). **Las impresiones son la única cifra que se trata como utilizable** —los clics y la posición
+no se exponen por superficie de IA— y todos los hallazgos que produce son de **severidad 0**,
+excluidos de la puntuación. Redirigirlo al directorio `probes/` de la ejecución es lo que hace que
+`report.mjs` lo informe bajo `probes.gsc_generative_ai` en el nivel 2.
+
+## El oráculo opcional de documentación de Shopify
+
+[`.mcp.json.example`](../../.mcp.json.example) incluye también `@shopify/dev-mcp`:
+
+```jsonc
+{ "shopify-dev": { "type": "stdio", "command": "npx", "args": ["-y", "@shopify/dev-mcp@latest"] } }
+```
+
+Es un **oráculo de documentación y de esquema GraphQL**, no una vía de escritura. Úsalo para responder
+«¿existe este campo en esta versión de la API?» antes de escribir en una tienda. Nunca toca tu tienda
+ni guarda credenciales, y los adaptadores de Shopify jamás lo requieren: recurren a su constante de
+versión de API fijada. No existe ningún MCP oficial de Shopify que escriba.
 
 ## Degradación elegante, en resumen
 
-- **El nivel 0 siempre basta para ejecutar una auditoría.** No requiere ningún MCP, ninguna clave ni OAuth en red.
-- Sin MCP de renderizado → las páginas CSR se auditan a partir del HTML en bruto, `render.confidence = reduced`, con un hallazgo que te indica que instales Playwright/Firecrawl para una cobertura completa.
-- Sin clave de PSI → los CWV de campo se informan como `needs_api`, acompañados únicamente de heurísticas de laboratorio claramente etiquetadas.
-- Sin MCP de nivel 2 → los hallazgos autenticados se informan como `needs_api`.
-- Cuando el nivel requerido no está disponible, el estado es **`needs_api`** — nunca una métrica fabricada ni un `pass` falso.
+- **El nivel 0 siempre basta para ejecutar una auditoría.** Sin MCP, sin clave, sin OAuth.
+- Sin renderizador → las páginas CSR se auditan a partir del HTML en bruto con
+  `render.confidence = reduced` y un hallazgo que nombra el renderizador ausente y cómo aportarlo.
+- Sin clave de PSI → los CWV de campo son `needs_api`, acompañados únicamente de heurísticas de
+  laboratorio claramente etiquetadas.
+- Sin fuente de nivel 2 → los hallazgos autenticados son `needs_api`.
+- Siempre que el nivel requerido no esté disponible, el estado es **`needs_api`**: nunca una métrica
+  fabricada, nunca un `pass` falso y nunca una ausencia silenciosa en el informe.

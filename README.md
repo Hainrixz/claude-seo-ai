@@ -284,9 +284,11 @@ Built by **Enrique Rocha** — I help teams ship AI: consulting, automations, an
 
 `claude-seo-ai` es la herramienta open-source de **SEO + búsqueda con IA** para Claude Code. Audita cualquier sitio en **dos puntajes independientes** — **Search SEO** clásico y **Visibilidad en IA (GEO/AEO)** — con hallazgos reproducibles, y opcionalmente **aplica** las correcciones seguras por ti (meta tags, JSON-LD, robots.txt para crawlers de IA, hreflang, sitemaps…), siempre con confirmación previa.
 
-- **Instalar:** `/plugin marketplace add Hainrixz/claude-seo-ai` → `/plugin install claude-seo-ai@claude-seo-ai`. Cross-agente: `npx skills add Hainrixz/claude-seo-ai`.
-- **Usar:** `/claude-seo-ai:audit <url>` · `:geo` · `:score` · `:fix` (vista previa por defecto; nunca escribe sin tu confirmación).
-- **Honestidad:** llms.txt se genera pero puntúa 0; FAQ/HowTo marcados como sin rich results; nunca inventa estadísticas, fechas ni enlaces de identidad.
-- **Sin claves funciona** (Tier 0, offline). Render de SPAs y Core Web Vitals reales son opcionales (Tier 1+).
+- **Instalar:** `/plugin marketplace add Hainrixz/claude-seo-ai` → `/plugin install claude-seo-ai@claude-seo-ai`. Multiagente: `npx skills add Hainrixz/claude-seo-ai` (solo las skills en Markdown; la capa `scripts/` va en el canal de plugin).
+- **Usar:** `/claude-seo-ai:audit <url>` · `:geo` · `:score` · `:compare` · `:fix`. Los cuatro primeros son de solo lectura; `fix` previsualiza todo y escribe solo tras tu confirmación cambio por cambio.
+- **Cada auditoría se persiste** en `${CLAUDE_PLUGIN_DATA}/runs/<host>/<run-id>/`, así que `score`, `compare` y `fix` trabajan sobre un informe en disco, no sobre «la última auditoría de esta sesión».
+- **Funciona en cualquier sitio:** un detector de cuatro capas (plataforma · framework · plugins · hosting) enruta cada corrección al adaptador dueño de esa superficie — Shopify, WordPress, Webflow, Wix, Ghost, HubSpot, BigCommerce, árboles de código o `instructions`. **Nada se publica en vivo por defecto.**
+- **Honestidad:** llms.txt y el resto de M21 se informan pero puntúan 0; las sondas (`--probe`, `--gsc-ai-export`) tienen severidad 0 y nunca entran en la puntuación; una ejecución delgada marca su banda como provisional; `needs_api` / `manual_review` nunca son un aprobado silencioso; nunca inventa estadísticas, fechas ni enlaces de identidad.
+- **Sin claves funciona** (Tier 0: los scripts de Node sin dependencias son la capa de adquisición). Render de SPAs y Core Web Vitals reales son opcionales (Tier 1+).
 
-Guías completas en español: [`docs/es/`](docs/es/) · hecho con cariño por [tododeia.com](https://tododeia.com).
+Guías completas en español: [`docs/es/`](docs/es/) — [uso](docs/es/usage.md) · [arquitectura](docs/es/architecture.md) · [puntuación](docs/es/scoring.md) · [plataformas](docs/es/platforms.md) · [MCP](docs/es/mcp.md) · [distribución](docs/es/distribution.md). Hecho con cariño por [tododeia.com](https://tododeia.com).
