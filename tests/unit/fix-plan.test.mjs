@@ -226,6 +226,137 @@ test('the summary never prints an empty "[not ready: ]" badge', () => {
   assert.ok(!ok.includes('not ready'), ok);
 });
 
+// ---------------------------------------------------------------------------
+// coverage accounting
+
+test('classifyFindings puts every finding in exactly one bucket', () => {
+  const f = (id, fixable, status = 'fail') => ({ id, module: id.split('.')[0], status, fixable });
+  const list = [
+    f('M7.a', 'auto'), f('M7.b', 'proposed'), f('M9.c', 'advisory'),
+    f('M2.d', 'auto', 'pass'), f('M2.e', 'auto', 'needs_api'),
+  ];
+  const off = FP.classifyFindings(list, { includeProposed: false });
+  assert.equal(off.actionable.length, 3, 'only fail/warn findings are actionable');
+  assert.deepEqual(off.considered.map((x) => x.id), ['M7.a'], 'proposed is not handed over without the flag');
+  assert.deepEqual(off.withheld_proposed.map((x) => x.id), ['M7.b']);
+  assert.deepEqual(off.advisory.map((x) => x.id), ['M9.c']);
+
+  const on = FP.classifyFindings(list, { includeProposed: true });
+  assert.deepEqual(on.considered.map((x) => x.id), ['M7.a', 'M7.b']);
+  assert.deepEqual(on.withheld_proposed, [], 'with the flag nothing is held back');
+
+  // --category narrows the pool the same way every adapter narrows it.
+  const only9 = FP.classifyFindings(list, { category: 'M9' });
+  assert.deepEqual(only9.actionable.map((x) => x.id), ['M9.c']);
+});
+
+test('buildCoverage accounts for every finding an adapter did not plan, and why', () => {
+  const f = (id, fixable) => ({ id, module: id.split('.')[0], status: 'fail', fixable });
+  const findings = [f('M7.a', 'auto'), f('M7.b', 'proposed'), f('M9.c', 'advisory'), f('M12.d', 'auto')];
+  const change = (id, cls) => ({ id: 'chg_' + id, class: cls, finding_ids: [id] });
+
+  const cov = FP.buildCoverage({
+    findings,
+    includeProposed: false,
+    groups: [
+      { adapter: 'local-files', available: true, handed: findings, changes: [change('M7.a', 'auto')], skipped: [{ finding: 'M12.d', reason: 'no route' }] },
+      { adapter: 'instructions', available: true, handed: [f('M9.c', 'advisory'), f('M12.d', 'auto')], changes: [change('M9.c', 'proposed')], skipped: [] },
+    ],
+  });
+
+  assert.equal(cov.findings, 4);
+  assert.equal(cov.actionable, 4);
+  assert.equal(cov.writable, 2, 'M7.a and M12.d are the write-adapter pool without the flag');
+  assert.equal(cov.planned, 2);
+  assert.equal(cov.planned_auto, 1);
+  assert.equal(cov.planned_proposed, 1);
+
+  assert.equal(cov.skipped_proposed.count, 1);
+  assert.deepEqual(cov.skipped_proposed.ids, ['M7.b']);
+  assert.match(cov.skipped_proposed.hint, /--include-proposed/);
+
+  assert.equal(cov.advisory.count, 1);
+  assert.deepEqual(cov.advisory.ids, ['M9.c']);
+  assert.deepEqual(cov.advisory.rendered_as_instructions, ['M9.c']);
+
+  // M12.d reached both adapters and neither planned it: that is the unroutable bucket.
+  assert.equal(cov.unroutable.count, 1);
+  assert.deepEqual(cov.unroutable.ids, ['M12.d']);
+  assert.match(cov.unroutable.note, /no adapter/);
+
+  assert.equal(cov.by_adapter['local-files'].considered, 2);
+  assert.equal(cov.by_adapter['local-files'].planned_auto, 1);
+  assert.equal(cov.by_adapter['local-files'].skipped, 1);
+  assert.equal(cov.by_adapter['local-files'].withheld_proposed, 1, 'the adapter never saw the proposed finding');
+  assert.equal(cov.by_adapter.instructions.considered, 2, 'instructions renders advisory findings too');
+  assert.ok(cov.planned <= cov.considered, 'nothing can be planned that no adapter was handed');
+
+  // With the flag, the same report holds nothing back.
+  const withFlag = FP.buildCoverage({
+    findings, includeProposed: true,
+    groups: [{ adapter: 'local-files', available: true, handed: findings, changes: [change('M7.a', 'auto'), change('M7.b', 'proposed')], skipped: [] }],
+  });
+  assert.equal(withFlag.skipped_proposed.count, 0);
+  assert.equal(withFlag.skipped_proposed.hint, null);
+  assert.equal(withFlag.planned_proposed, 1);
+});
+
+test('the dry run reports coverage in plan.json, the manifest and the printed summary', () => {
+  const s = sandbox();
+  try {
+    const withoutFlag = runCli(['--report', s.reportPath, '--profile', s.profilePath, '--project', s.project, '--data', s.data, '--run', 'cov']);
+    assert.equal(withoutFlag.status, 0, withoutFlag.stderr);
+    const cov = withoutFlag.out.coverage;
+    assert.ok(cov, 'the result carries a coverage block');
+    assert.equal(cov.findings, REPORT.findings.length);
+    assert.equal(cov.include_proposed, false);
+    assert.equal(cov.advisory.count, 1);
+    assert.deepEqual(cov.advisory.ids, ['M9.cwv.lcp_slow']);
+    assert.ok(cov.by_adapter['local-files'], 'every adapter that ran is accounted for');
+    assert.ok(cov.by_adapter.instructions);
+
+    const plan = JSON.parse(readFileSync(join(s.data, 'fix', 'runs', 'cov', 'plan.json'), 'utf8'));
+    assert.deepEqual(plan.coverage, cov, 'plan.json carries the same accounting the CLI printed');
+    const manifest = JSON.parse(readFileSync(join(s.data, 'fix', 'runs', 'cov', 'manifest.json'), 'utf8'));
+    assert.equal(manifest.counts.considered, cov.considered);
+    assert.equal(manifest.counts.advisory, cov.advisory.count);
+    assert.equal(manifest.counts.skipped_proposed, cov.skipped_proposed.count);
+    assert.equal(manifest.counts.unroutable, cov.unroutable.count);
+
+    assert.match(withoutFlag.out.summary, /coverage: \d+ actionable finding\(s\)/);
+    assert.match(withoutFlag.out.summary, /coverage: \d+ considered here/, 'each adapter group prints its own line');
+    assert.match(withoutFlag.out.summary, /advisory, never written \(1\): M9\.cwv\.lcp_slow/);
+  } finally { s.cleanup(); }
+});
+
+test('a proposed finding is never dropped silently: the count, the ids and the flag are printed', () => {
+  const s = sandbox();
+  try {
+    // The shipped report is all-auto, so add one proposed finding to the same page.
+    const proposed = { ...finding('M7.title.length_out_of_band', 'M7', '<title>Rain shadow</title>'), fixable: 'proposed', status: 'warn' };
+    writeFileSync(s.reportPath, JSON.stringify({ ...REPORT, findings: [...REPORT.findings, proposed] }, null, 2));
+
+    const held = runCli(['--report', s.reportPath, '--profile', s.profilePath, '--project', s.project, '--data', s.data, '--run', 'held']);
+    assert.equal(held.status, 0, held.stderr);
+    assert.equal(held.out.coverage.skipped_proposed.count, 1);
+    assert.deepEqual(held.out.coverage.skipped_proposed.ids, ['M7.title.length_out_of_band']);
+    assert.ok(!held.out.changes.some((c) => (c.finding_ids || []).includes('M7.title.length_out_of_band')),
+      'the proposed finding is not planned without the flag');
+    assert.match(held.out.summary, /held back as proposed \(1\): M7\.title\.length_out_of_band/);
+    assert.match(held.out.summary, /--include-proposed/);
+    assert.ok(held.out.notes.some((n) => n.includes('--include-proposed')), 'the note names the flag, not just the count');
+    assert.equal(held.out.coverage.by_adapter['local-files'].withheld_proposed, 1);
+
+    const planned = runCli(['--report', s.reportPath, '--profile', s.profilePath, '--project', s.project, '--data', s.data, '--run', 'planned', '--include-proposed']);
+    assert.equal(planned.status, 0, planned.stderr);
+    assert.equal(planned.out.coverage.skipped_proposed.count, 0);
+    assert.equal(planned.out.coverage.include_proposed, true);
+    assert.ok(planned.out.changes.some((c) => (c.finding_ids || []).includes('M7.title.length_out_of_band')),
+      'with the flag the same finding is planned');
+    assert.ok(!planned.out.summary.includes('held back as proposed'));
+  } finally { s.cleanup(); }
+});
+
 test('usage errors: a missing or unreadable report, and a bad project path', () => {
   const s = sandbox();
   try {

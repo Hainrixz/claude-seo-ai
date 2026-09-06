@@ -19,3 +19,6 @@ backups/
 # claude-seo-ai run artifacts (persisted audits) and comparisons — runtime data, never committed
 runs/
 compare/
+
+# ...but `compare/` above also matches the compare command's own skill directory. Keep it tracked.
+!skills/compare/

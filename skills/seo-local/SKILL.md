@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 Local pages live and die on consistent, machine-readable place data. **Conditional module**: only runs when the page is classified local-business (storefront, service-area, multi-location, contact/location page). Reference: `references/schema-tier1.md` (LocalBusiness row).
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `text_sample`, `iframes` for maps) and `vertical` from the envelope; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `text_sample`, `iframes` for maps) and `vertical` from the envelope; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`), only for local-business pages:
@@ -27,7 +27,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 **Never fabricate** an address, phone, coordinates, or hours — ask the user or leave a clearly-marked `TODO` placeholder they fill before injection.
 
 ## Verification
-- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-jsonld.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) (`schema_validator`) — JSON validity + required LocalBusiness props; `dom_assert` confirms visible NAP matches schema. <!-- reconcile-flags-v0.2 -->
+- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-jsonld.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) (`schema_validator`) — JSON validity + required LocalBusiness props; `dom_assert` confirms visible NAP matches schema.
 - Tier 1: confirm rich-result eligibility with Google Rich Results Test / schema.org validator. When the data tier (or GBP) is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings

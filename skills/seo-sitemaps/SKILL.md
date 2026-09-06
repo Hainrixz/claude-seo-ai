@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 Sitemaps are the discovery contract you hand the crawler — they should list exactly the canonical, indexable URLs and nothing else. Schema rules for related markup: `references/schema-tier1.md`.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` plus `<run_dir>/site/sitemaps.json` (+ `site/sitemap-urls.txt`), `<run_dir>/site/robots.json`, and `<run_dir>/crawl.json` for orphan reconciliation and per-URL status; Grep `pages/<slug>.html` for verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` plus `<run_dir>/site/sitemaps.json` (+ `site/sitemap-urls.txt`), `<run_dir>/site/robots.json`, and `<run_dir>/crawl.json` for orphan reconciliation and per-URL status; Grep `pages/<slug>.html` for verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) plus `site/sitemaps.json` and `site/robots.json`:
@@ -28,7 +28,8 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - **Never fabricate** lastmod times, media URLs, or canonical targets — pull from observed data, ask the user, or leave a clearly-marked `TODO` placeholder per the schema `fixable` contract.
 
 ## Verification
-- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — method `xml_parse`: parses robots.txt + sitemap XML, checks well-formedness, size caps, namespace/extension validity, and the canonical/noindex consistency assertion. <!-- reconcile-flags-v0.2 -->
+- From the run (no network): read `<run_dir>/site/sitemaps.json` and `<run_dir>/site/robots.json` — the crawl already walked the index, followed gzipped children and recorded the per-file errors.
+- Re-fetch: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --url <final_url> [--max-sitemaps 50] [--max-urls 100000] [--no-well-known]` — method `xml_parse`: parses robots.txt + every declared and probed sitemap, checks well-formedness, size caps, namespace/extension validity, and the canonical/noindex consistency assertion. `--sitemap <sitemap url>` targets one file and `--file <robots.txt> [--path /x]` parses an offline robots file. This script has **no `--snapshot` mode**: sitemaps are site-level artifacts, not page snapshots.
 - When the required data tier (live fetch of sitemap/robots, or the resolved link graph) is unavailable, status is `needs_api` — never a false `pass`.
 
 ## Findings

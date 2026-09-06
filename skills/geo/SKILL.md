@@ -1,7 +1,7 @@
 ---
 name: geo
 description: Analyze and score only a page's AI-search visibility (GEO/AEO) — answer extractability, fact density, AI-crawler access and Google AI-feature snippet eligibility, entity linking, AI discovery files, and agent-readiness — and report an AI Visibility score with a citability breakdown, plus optional unscored probes (web-search presence, Search Console generative-AI impressions). Read-only. Use for "will AI engines cite this?", GEO/AEO, or ChatGPT/Perplexity/Google AI Overviews/Gemini optimization.
-argument-hint: "<url|path> [--pages N] [--render auto|static|js] [--probe \"<question>\"] [--gsc-ai-export <csv>]"
+argument-hint: "<url|path> [--pages N] [--render static|auto|js] [--feed <path>] [--probe \"<question>\"] [--gsc-ai-export <csv>]"
 allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash, Agent
 ---
 
@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash, Agent
 
 The AI-search (GEO/AEO) subset of the audit. **Read-only.**
 
-`$ARGUMENTS` = `<url|path> [flags]`. `--pages` and `--render` are forwarded to the orchestrator. `--probe` and `--gsc-ai-export` are **probes: reported, never scored** (severity 0, excluded from the AI Visibility score and from every cap). <!-- reconcile-flags-v0.2 -->
+`$ARGUMENTS` = `<url|path> [flags]`. `--pages N`, `--render static|auto|js` (default `static`) and `--feed <path>` (the Agentic Commerce Protocol product feed; it only does anything when the e-commerce vertical is active, and without it `M18.agentic.acp_feed_errors` stays `needs_api` — an unread feed is never a clean feed) are forwarded to the orchestrator and reach `audit.mjs` unchanged. `--probe` and `--gsc-ai-export` are handled here, not by `audit.mjs`: they are **probes — reported, never scored** (severity 0, excluded from the AI Visibility score and from every cap).
 
 ## What to do
 1. Invoke **seo-orchestrator** with the target and flags and the instruction "AI path only": it acquires the snapshot with the scripts (never WebFetch), runs the deterministic checks, and dispatches **ai-search-geo-specialist** with **M6** (seo-entity-linking), **M11** (seo-geo-answerblocks), **M12** (seo-geo-factdensity), **M14** (seo-ai-crawlers — access + Google AI-feature eligibility), **M21** (seo-ai-discovery — llms.txt, agents.md, UCP, agentic sitemap), **M22** (seo-agent-readiness); plus **M5** (seo-schema-jsonld, via schema-generator) and **M4** (seo-rendering, via technical-auditor) because they feed AI visibility.
@@ -33,7 +33,7 @@ A rough proxy for "does this site show up when someone asks this?", built from o
    { "host": "…", "queries": [ … ] }
    JSON
    ```
-   `--results <file.json>` reads the same JSON from a file instead of stdin. <!-- reconcile-flags-v0.2 -->
+   `--results <file.json>` reads the same JSON from a file instead of stdin.
 4. It returns presence rate (queries where the host appears), best rank, the competitor-host tally, and a trend against earlier probe runs stored for that host. Report it under **`probes.web_search`** and quote its `disclaimer` field verbatim — echo the string the script emits (`DISCLAIMER` in `scripts/probe-report.mjs`, also written into `report.json` and `report.md`), never a paraphrase of it, so the model's prose and the machine-generated line beside it cannot disagree. Today that string reads: *"Web-search presence for these questions. This is NOT AI Overview, AI Mode, ChatGPT, or Perplexity citation data — no vendor exposes that. Indexing/retrievability is a documented precondition for Google AI features; presence here is necessary, not sufficient."*
 5. The finding is `M14.probe.web_presence`, **severity 0**, method `web_search_probe`. Never let a probe change the AI Visibility score, and never describe a rank as a ranking measurement — WebSearch results are personalized, localized, and volatile.
 
@@ -43,7 +43,7 @@ A rough proxy for "does this site show up when someone asks this?", built from o
    node "${CLAUDE_PLUGIN_ROOT}/scripts/gsc-ai-import.mjs" --csv <file.csv> [--host <host>] [--history <dir>] \
      > "<run_dir>/probes/gsc-generative-ai.json"
    ```
-   The script prints the import and writes nothing itself, so redirect it into the run's `probes/` directory — that is what makes `report.mjs` report it under `probes.gsc_generative_ai` at data tier 2. <!-- reconcile-flags-v0.2 -->
+   The script prints the import and writes nothing itself, so redirect it into the run's `probes/` directory — that is what makes `report.mjs` report it under `probes.gsc_generative_ai` at data tier 2.
 2. English and Spanish column headers are both recognized. The report carries **impressions only** — no clicks, no citations, no per-answer attribution — so the import reports impressions and nothing more.
 3. Report it under **`probes.gsc_generative_ai`**. Findings, all **severity 0**: `M14.gsc_ai.impressions_present` (the export shows generative-AI impressions for this property), `M14.gsc_ai.zero_impressions` (the export parsed but contains none), `M14.gsc_ai.unavailable` (`needs_api` — no export supplied, or the file could not be parsed; the default state).
 4. Say plainly what the number is not: impressions in Google's generative-AI surfaces are not citations, not clicks, and not a score input.

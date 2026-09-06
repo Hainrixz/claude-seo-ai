@@ -251,6 +251,46 @@ test('guard-bash denies the ungated remote write surface without a ticket', () =
   } finally { cleanup(); }
 });
 
+test('a URL query string does not hide the API host from the write rule', () => {
+  // segments() used to split on a bare `&`, so `?x=1&y=2` tore the command in two and the half
+  // carrying the Admin API host lost its `-X POST`: the write sailed past the gate.
+  const command = 'curl "https://s.myshopify.com/admin/api/2026-07/graphql.json?x=1&y=2" -X POST -d @q.json';
+  assert.deepEqual(GB.segments(command), [command], 'a quoted URL is one statement, not two');
+  const verdict = GB.classify(command);
+  assert.equal(verdict.tier, 'gate');
+  assert.equal(verdict.rule, 'platform-api-write');
+
+  const { dir, cleanup } = tempDir();
+  try {
+    const denied = runHook(GUARD_BASH, bashPayload(command), { args: ['--data', dir] });
+    assert.equal(denied.status, 2, 'a write against the Admin API is gated even with a query string');
+    assert.equal(denied.decision, 'deny');
+    A.issueTicket(dir, { command, run: 'r1', change: 'chg_1' });
+    assert.equal(runHook(GUARD_BASH, bashPayload(command), { args: ['--data', dir] }).decision, 'ask');
+  } finally { cleanup(); }
+});
+
+test('segments splits on unquoted shell operators only', () => {
+  assert.deepEqual(GB.segments('a && b'), ['a', 'b']);
+  assert.deepEqual(GB.segments('a || b'), ['a', 'b']);
+  assert.deepEqual(GB.segments('a; b'), ['a', 'b']);
+  assert.deepEqual(GB.segments('a | b'), ['a', 'b']);
+  assert.deepEqual(GB.segments('a\nb'), ['a', 'b']);
+  // `&` is a query-string separator far more often than a backgrounding operator here, and every
+  // rule matches on substrings, so keeping the statement whole costs nothing and misses nothing.
+  assert.deepEqual(GB.segments('curl "http://x/y?a=1&b=2"'), ['curl "http://x/y?a=1&b=2"']);
+  assert.deepEqual(GB.segments("echo 'a && b'"), ["echo 'a && b'"], 'a quoted operator is text');
+  assert.deepEqual(GB.segments('echo "a; b" ; ls'), ['echo "a; b"', 'ls']);
+  assert.deepEqual(GB.segments('npm run build 2>&1 | tee out.log'), ['npm run build 2>&1', 'tee out.log']);
+  assert.deepEqual(GB.segments(''), []);
+  assert.deepEqual(GB.segments(null), []);
+
+  // A remote command whose quotes are now respected is classified as the remote write it is.
+  const remote = GB.classify('ssh deploy@host "cd /srv/wp && wp option update blog_public 1"');
+  assert.equal(remote.tier, 'gate');
+  assert.equal(remote.rule, 'wp-cli-write-remote');
+});
+
 test('guard-bash denies a redirect or tee into a protected file', () => {
   const { dir, cleanup } = tempDir();
   try {

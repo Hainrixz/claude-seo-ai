@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 hreflang tells search engines which language/region URL to serve. This module is **conditional**: it only runs when seo-vertical-detect flags a multilingual site (multiple `lang`/locale URLs, language switcher, or existing hreflang). On monolingual sites every finding is `not_applicable` at severity 0. Schema-type concerns defer to `references/schema-tier1.md`; this module owns link-level localization only.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`hreflang[]`, `canonicals[]`, `<html lang>` in `parsed`) plus `headers.link` and the sibling pages under `<run_dir>/pages/` for reciprocity; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`hreflang[]`, `canonicals[]`, `<html lang>` in `parsed`) plus `headers.link` and the sibling pages under `<run_dir>/pages/` for reciprocity; Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`). Read hreflang from `<link rel="alternate" hreflang="...">` in `<head>` (also accept HTTP `Link:` headers / sitemap `xhtml:link` when present):
@@ -27,7 +27,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - **Never fabricate** locales, region codes, or alternate URLs. If the map is incomplete, leave a clearly-marked `TODO(locale)` placeholder and ask the user.
 
 ## Verification
-- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/hreflang-check.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — parses the alternate set, validates BCP-47 tags, and checks reciprocity/self-reference/x-default across the discovered cluster. <!-- reconcile-flags-v0.2 -->
+- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/hreflang-check.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — parses the alternate set from the `<link>` tags **and** the HTTP `Link` header (`entries`, `header_entries`), validates BCP-47 tags (`invalid_bcp47`), and reports `has_x_default`, `self_referenced`, `duplicate_langs` and the canonical-vs-hreflang conflict. Reciprocity is **not** in this mode: it needs `--url <u> --deep [--budget 25] [--ua <preset>]`, which fetches each declared alternate.
 - Reciprocity requires fetching each declared alternate; when those URLs (or a sitemap tier) are unavailable, status is `needs_api`, **never** a false `pass`.
 
 ## Findings

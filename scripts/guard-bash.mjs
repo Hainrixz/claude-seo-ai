@@ -58,15 +58,42 @@ export const API_TARGETS = Object.freeze([
 const MAYBE = /(shopify|wp[\s.]|wp$|curl|wget|node\s+-{1,2}e|adapters[\\/]|\btee\b|>)/i;
 
 /**
- * Split a command line into rough statements. Approximate on purpose: quotes and subshells are not
- * parsed, so a quoted remote command (`ssh host 'cd /p && wp option update …'`) splits too — which
- * only makes the WP-CLI rule fire on the inner statement, exactly as intended.
+ * Split a command line into statements on the shell operators that actually separate them —
+ * `&&`, `||`, `;`, `|` and a newline — and only when they are unquoted.
+ *
+ * A bare `&` is NOT a separator here. It is the character that joins query-string parameters, and
+ * splitting on it tore `curl "https://shop.myshopify.com/admin/api/2026-07/x.json?a=1&b=2" -X POST`
+ * in half: the piece carrying the API host lost the `-X POST`, so the write went unrecognised.
+ * Backgrounding a command with `&` therefore leaves it in the same segment as its neighbour, which
+ * costs nothing — every rule below matches on substrings, so a longer segment still fires.
+ *
+ * Quotes are tracked (single, double, and a backslash escape outside single quotes), so a quoted
+ * remote command (`ssh host 'cd /p && wp option update …'`) now stays one segment and is classified
+ * as the remote write it is.
  */
 export function segments(command) {
-  return String(command == null ? '' : command)
-    .split(/\|\||&&|[;\n|&]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const src = String(command == null ? '' : command);
+  const out = [];
+  let buf = '';
+  let quote = null;
+  const cut = () => { out.push(buf); buf = ''; };
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quote) {
+      if (ch === '\\' && quote === '"' && i + 1 < src.length) { buf += ch + src[++i]; continue; }
+      buf += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; buf += ch; continue; }
+    if (ch === '\\' && i + 1 < src.length) { buf += ch + src[++i]; continue; }
+    if (ch === '\n' || ch === ';') { cut(); continue; }
+    if ((ch === '&' || ch === '|') && src[i + 1] === ch) { cut(); i++; continue; }
+    if (ch === '|') { cut(); continue; }
+    buf += ch;
+  }
+  cut();
+  return out.map((s) => s.trim()).filter(Boolean);
 }
 
 const unquote = (s) => {

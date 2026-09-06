@@ -50,9 +50,11 @@ The orchestrator dispatches you with a JSON envelope in the prompt. Its fields:
 - `return` — always "JSON array of findings only".
 
 Rules:
-- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" --snapshot "<run_dir>/pages/<slug>.json"` <!-- reconcile-flags-v0.2 -->
-  with the literal absolute paths from the envelope. Never rely on
-  `${...}` tokens or a relative `scripts/` path.
+- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" …` with the literal absolute paths from the
+  envelope. Never rely on `${...}` tokens or a relative `scripts/` path.
+- Both of your scripts read the run with `--snapshot "<run_dir>/pages/<slug>.json"`:
+  `check-freshness.mjs [--lang en|es|auto]` (M13) and `validate-jsonld.mjs` (M16 author / publisher
+  nodes). Neither fetches anything — the stored `Last-Modified` header comes from the snapshot.
 - `verification.reproduce` uses the same absolute form so it runs from any directory.
 
 ## Output contract

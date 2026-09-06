@@ -179,6 +179,22 @@ export function matchesCategory(finding, category) {
   return wanted.some((w) => values.has(w));
 }
 
+/**
+ * The note an adapter owes the user when `--include-proposed` was not passed: which findings it
+ * never even looked at, and how to get them planned. Without this the drop is silent, and a plan
+ * that says "2 changes" over a report of thirty findings reads as if the rest were fine.
+ * @returns {string|null} null when nothing was held back
+ */
+export function withheldProposedNote(findings, { includeProposed = false, category = null } = {}) {
+  if (includeProposed !== false) return null;
+  const held = (Array.isArray(findings) ? findings : []).filter(
+    (f) => f && (f.status === 'fail' || f.status === 'warn') && f.fixable === 'proposed' && matchesCategory(f, category),
+  );
+  if (!held.length) return null;
+  return held.length + ' finding(s) are classed "proposed" — their wording needs a human to approve it — so they were left out: '
+    + held.map((f) => f.id).join(', ') + '. Re-run with --include-proposed to plan them.';
+}
+
 /** Findings a remote write adapter may act on at all (advisory ones never reach an API). */
 export function writableFindings(findings, { includeProposed = true, category = null } = {}) {
   return (Array.isArray(findings) ? findings : []).filter((f) => {
@@ -223,15 +239,8 @@ export function groupByPage(findings, { report = null, answers = {}, includeProp
   const pages = new Map();
   const skipped = [];
   const notes = [];
-  if (includeProposed === false) {
-    const held = (Array.isArray(findings) ? findings : []).filter(
-      (f) => f && (f.status === 'fail' || f.status === 'warn') && f.fixable === 'proposed' && matchesCategory(f, category),
-    );
-    if (held.length) {
-      notes.push(held.length + ' finding(s) are classed "proposed" — their wording needs a human to approve it — so they were left out. '
-        + 'Re-run with --include-proposed to plan them.');
-    }
-  }
+  const withheld = withheldProposedNote(findings, { includeProposed, category });
+  if (withheld) notes.push(withheld);
   for (const finding of writableFindings(findings, { includeProposed, category })) {
     const url = urlOf(finding, report);
     if (!url) { skipped.push({ finding: finding.id, reason: 'no URL on the finding and no URL target in the report' }); continue; }
@@ -434,6 +443,51 @@ export function fieldsMatch(expected, actual) {
     }
   }
   return { ok: mismatches.length === 0, mismatches };
+}
+
+/**
+ * The one shape every adapter CLI uses when an op throws where it was not expected.
+ *
+ * A throw that escapes preview/apply/verify/rollback means the op stopped somewhere it does not
+ * describe, so the change is not "still pending": it is marked `failed` and the reason travels
+ * with it, on the change (`change.error`, which is what gets persisted back into plan.json) as
+ * well as on the result row. When `failed` is unreachable from the current status — the change is
+ * already terminal — the status is left alone and the message is still reported, because a
+ * manifest that swallowed the reason is worse than one that repeats a terminal status.
+ *
+ * @param {object} change the change the op was running on
+ * @param {any}    error  the thrown value
+ * @returns {{change: object, ok: false, error: string}}
+ */
+export function opThrew(change, error) {
+  const message = String((error && error.message) || error);
+  if (!change || typeof change !== 'object') return { change, ok: false, error: message };
+  if (!canTransitionSafe(change.status, 'failed')) {
+    return { change: { ...change, error: message }, ok: false, error: message };
+  }
+  return { change: transitionChange(change, 'failed', { error: message }), ok: false, error: message };
+}
+
+/**
+ * Log the audit-trail event for one CLI op run.
+ *
+ * The distinction that matters: an `apply` in which every change was refused for lack of a
+ * confirmation ticket wrote nothing, so logging it as `apply` would put a write in the audit log
+ * that never happened. Those runs are logged as `refused`, with the reason and the op that was
+ * asked for; a partial refusal keeps the op name and carries a `refused` count.
+ *
+ * @param {object|null} run     fix-run handle (null is a no-op)
+ * @param {object} info { op, adapter, results: [{refused?}], extra }
+ */
+export function logOpEvent(run, { op, adapter = null, results = [], extra = {} } = {}) {
+  if (!run || typeof run.log !== 'function') return null;
+  const rows = Array.isArray(results) ? results : [];
+  const refused = rows.filter((r) => r && r.refused);
+  const base = { adapter, changes: rows.length, ...extra };
+  if (rows.length && refused.length === rows.length) {
+    return run.log({ event: 'refused', op, reason: refused[0].refused, ...base });
+  }
+  return run.log({ event: op, ...base, ...(refused.length ? { refused: refused.length } : {}) });
 }
 
 /** One-line summary of an http.mjs failure, safe to put in a change's `error`. */

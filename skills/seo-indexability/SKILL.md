@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 If a page can't be crawled, indexed, or canonicalized correctly, every other signal is wasted — this is the floor under the Search score. Schema-side context: `references/schema-tier1.md`. AI-bot access and snippet eligibility are M14 (`seo-ai-crawlers`); this module owns the classic-Search side, including the search-axis cloaking check.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`canonicals[]`, `robots_meta[]`) plus `status_chain`, `headers`, `robots_directives.effective`, and the crawl graph in `<run_dir>/crawl.json` for orphans, depth, duplicate clusters, and internal link status; `<run_dir>/profile.json` carries `environment.kind` (`production|preview|staging|local`); when the run included a user-agent diff, `<run_dir>/ua-diff.json` holds the per-UA response fields. Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`canonicals[]`, `robots_meta[]`) plus `status_chain`, `headers`, `robots_directives.effective`, and the crawl graph in `<run_dir>/crawl.json` for orphans, depth, duplicate clusters, and internal link status; `<run_dir>/profile.json` carries `environment.kind` (`production|preview|staging|local`); when the run included a user-agent diff, `<run_dir>/ua-diff.json` holds the per-UA response fields. Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) plus `headers`, `status_chain`, and `robots_directives`:
@@ -32,7 +32,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - `dom_assert`: parse the DOM for canonical/robots presence and value.
 - `header_check`: read `X-Robots-Tag` and follow the redirect chain (status + `Location` per hop, loop detection).
 - `link_graph`: internal link status, orphans, and click-depth from `<run_dir>/crawl.json`.
-- `ua_diff`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/ua-diff.mjs" --url <final_url> --ua default,googlebot` — the two responses side by side. <!-- reconcile-flags-v0.2 -->
+- `ua_diff`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/ua-diff.mjs" --url <final_url> --ua default,googlebot` — the two responses side by side.
 - When the required data tier is unavailable (no live fetch, no crawl graph for orphans and depth, no UA diff), status is `needs_api` — never a false `pass`.
 
 ## Findings

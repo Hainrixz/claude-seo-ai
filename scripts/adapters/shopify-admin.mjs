@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
 import {
   ensureConfirmed, loadFixRun, makeChange, openFixRun, requireTicket, resolveDataDir, transition,
+  updateManifest,
 } from '../lib/adapter.mjs';
 import { jsonRequest } from '../lib/http.mjs';
 import { presence, redactObject, resolveKey } from '../lib/credentials.mjs';
@@ -30,6 +31,7 @@ import { readJson, writeJson, writeText } from '../lib/store.mjs';
 import { reproduceCommand } from '../lib/finding.mjs';
 import { fixableFindings, normalizeAnswers, parseFixPreview } from './local-files.mjs';
 import { normalizeStore } from './shopify-theme.mjs';
+import { logOpEvent, opThrew, withheldProposedNote } from './_shared.mjs';
 import { snapshotUrl } from '../snapshot.mjs';
 
 export const ADAPTER = 'shopify-admin';
@@ -475,7 +477,13 @@ export async function plan(options = {}, ctx = {}) {
   const endpoint = adminEndpoint(store);
   const build = (spec) => buildChange({ ...spec, endpoint });
 
-  for (const finding of fixableFindings(findings, { includeProposed: true, category: options.category })) {
+  // Every Admin write is `proposed` (the API writes live), so the flag decides whether this adapter
+  // plans anything at all. Assuming it would let `plan` stage a live write nobody asked to see.
+  const includeProposed = options.includeProposed === true;
+  const withheld = withheldProposedNote(findings, { includeProposed, category: options.category });
+  if (withheld) notes.push(withheld);
+
+  for (const finding of fixableFindings(findings, { includeProposed, category: options.category })) {
     const id = String(finding.id || '');
     const answer = answers[id];
     const raw = finding.fix_preview || answer || '';
@@ -639,19 +647,37 @@ function buildChange({ finding, runDir, url, target, op, strategy, scopes, paylo
 // ---------------------------------------------------------------------------
 // preview / apply / verify / rollback
 
-/** preview: re-read the resource so the "current values" shown are the ones the write would replace. */
+/**
+ * preview: re-read the resource so the "current values" shown are the ones the write would replace.
+ *
+ * When that read fails there are no current values — only the ones recorded at plan time. Printing
+ * those under the same heading would present stale state as freshly read, so the body says so in
+ * the heading itself and the result carries `read_error` with `ok: null`: the write is not refused,
+ * but nobody should confirm it believing the "before" was just checked.
+ */
 export async function preview(change, ctx = {}) {
   const local = { ...ctx, store: ctx.store || resolveStore(ctx) };
   const fresh = await currentState(local, change);
-  const body = fresh.ok && fresh.changedSince
+
+  if (!fresh.ok) {
+    const body = change.preview.body.replace('Current values:', 'Current values AT PLAN TIME (the live re-read failed — see below):')
+      + '\n\nHEADS UP: the live values could not be re-read just now: ' + fresh.error + '\n'
+      + 'What this write would replace is therefore unknown. Re-run `preview` once the Admin API answers,\n'
+      + 'and do not confirm the write on the strength of the values above.';
+    if (ctx.run) writeText(ctx.run.previewPath(change.id, '.graphql.txt'), body);
+    const next = transition({ ...change, preview: { ...change.preview, body } }, 'previewed');
+    return { change: next, ok: null, body, live: null, read_error: fresh.error, warning: 'the current values could not be read: ' + fresh.error };
+  }
+
+  const body = fresh.changedSince
     ? change.preview.body + '\n\nHEADS UP: the live values changed since this was planned. Now:\n' + JSON.stringify(fresh.before, null, 2)
     : change.preview.body;
   if (ctx.run) writeText(ctx.run.previewPath(change.id, '.graphql.txt'), body);
-  if (fresh.ok && fresh.idempotent) {
+  if (fresh.idempotent) {
     return { change: transition(change, 'skipped_idempotent'), ok: true, body, reason: 'the live values already match this change' };
   }
   const next = transition({ ...change, preview: { ...change.preview, body } }, 'previewed');
-  return { change: next, ok: true, body, drifted: !!(fresh.ok && fresh.changedSince), live: fresh.ok ? fresh.before : null };
+  return { change: next, ok: true, body, drifted: !!fresh.changedSince, live: fresh.before };
 }
 
 /** Read what is live right now for this change, and say whether the write is still needed. */
@@ -916,24 +942,26 @@ export async function main(args = {}) {
     if (op === 'apply') {
       const gate = requireTicket(dataDir, { ticket: args.ticket, run: run.id, change: change.id });
       if (!gate.ok) {
-        results.push({ change: change.id, ok: false, error: 'apply writes live data and needs a valid confirmation ticket (' + gate.reason + ')' });
+        results.push({ change: change.id, ok: false, refused: gate.reason, error: 'apply writes live data and needs a valid confirmation ticket (' + gate.reason + ')' });
         continue;
       }
     }
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
+    catch (e) { out = opThrew(change, e); }
     if (out.change) updated.push(out.change);
     results.push({
       change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok,
       ...(out.error ? { error: out.error } : {}), ...(out.checks ? { checks: out.checks } : {}),
       ...(out.reason ? { reason: out.reason } : {}), ...(out.note ? { note: out.note } : {}),
       ...(out.user_errors ? { user_errors: out.user_errors } : {}), ...(out.drifted ? { drifted: true } : {}),
+      ...(out.warning ? { warning: out.warning } : {}), ...(out.read_error ? { read_error: out.read_error } : {}),
     });
   }
   persist(run, updated);
-  run.log({ event: op, adapter: ADAPTER, changes: results.length });
+  logOpEvent(run, { op, adapter: ADAPTER, results });
+  updateManifest(run, { op, adapter: ADAPTER, changes: updated });
   const failed = results.some((r) => r.ok === false);
   return { result: { adapter: ADAPTER, op, run: run.id, run_dir: run.dir, store: ctx.store, api_version: API_VERSION, results }, code: failed ? EXIT.RUNTIME : EXIT.OK };
 }

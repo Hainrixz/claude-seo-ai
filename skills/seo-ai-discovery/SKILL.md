@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, Bash
 Discovery files tell agents and coding assistants where to look; none of them is a documented answer-engine ranking or citation signal, so every M21 finding is `speculative` or `directional` and the module's weight is **0**. Robots/UA posture lives in `seo-ai-crawlers` (M14); agentic-commerce readiness (UCP + catalog feeds on stores) lives in `seo-ecommerce` (M18).
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: `<run_dir>/site/discovery.json` holds the probe results (status, content-type, bytes, raw bodies ≤256 KB) for `/llms.txt`, `/llms-full.txt`, `/agents.md`, `/.well-known/ucp`, `/.well-known/ai-catalog.json`, `/sitemap_agentic_discovery.xml`, `/api/ucp/mcp`; `<run_dir>/site/robots.json` holds the per-bot verdicts for the robots cross-check; `vertical` in the envelope decides UCP ownership. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: `<run_dir>/site/discovery.json` holds the probe results (status, content-type, bytes, raw bodies ≤256 KB) for `/llms.txt`, `/llms-full.txt`, `/agents.md`, `/.well-known/ucp`, `/.well-known/ai-catalog.json`, `/sitemap_agentic_discovery.xml`, `/api/ucp/mcp`; `<run_dir>/site/robots.json` holds the per-bot verdicts for the robots cross-check; `vertical` in the envelope decides UCP ownership. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 1. **llms.txt** — present (200, text); llmstxt.org structure: one H1 title, optional summary blockquote, H2 sections of `- [title](url): note` links; linked URLs resolve (`--deep`, ≤25 checked); the file is not disallowed in robots to the AI bots that would read it. `/llms-full.txt` is reported present/absent only.
@@ -24,7 +24,7 @@ Work from the PageSnapshot named in your dispatch envelope: `<run_dir>/site/disc
 - **Never fabricate** link targets, descriptions, endpoints, or versions — ask the user or leave a clearly-marked `TODO` placeholder.
 
 ## Verification
-- `node "${CLAUDE_PLUGIN_ROOT}/scripts/ai-discovery.mjs" --snapshot <pages/<slug>.json> [--deep]` — re-reads `site/discovery.json`, validates llms.txt structure (`dom_assert`), UCP/ARD JSON shape (`schema_validator`), agentic-sitemap XML (`xml_parse`), and the robots cross-check (`robots_parse`). <!-- reconcile-flags-v0.2 -->
+- `node "${CLAUDE_PLUGIN_ROOT}/scripts/ai-discovery.mjs" --snapshot <pages/<slug>.json> [--deep]` — re-reads `site/discovery.json`, validates llms.txt structure (`dom_assert`), UCP/ARD JSON shape (`schema_validator`), agentic-sitemap XML (`xml_parse`), and the robots cross-check (`robots_parse`).
 - When the discovery probes did not run (no network, local path), status is `needs_api` — never a false `pass`.
 
 ## Findings

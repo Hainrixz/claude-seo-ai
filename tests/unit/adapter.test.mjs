@@ -276,25 +276,127 @@ test('a ticket never stores the password from the command it authorizes', () => 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('no adapter stamps a change terminally failed from its op-dispatch catch', () => {
-  // `failed` is terminal: a transient throw inside a read-only op (preview/verify) must not kill the
-  // change, and the results row must carry the reason. Every adapter uses one shape for this.
+test('every adapter routes its op-dispatch catch through the one shared helper', () => {
+  // A throw that escapes an op means the op stopped somewhere it does not describe. One helper
+  // decides what that means (fail the change, keep the reason) so seven adapters cannot drift.
   const dir = join(ROOT, 'scripts', 'adapters');
-  const files = readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort();
+  const files = readdirSync(dir).filter((f) => f.endsWith('.mjs') && f !== '_shared.mjs').sort();
   assert.ok(files.length >= 7, 'expected the adapter set, found ' + files.length);
   let seen = 0;
   for (const file of files) {
     const src = readFileSync(join(dir, file), 'utf8');
     for (const line of src.split('\n')) {
       if (!/^\s*catch \(e\) \{ out = /.test(line)) continue;
+      // A per-change op must go through the helper. (page-api's site-wide `publish` has no single
+      // change to fail, so it keeps its own catch — that line never mentions `change`.)
+      if (!/\bchange\b/.test(line)) continue;
       seen++;
-      assert.ok(!line.includes("status: 'failed'"),
-        file + ' burns the change in its op catch — only apply may transition to failed:\n  ' + line.trim());
-      assert.match(line, /error: String\(\(e && e\.message\) \|\| e\)/,
-        file + ' drops the reason in its op catch:\n  ' + line.trim());
+      assert.match(line, /out = opThrew\(change, e\);/,
+        file + ' hand-rolls its op catch instead of using _shared.opThrew:\n  ' + line.trim());
+    }
+    if (/out = opThrew\(/.test(src)) {
+      assert.match(src, /import \{[^}]*\bopThrew\b[^}]*\} from '\.\/_shared\.mjs';/,
+        file + ' uses opThrew without importing it from ./_shared.mjs');
     }
   }
   assert.ok(seen >= 7, 'expected an op-dispatch catch in each adapter, found ' + seen);
+});
+
+test('opThrew fails the change and keeps the reason, and never throws on a terminal one', async () => {
+  const SH = await import(pathToFileURL(join(ROOT, 'scripts', 'adapters', '_shared.mjs')).href);
+  const { change } = A.makeChange({ ...baseChange, status: 'confirmed' });
+  const out = SH.opThrew(change, new Error('ECONNRESET while reading the resource'));
+  assert.equal(out.ok, false);
+  assert.equal(out.change.status, 'failed');
+  assert.equal(out.change.error, 'ECONNRESET while reading the resource');
+  assert.equal(out.error, 'ECONNRESET while reading the resource');
+
+  // `failed` and `rolled_back` are terminal: the status is left alone, the reason still travels.
+  for (const status of ['failed', 'rolled_back', 'skipped_unready']) {
+    const terminal = { ...change, status };
+    const again = SH.opThrew(terminal, 'boom');
+    assert.equal(again.change.status, status, status + ' must not be transitioned again');
+    assert.equal(again.change.error, 'boom');
+    assert.equal(again.error, 'boom');
+  }
+  assert.equal(SH.opThrew(null, new Error('x')).error, 'x', 'a missing change is still reported');
+});
+
+test('updateManifest records what an op did, and only a landed write ends the dry run', () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const run = A.openFixRun(dir, { report: '/r/report.json' });
+    run.updateManifest((m) => ({ ...m, dry_run: true }));
+    const a = 'chg_aaaaaaaaaaaa';
+    const b = 'chg_bbbbbbbbbbbb';
+
+    // A preview is not a write, whatever it moved the change to.
+    A.updateManifest(run, { op: 'preview', adapter: 'local-files', changes: [{ id: a, status: 'previewed' }] });
+    let m = run.readManifest();
+    assert.equal(m.dry_run, true, 'a preview never ends the dry run');
+    assert.equal(m.results[a].status, 'previewed');
+    assert.equal(m.results[a].adapter, 'local-files');
+    assert.ok(m.previewed_at);
+
+    // An apply that landed does.
+    A.updateManifest(run, { op: 'apply', adapter: 'local-files', changes: [{ id: a, status: 'applied' }, { id: b, status: 'failed', error: 'HTTP 403' }] });
+    m = run.readManifest();
+    assert.equal(m.dry_run, false);
+    assert.deepEqual(m.applied, [a]);
+    assert.deepEqual(m.failed, [b]);
+    assert.equal(m.results[b].error, 'HTTP 403');
+    assert.equal(m.last_op.op, 'apply');
+    assert.ok(m.applied_at);
+
+    // A rollback moves the id from applied to rolled_back rather than leaving it in both.
+    A.updateManifest(run, { op: 'rollback', adapter: 'local-files', changes: [{ id: a, status: 'rolled_back' }] });
+    m = run.readManifest();
+    assert.deepEqual(m.applied, []);
+    assert.deepEqual(m.rolled_back, [a]);
+    assert.ok(m.rolled_back_at);
+
+    // An apply in which every change was refused wrote nothing: the dry run must survive it.
+    const fresh = A.openFixRun(dir, { id: 'refused-only' });
+    fresh.updateManifest((mm) => ({ ...mm, dry_run: true }));
+    A.updateManifest(fresh, { op: 'apply', adapter: 'local-files', changes: [] });
+    assert.equal(fresh.readManifest().dry_run, true);
+
+    // `wrote` is the override for an op with no changes of its own (a theme publish).
+    A.updateManifest(fresh, { op: 'publish', adapter: 'shopify-theme', changes: [], wrote: true });
+    assert.equal(fresh.readManifest().dry_run, false);
+    assert.ok(fresh.readManifest().published_at);
+
+    assert.equal(A.updateManifest(null, { op: 'apply' }), null, 'no run is a no-op, never a throw');
+
+    // Re-planning must never reset a run that already wrote something back to "dry run".
+    const replanned = A.loadFixRun(run.id, { dataDir: dir });
+    replanned.updateManifest((mm) => ({ ...mm, dry_run: mm.dry_run === false ? false : true }));
+    assert.equal(replanned.readManifest().dry_run, false, 'a landed write survives a re-plan');
+  } finally { cleanup(); }
+});
+
+test('loadFixRun takes a run id as well as a directory, and says where it looked', () => {
+  const { dir, cleanup } = tempDir();
+  try {
+    const run = A.openFixRun(dir, { id: 'run-42', report: '/r/report.json' });
+    const { change } = A.makeChange(baseChange);
+    run.setChanges([change]);
+
+    // The id fix-plan prints, resolved under <DATA>/fix/runs/<id> — this is what adapters get.
+    const byId = A.loadFixRun('run-42', { dataDir: dir });
+    assert.equal(byId.id, 'run-42');
+    assert.equal(byId.dir, run.dir);
+    assert.equal(byId.readPlan().changes[0].id, change.id);
+
+    // The directory form still works, and still derives the data dir from the layout.
+    const byDir = A.loadFixRun(run.dir);
+    assert.equal(byDir.id, 'run-42');
+    assert.equal(byDir.data_dir, resolve(dir));
+
+    assert.throws(() => A.loadFixRun('no-such-run', { dataDir: dir }), /fix run not found: no-such-run/);
+    assert.throws(() => A.loadFixRun('no-such-run', { dataDir: dir }), /runs.no-such-run/, 'the error names where it looked');
+    assert.throws(() => A.loadFixRun(''), /run id or directory/);
+  } finally { cleanup(); }
 });
 
 test('canonicalJson sorts keys recursively so hashes are stable', () => {

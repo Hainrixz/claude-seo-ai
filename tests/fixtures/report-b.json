@@ -1,0 +1,178 @@
+{
+  "target": { "kind": "url", "value": "https://staging.example.com/", "host": "staging.example.com", "pages_analyzed": 3 },
+  "generated_at": "2026-09-04T10:00:00.000Z",
+  "run_id": "2026-09-04T10-00-00Z",
+  "plugin_version": "0.2.0",
+  "tier": 0,
+  "vertical": { "primary": "generic", "also": [], "multilingual": false, "source": "inferred" },
+  "coverage": {
+    "mode": "deterministic",
+    "modules_covered": ["M2", "M5", "M7", "M8", "M10", "M14", "M15", "M17"],
+    "modules_model_only": ["M6", "M11", "M12", "M16"]
+  },
+  "scores": {
+    "search_seo": {
+      "value": 66,
+      "raw_value": 66,
+      "band": "D",
+      "state": "scored",
+      "capped": false,
+      "cap_reasons": [],
+      "needs_api_count": 0,
+      "manual_review_count": 0,
+      "unscored_count": 0,
+      "dropped_count": 0,
+      "interpretation": "Synthetic fixture: the search axis of the candidate run.",
+      "categories": [
+        { "name": "Indexability & Crawl", "weight": 22, "value": 75, "active": true, "modules": ["M1", "M2", "M3"], "activation": "always", "conditional": false, "scored": 2, "needs_api": 0, "manual_review": 0 },
+        { "name": "On-Page & Meta", "weight": 12, "value": 30, "active": true, "modules": ["M7"], "activation": "always", "conditional": false, "scored": 2, "needs_api": 0, "manual_review": 0 },
+        { "name": "Core Web Vitals / Performance", "weight": 16, "value": 40, "active": true, "modules": ["M15"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 },
+        { "name": "Social Cards", "weight": 2, "value": 0, "active": true, "modules": ["M8"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 }
+      ]
+    },
+    "ai_visibility": {
+      "value": 63,
+      "raw_value": 63,
+      "band": "D",
+      "state": "scored",
+      "capped": false,
+      "cap_reasons": [],
+      "needs_api_count": 0,
+      "manual_review_count": 0,
+      "unscored_count": 0,
+      "dropped_count": 0,
+      "interpretation": "Synthetic fixture: the AI axis of the candidate run.",
+      "categories": [
+        { "name": "AI Crawler Access", "weight": 14, "value": 100, "active": true, "modules": ["M14"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 },
+        { "name": "Structured Data", "weight": 12, "value": 20, "active": true, "modules": ["M5"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 }
+      ]
+    }
+  },
+  "pages": [
+    { "url": "https://staging.example.com/a", "slug": "a--bbbb0001", "role": "target", "template": "/a|", "weight": 2, "findings_count": 3, "search": { "value": 80, "raw_value": 80, "band": "B", "state": "scored", "capped": false }, "ai": { "value": 65, "raw_value": 65, "band": "D", "state": "scored", "capped": false } },
+    { "url": "https://staging.example.com/c", "slug": "c--bbbb0002", "role": "sample", "template": "/c|", "weight": 1, "findings_count": 1, "search": { "value": 55, "raw_value": 55, "band": "F", "state": "scored", "capped": false }, "ai": { "value": 45, "raw_value": 45, "band": "F", "state": "scored", "capped": false } }
+  ],
+  "findings": [
+    {
+      "id": "M7.title.missing",
+      "module": "M7",
+      "title": "Page declares a <title>",
+      "status": "pass",
+      "severity": 4,
+      "scope": "page",
+      "location": { "url": "https://staging.example.com/a" },
+      "evidence": { "observed": "The head of https://staging.example.com/a declares one <title> of 48 characters." },
+      "expected": "Every indexable page declares one non-empty <title>.",
+      "recommendation": "Keep the title unique per template.",
+      "fixable": "advisory",
+      "verification": { "method": "dom_assert", "assertion": "The document has exactly one non-empty <title>.", "reproduce": "node scripts/parse-html.mjs --url https://staging.example.com/a" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Google documents the title as the primary source of the search result link." }
+    },
+    {
+      "id": "M7.description.too_short",
+      "module": "M7",
+      "title": "Meta description missing",
+      "status": "fail",
+      "severity": 4,
+      "scope": "page",
+      "location": { "url": "https://staging.example.com/b" },
+      "evidence": { "observed": "No meta description on https://staging.example.com/b." },
+      "expected": "A meta description of 70-160 characters.",
+      "recommendation": "Write a description that summarises the page.",
+      "fixable": "proposed",
+      "verification": { "method": "dom_assert", "assertion": "The meta description length is inside the pass band.", "reproduce": "node scripts/parse-html.mjs --url https://staging.example.com/b" },
+      "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "medium", "rationale": "Without a description the engine writes its own snippet from the page." }
+    },
+    {
+      "id": "M2.canonical.missing",
+      "module": "M2",
+      "title": "rel=canonical points at another URL",
+      "status": "warn",
+      "severity": 3,
+      "scope": "page",
+      "location": { "url": "https://staging.example.com/c" },
+      "evidence": { "observed": "https://staging.example.com/c canonicalises to /c-old." },
+      "expected": "Every indexable URL declares the canonical version of itself.",
+      "recommendation": "Point the canonical at the page itself unless the duplicate is intentional.",
+      "fixable": "proposed",
+      "verification": { "method": "dom_assert", "assertion": "The head carries exactly one self-referential rel=canonical.", "reproduce": "node scripts/parse-html.mjs --url https://staging.example.com/c" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Google documents rel=canonical as its strongest canonicalisation signal." }
+    },
+    {
+      "id": "M8.og.image_missing",
+      "module": "M8",
+      "title": "og:image is missing",
+      "status": "fail",
+      "severity": 3,
+      "scope": "page",
+      "location": { "url": "https://staging.example.com/d" },
+      "evidence": { "observed": "No og:image meta on https://staging.example.com/d." },
+      "expected": "A reachable og:image of at least 200x200.",
+      "recommendation": "Add an og:image to the social card block.",
+      "fixable": "auto",
+      "verification": { "method": "dom_assert", "assertion": "og:image is present and resolves.", "reproduce": "node scripts/parse-html.mjs --url https://staging.example.com/d" },
+      "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "low", "rationale": "Social cards affect click-through on shared links." }
+    },
+    {
+      "id": "M10.links.broken_internal",
+      "module": "M10",
+      "title": "Internal link returns 404",
+      "status": "warn",
+      "severity": 3,
+      "scope": "page",
+      "location": { "url": "https://staging.example.com/e" },
+      "evidence": { "observed": "1 of 12 internal links on https://staging.example.com/e answered 404." },
+      "expected": "Internal links resolve to 2xx URLs.",
+      "recommendation": "Repoint or remove the broken link.",
+      "fixable": "proposed",
+      "verification": { "method": "link_graph", "assertion": "Every internal link answers 2xx.", "reproduce": "node scripts/link-graph.mjs --url https://staging.example.com/e" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Broken internal links waste crawl budget and lose link equity." }
+    },
+    {
+      "id": "M15.cwv.field_data",
+      "module": "M15",
+      "title": "LCP above the good threshold",
+      "status": "fail",
+      "severity": 3,
+      "scope": "site",
+      "location": { "url": "https://staging.example.com/a" },
+      "evidence": { "observed": "CrUX p75 LCP for the origin is 4.1 s." },
+      "expected": "p75 LCP at or below 2.5 s.",
+      "recommendation": "Reduce the largest contentful paint of the entry templates.",
+      "fixable": "advisory",
+      "verification": { "method": "crux_api", "assertion": "p75 LCP <= 2500 ms for the origin.", "reproduce": "PSI_API_KEY=… node scripts/psi-client.mjs --url https://staging.example.com/a" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Google documents Core Web Vitals as a ranking signal." }
+    },
+    {
+      "id": "M14.robots.ai_bots_allowed",
+      "module": "M14",
+      "title": "AI crawlers are allowed at the origin root",
+      "status": "pass",
+      "severity": 3,
+      "scope": "site",
+      "evidence": { "observed": "robots.txt has no Disallow that applies to GPTBot, ClaudeBot, PerplexityBot or Google-Extended at /." },
+      "expected": "The AI crawlers the site wants citations from can reach it.",
+      "recommendation": "Keep the posture deliberate and documented.",
+      "fixable": "advisory",
+      "verification": { "method": "robots_parse", "assertion": "isAllowed(robots, bot, '/') is true for each AI bot.", "reproduce": "node scripts/parse-robots-sitemap.mjs --url https://staging.example.com/" },
+      "expected_impact": { "axis": "ai", "confidence": "established", "magnitude": "high", "rationale": "Each vendor documents the user agent it uses and honours robots.txt for it." }
+    },
+    {
+      "id": "M5.product.missing_offers",
+      "module": "M5",
+      "title": "Product node without offers",
+      "status": "fail",
+      "severity": 4,
+      "scope": "page",
+      "location": { "url": "https://staging.example.com/only-in-b" },
+      "evidence": { "observed": "The Product node on https://staging.example.com/only-in-b has no offers property." },
+      "expected": "A Product node carries offers with price and availability.",
+      "recommendation": "Emit offers on the product template.",
+      "fixable": "proposed",
+      "verification": { "method": "schema_validator", "assertion": "Every Product node has an offers property.", "reproduce": "node scripts/validate-jsonld.mjs --url https://staging.example.com/only-in-b" },
+      "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "high", "rationale": "Google documents offers as required for product rich results." }
+    }
+  ],
+  "data_sources": { "render": "none", "psi": "crux", "gsc": null },
+  "warnings": []
+}

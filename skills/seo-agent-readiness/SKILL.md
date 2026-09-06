@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, Bash
 Google's *Optimizing your website for generative AI features* guide points to "agent-friendly website best practices" (web.dev *Build agent-friendly websites*): agents drive a page through its accessibility tree, so unnamed, non-semantic, or script-only controls are invisible to them. This module checks the statically checkable subset and names the rest. Alt text is M9, anchor-text quality is M10, rendering is M4 — reference them, never re-emit them.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` (`anchors[]`, `forms`, `iframes`, `scripts[]`, `landmarks`) from `<run_dir>/pages/<slug>.json`, preferring `parsed_rendered` when `render.used` is not `none`; Grep `pages/<slug>.html` (or `.rendered.html`) for the offending elements as verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` (`anchors[]`, `forms`, `iframes`, `scripts[]`, `landmarks`) from `<run_dir>/pages/<slug>.json`, preferring `parsed_rendered` when `render.used` is not `none`; Grep `pages/<slug>.html` (or `.rendered.html`) for the offending elements as verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 1. **Semantic controls** — interactive behavior on `div`/`span` (`onclick`, `role="button"`, `tabindex` + handler) instead of `<button>` / `<a href>`; count against total controls.
@@ -27,8 +27,8 @@ Work from the PageSnapshot named in your dispatch envelope: read `parsed` (`anch
 - **Never fabricate** labels or link text the surrounding content does not support — leave a clearly-marked `TODO` placeholder or ask.
 
 ## Verification
-- `node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-readiness.mjs" --snapshot <pages/<slug>.json>` — counts per check with the offending elements (method `dom_assert`). <!-- reconcile-flags-v0.2 -->
-- Tier 1, **consent-gated** (ask first — it downloads and launches a browser): `npx lighthouse <url> --output=json --output-path <run_dir>/lighthouse.json` and read the agentic-browsing category (category id TO-VERIFY against the installed Lighthouse version). Run only when the user agrees and Chrome is available; otherwise `M22.lighthouse.agentic_browsing` stays `needs_api`. <!-- reconcile-flags-v0.2 -->
+- `node "${CLAUDE_PLUGIN_ROOT}/scripts/agent-readiness.mjs" --snapshot <pages/<slug>.json>` — counts per check with the offending elements (method `dom_assert`).
+- Tier 1, **consent-gated** (ask first — it downloads and launches a browser): `npx lighthouse <url> --output=json --output-path <run_dir>/lighthouse.json` and read the agentic-browsing category (category id TO-VERIFY against the installed Lighthouse version). Run only when the user agrees and Chrome is available; otherwise `M22.lighthouse.agentic_browsing` stays `needs_api`.
 - When the page is client-rendered and not rendered (`render.needed && render.used === "none"`), control checks run on the shell only: state that limit and keep `needs_api` where the shell is empty.
 
 ## Findings

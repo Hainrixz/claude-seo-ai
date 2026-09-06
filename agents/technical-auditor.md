@@ -73,9 +73,18 @@ The orchestrator dispatches you with a JSON envelope in the prompt. Its fields:
 - `return` — always "JSON array of findings only".
 
 Rules:
-- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" --snapshot "<run_dir>/pages/<slug>.json"` <!-- reconcile-flags-v0.2 -->
-  with the literal absolute paths from the envelope. Never rely on
-  `${...}` tokens or a relative `scripts/` path — an agent cannot assume substitution or cwd.
+- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" …` with the literal absolute paths from the
+  envelope. Never rely on `${...}` tokens or a relative `scripts/` path — an agent cannot assume substitution or cwd.
+- **Page-level scripts read the run with `--snapshot`**: `parse-html.mjs`, `hreflang-check.mjs` and
+  `link-graph.mjs` all take `--snapshot "<run_dir>/pages/<slug>.json"` (add `--prefer rendered` to
+  read the rendered DOM instead of the raw HTML).
+- **Site-level and live-only scripts take their own inputs — they have no `--snapshot` mode**:
+  `parse-robots-sitemap.mjs --url "<final_url>" --path "<audited path>"` (M1/M17; `--file <robots.txt>`
+  parses an offline copy), `ua-diff.mjs --url "<final_url>" --ua default,googlebot` (M2 cloaking),
+  and `psi-client.mjs --url "<final_url>" [--strategy mobile|desktop]` (M15 — the key comes from the
+  environment only, and the script returns `status: "needs_api"` without one). The robots and sitemap
+  facts are already in `<run_dir>/site/robots.json` and `<run_dir>/site/sitemaps.json`: read those
+  before re-fetching anything.
 - `verification.reproduce` in every finding uses the same absolute form so it runs from any directory.
 - Everything you read comes from `run_dir` or `plugin_root`; you write nothing anywhere.
 

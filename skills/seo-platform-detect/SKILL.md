@@ -16,8 +16,12 @@ this skill answers *what is it built on*. Both feed one `profile.json`.
 
 ## When to run
 
-After `snapshot.mjs` has written `<run_dir>/pages/<slug>.json`, before the dispatch envelopes are
-built. One run per audit — every subagent reads the same profile.
+In the normal `/audit` and `/geo` flow you do **not** run this yourself: `audit.mjs` already calls the
+same `detect()` over the run's homepage snapshot and persists the result as `<run_dir>/profile.json`.
+Read that file first. Run the script directly only when you need a signal the headless pass could not
+use — `--path <project>` for repo/package signals, `--probe` for the WordPress plugin verdict — or when
+you are working outside the runner. Either way it is one run per audit, before the dispatch envelopes
+are built; every subagent reads the same profile.
 
 ## How to run
 
@@ -58,7 +62,9 @@ a Next.js front end yields `platform: wordpress` **and** `framework: nextjs`, an
 
 ## Merging into profile.json
 
-Write `<run_dir>/profile.json` as the union of this output and `seo-vertical-detect`'s:
+`<run_dir>/profile.json` is the union of this output and `seo-vertical-detect`'s. `audit.mjs` writes it: it
+refreshes every key `detect()` owns and preserves the ones you added, so a `vertical` block already in the
+file survives a re-run (a `--vertical` flag overrides it). Shape:
 
 ```json
 { "version": "detect-platform/1", "platform": {…}, "framework": {…}, "cms_plugins": [],
@@ -75,7 +81,8 @@ a non-production host and reports them as expected instead.
 ## Which card goes to which subagent
 
 `profile.cards[]` already lists the paths (`references/platforms/<id>.md`). Put them in every
-dispatch envelope as `PLATFORM_CARDS`, alongside `PROFILE_PATH` and a one-line summary
+dispatch envelope as `platform_cards`, alongside the `platform` field (the absolute `profile.json`
+path) and a one-line summary
 (`"shopify (high) · theme head · staging theme available · environment production"`), with these two
 instructions verbatim:
 

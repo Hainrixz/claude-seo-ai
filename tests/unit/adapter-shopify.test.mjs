@@ -247,6 +247,7 @@ test('the fix map routes each finding to the theme file the card names', () => {
   assert.equal(at('M2.shopify.variant_param_canonical').block, 'canonical');
   assert.equal(at('M20.shopify.duplicate_hreflang').strategy, 'manual');
   assert.equal(at('M1.shopify.tag_combo_urls_crawlable').file, 'templates/robots.txt.liquid');
+  assert.equal(at('M17.robots.no_sitemap_line').file, 'templates/robots.txt.liquid');
   assert.equal(at('M5.shopify.theme_jsonld_gaps').file, 'sections/main-product.liquid');
   assert.equal(at('M5.organization.missing').file, 'snippets/seo-structured-data.liquid');
   assert.equal(at('M5.article.missing').file, 'sections/main-article.liquid');
@@ -259,8 +260,61 @@ test('the fix map routes each finding to the theme file the card names', () => {
 test('platform-owned and unobservable ids are never claimed by the theme adapter', () => {
   assert.equal(T.themeTargetFor({ id: 'M17.shopify.sitemap_platform_owned' }), null, 'Shopify owns sitemap.xml');
   assert.equal(T.themeTargetFor({ id: 'M1.shopify.robots_liquid_drops_defaults' }), null, 'that id is needs_api, not a fix');
+  assert.equal(T.themeTargetFor({ id: 'M1.robots.unreachable' }), null, 'a robots.txt that does not answer is a server problem, not a theme edit');
   assert.equal(T.themeTargetFor({ id: 'M15.lcp.exceeds_p75' }), null);
   assert.equal(T.themeTargetFor({}), null);
+});
+
+test('only an additive robots line is auto: blocks, crawl-delay and the default groups are proposed', () => {
+  const at = (id) => T.themeTargetFor({ id });
+  // Additive and deterministic: appending the directive is the whole fix.
+  for (const id of ['M1.sitemap.missing_directive', 'M17.robots.no_sitemap_line']) {
+    assert.equal(at(id).cls, 'auto', id + ' only adds a line');
+    assert.equal(at(id).strategy, 'liquid-robots', id);
+    assert.equal(at(id).robots_kind, 'additive', id);
+  }
+  // Restoring the platform defaults re-imposes every Shopify Disallow: a person approves that.
+  for (const id of ['M1.shopify.tag_combo_urls_crawlable', 'M1.shopify.filter_sort_urls_crawlable']) {
+    assert.equal(at(id).cls, 'proposed', id + ' changes what is crawlable');
+    assert.equal(at(id).robots_kind, 'restore-defaults', id);
+  }
+  // Nothing that removes or rewrites an existing directive is an append, so none of these is auto.
+  for (const id of ['M1.robots.blocks_googlebot', 'M1.robots.blocks_css_js', 'M1.robots.syntax_error', 'M1.crawl_delay.excessive']) {
+    const entry = at(id);
+    assert.equal(entry.cls, 'proposed', id + ' must not be auto');
+    assert.equal(entry.strategy, 'manual', id + ' cannot be performed by appending a block');
+    assert.equal(entry.robots_kind, 'edit-existing', id);
+  }
+  // Every robots route lands in the template, and no robots route is auto unless it is additive.
+  for (const entry of T.THEME_FIX_MAP.filter((e) => e.block === 'robots')) {
+    assert.equal(entry.file, 'templates/robots.txt.liquid');
+    if (entry.cls === 'auto') assert.equal(entry.robots_kind, 'additive', 'an auto robots edit must be additive: ' + entry.id);
+  }
+});
+
+test('an additive robots change is skipped when nobody supplied the directive to add', async () => {
+  const { dataDir, cleanup } = sandbox();
+  try {
+    const run = A.openFixRun(dataDir, {});
+    const noLine = {
+      id: 'M17.robots.no_sitemap_line', module: 'M17', title: 'robots.txt declares no sitemap',
+      status: 'warn', severity: 3, scope: 'site', fixable: 'auto',
+      location: { url: 'https://' + STORE + '/robots.txt' },
+    };
+    const bare = await T.plan({ report: { target: { kind: 'url', value: 'https://' + STORE + '/' }, findings: [noLine] }, store: STORE }, { run, dataDir, env: themeEnv() });
+    assert.deepEqual(bare.changes, [], 'a robots block with no directive would write nothing');
+    assert.match(bare.skipped[0].reason, /never invented/);
+
+    // With the line, it is planned as an auto, additive change carrying exactly that directive.
+    const withLine = await T.plan({
+      report: { target: { kind: 'url', value: 'https://' + STORE + '/' }, findings: [{ ...noLine, fix_preview: 'Sitemap: https://' + STORE + '/sitemap.xml' }] },
+      store: STORE,
+    }, { run, dataDir, env: themeEnv() });
+    assert.equal(withLine.changes.length, 1);
+    assert.equal(withLine.changes[0].class, 'auto');
+    assert.deepEqual(withLine.changes[0].payload.rules, ['Sitemap: https://' + STORE + '/sitemap.xml']);
+    assert.equal(withLine.changes[0].payload.robots_kind, 'additive');
+  } finally { cleanup(); }
 });
 
 // ---------------------------------------------------------------------------
@@ -671,7 +725,23 @@ test('the robots assertion checks the tag-combination rule, not a marker comment
   const both = S_parseRobotsFor('User-agent: *\nDisallow: /collections/*+*\nDisallow: /internal\n');
   const full = T.assertBlock(withCustom, { robots: both });
   assert.equal(full.ok, true);
-  assert.match(full.detail, /1 rule\(s\) with wildcards were not asserted automatically/);
+  assert.match(full.detail, /1 rule\(s\) \(wildcards, Allow, Crawl-delay\) were not asserted automatically/);
+
+  // An added Sitemap: line is asserted against what the served file declares, not just counted.
+  const withSitemap = { payload: { block: 'robots', robots_kind: 'additive', rules: ['Sitemap: https://x.test/sitemap.xml'] }, target: {} };
+  const missing = T.assertBlock(withSitemap, { robots: kept });
+  assert.equal(missing.ok, false);
+  assert.match(missing.detail, /does not declare https:\/\/x\.test\/sitemap\.xml/);
+  const declared = S_parseRobotsFor('User-agent: *\nDisallow: /collections/*+*\nSitemap: https://x.test/sitemap.xml\n');
+  const served = T.assertBlock(withSitemap, { robots: declared });
+  assert.equal(served.ok, true);
+  assert.match(served.detail, /declares https:\/\/x\.test\/sitemap\.xml/);
+  assert.ok(!served.detail.includes('not asserted automatically'), 'a Sitemap line is asserted, not written off as a wildcard');
+
+  // A hand edit has no marked block and no rule this module can name: unknown, never a pass.
+  const manual = T.assertBlock({ payload: { block: 'robots', robots_kind: 'edit-existing' }, target: {} }, { robots: kept });
+  assert.equal(manual.ok, null);
+  assert.match(manual.detail, /hand edit/);
 });
 
 // parseRobots lives in lib/robots; the test needs it to build the two cases above.
@@ -998,13 +1068,27 @@ function adminRouter({ product = PRODUCT_NODE, collection = COLLECTION_NODE, red
   });
 }
 
-async function adminPlan(dataDir, fetchImpl, { answers = {}, findings = adminFindings } = {}) {
+// Every Admin write is `proposed` (the API has no staging surface), so the fix flow reaches these
+// with --include-proposed. The helper passes the flag; the test below covers what happens without it.
+async function adminPlan(dataDir, fetchImpl, { answers = {}, findings = adminFindings, includeProposed = true } = {}) {
   const run = A.openFixRun(dataDir, {});
   const report = { target: { kind: 'url', value: 'https://' + STORE + '/' }, findings };
-  const out = await S.plan({ report, store: STORE, answers }, { run, dataDir, env: adminEnv(), fetchImpl });
+  const out = await S.plan({ report, store: STORE, answers, includeProposed }, { run, dataDir, env: adminEnv(), fetchImpl });
   run.setChanges(out.changes);
   return { run, out };
 }
+
+test('the Admin adapter honours --include-proposed instead of assuming it', async () => {
+  const { dataDir, cleanup } = sandbox();
+  try {
+    const fetchImpl = mockFetch(adminRouter());
+    const { out } = await adminPlan(dataDir, fetchImpl, { includeProposed: false });
+    assert.deepEqual(out.changes, [], 'without the flag a proposed finding is not planned');
+    const note = out.notes.join(' ');
+    assert.match(note, /--include-proposed/, 'the drop is named, never silent');
+    assert.match(note, /M7\.title\.missing/, 'the withheld findings are listed by id');
+  } finally { cleanup(); }
+});
 
 test('plan builds the mutations the snapshots record, with the values from the report', async () => {
   const { dataDir, cleanup } = sandbox();
@@ -1205,6 +1289,41 @@ test('preview shows the live values and flags drift since the plan', async () =>
   } finally { cleanup(); }
 });
 
+test('a preview whose live read failed never shows the plan-time values as if read', async () => {
+  const { dataDir, cleanup } = sandbox();
+  try {
+    const fetchImpl = mockFetch(adminRouter());
+    const { run, out } = await adminPlan(dataDir, fetchImpl, { findings: [adminFindings[0]] });
+    const change = out.changes[0];
+    assert.match(change.preview.body, /^Current values:/m, 'the planned body claims a fresh read');
+
+    // The Admin API is unreachable now, so there is no "current" anything to show.
+    const broken = async () => { throw new Error('ECONNREFUSED shop.myshopify.com'); };
+    const res = await S.preview(change, { run, dataDir, env: adminEnv(), fetchImpl: broken, store: STORE });
+
+    assert.equal(res.ok, null, 'an unread state is unknown, never an ok preview');
+    assert.equal(res.live, null);
+    assert.match(res.read_error, /ECONNREFUSED/);
+    assert.match(res.warning, /could not be read/);
+    assert.ok(!/^Current values:/m.test(res.body), 'the stale block must not keep the heading of a fresh read');
+    assert.match(res.body, /Current values AT PLAN TIME/);
+    assert.match(res.body, /could not be re-read/);
+    assert.match(res.body, /do not confirm the write/);
+
+    // The CLI row carries the warning too, not just the module return.
+    const saved = { ...process.env };
+    try {
+      Object.assign(process.env, adminEnv(), { CLAUDE_SEO_AI_OFFLINE: '1' });
+      const cli = await S.main({ _: ['preview'], run: run.dir, data: dataDir });
+      const row = cli.result.results[0];
+      assert.ok(row.error || row.warning, 'a preview that could not read says so: ' + JSON.stringify(row));
+    } finally {
+      for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+      Object.assign(process.env, saved);
+    }
+  } finally { cleanup(); }
+});
+
 test('verify waits for the storefront: the API alone is pending_cache, not verified', async () => {
   const { dataDir, cleanup } = sandbox();
   try {
@@ -1344,7 +1463,7 @@ test('the fixture theme is the shape the adapters expect', () => {
 // ---------------------------------------------------------------------------
 // A thrown op must say why, and must not burn the change
 
-test('a thrown read-only op reports the reason and leaves the change retryable', async () => {
+test('an op that throws marks the change failed and keeps the reason, on the row and in plan.json', async () => {
   const { dataDir, cleanup } = sandbox();
   const saved = { ...process.env };
   try {
@@ -1354,27 +1473,73 @@ test('a thrown read-only op reports the reason and leaves the change retryable',
     assert.ok(out.changes.length >= 2);
     const id = out.changes[0].id;
 
-    // …then preview through the CLI with nothing injected and the network refused. `preview` reads
-    // the live values, so it throws — that is the transient failure this test is about.
+    // …then preview through the CLI with nothing injected and the network refused, so the op throws
+    // somewhere it does not describe. Every adapter routes that through _shared.opThrew.
     Object.assign(process.env, adminEnv(), { CLAUDE_SEO_AI_OFFLINE: '1' });
     const failed = await S.main({ _: ['preview'], run: run.dir, data: dataDir });
     assert.equal(failed.code, 2);
     for (const row of failed.result.results) {
       assert.equal(row.ok, false);
       assert.match(String(row.error || ''), /OFFLINE/i, 'the row carries the reason, not a bare "failed"');
-      assert.notEqual(row.status, 'failed', 'a read-only op never burns the change');
+      assert.equal(row.status, 'failed', 'a throw leaves the change failed, not silently still pending');
     }
 
-    // The plan on disk is untouched, so the same change can be previewed once the network is back.
+    // The reason travels with the change: plan.json records why, so a manifest cannot claim the op
+    // is still in flight. `failed` is terminal, so recovery is re-planning, not retrying this row.
     delete process.env.CLAUDE_SEO_AI_OFFLINE;
     const plan = JSON.parse(readFileSync(join(run.dir, 'plan.json'), 'utf8'));
     const stored = plan.changes.find((c) => c.id === id);
-    assert.equal(stored.status, 'planned');
-    assert.equal(A.canTransition(stored.status, 'previewed'), true);
+    assert.equal(stored.status, 'failed');
+    assert.match(String(stored.error || ''), /OFFLINE/i, 'the persisted change keeps the reason');
+    assert.equal(A.canTransition(stored.status, 'previewed'), false, 'failed is terminal');
 
-    const retried = await S.preview(stored, { run, dataDir, env: adminEnv(), fetchImpl, store: STORE });
-    assert.equal(retried.ok, true);
-    assert.equal(retried.change.status, 'previewed');
+    // Re-planning the same finding rebuilds the same change id at `planned`, which is the way back.
+    const again = await adminPlan(dataDir, fetchImpl, { findings: [adminFindings[0], adminFindings[1]] });
+    const rebuilt = again.out.changes.find((c) => c.id === id);
+    assert.ok(rebuilt, 'the change id is deterministic, so a re-plan reopens the same edit');
+    assert.equal(rebuilt.status, 'planned');
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+    cleanup();
+  }
+});
+
+test('a ticketless apply is logged as refused, and a failed op is recorded in manifest.json', async () => {
+  const { dataDir, cleanup } = sandbox();
+  const saved = { ...process.env };
+  try {
+    const fetchImpl = mockFetch(adminRouter());
+    const { run, out } = await adminPlan(dataDir, fetchImpl, { findings: [adminFindings[0]] });
+    const id = out.changes[0].id;
+    assert.equal(run.readManifest().dry_run, undefined, 'nothing has claimed a write yet');
+
+    // Everything below is offline: the CLI has no injected fetch, so nothing may reach the network.
+    Object.assign(process.env, adminEnv(), { CLAUDE_SEO_AI_OFFLINE: '1' });
+
+    // apply with no ticket: the gate refuses before any request, so the audit log must not say "apply".
+    const refused = await S.main({ _: ['apply'], run: run.dir, data: dataDir });
+    assert.equal(refused.code, 2);
+    assert.equal(refused.result.results[0].refused, 'no-ticket');
+    const events = run.readLog().map((e) => e.event);
+    assert.ok(events.includes('refused'), 'a run in which every change was refused is logged as refused: ' + events.join(','));
+    assert.ok(!events.includes('apply'), 'no apply event for a run that wrote nothing');
+    const afterRefusal = run.readManifest();
+    assert.notEqual(afterRefusal.dry_run, false, 'a refused apply does not end the dry run');
+    assert.deepEqual(afterRefusal.applied || [], [], 'nothing was applied');
+
+    // A preview that throws is recorded as failed, with the reason, and still not as a write.
+    const failed = await S.main({ _: ['preview'], run: run.dir, data: dataDir });
+    assert.equal(failed.code, 2);
+    const manifest = run.readManifest();
+    assert.deepEqual(manifest.failed, [id]);
+    assert.deepEqual(manifest.applied, []);
+    assert.equal(manifest.results[id].status, 'failed');
+    assert.equal(manifest.results[id].op, 'preview');
+    assert.match(manifest.results[id].error, /OFFLINE/i, 'the manifest keeps why it failed');
+    assert.notEqual(manifest.dry_run, false, 'a failed read-only op is not a write');
+    assert.equal(manifest.last_op.op, 'preview');
+    assert.ok(manifest.previewed_at, 'the op is timestamped');
   } finally {
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
     Object.assign(process.env, saved);

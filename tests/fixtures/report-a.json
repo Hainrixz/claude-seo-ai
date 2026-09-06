@@ -1,0 +1,178 @@
+{
+  "target": { "kind": "url", "value": "https://example.com/", "host": "example.com", "pages_analyzed": 3 },
+  "generated_at": "2026-09-01T10:00:00.000Z",
+  "run_id": "2026-09-01T10-00-00Z",
+  "plugin_version": "0.2.0",
+  "tier": 0,
+  "vertical": { "primary": "generic", "also": [], "multilingual": false, "source": "inferred" },
+  "coverage": {
+    "mode": "deterministic",
+    "modules_covered": ["M2", "M7", "M8", "M9", "M10", "M14", "M15", "M17"],
+    "modules_model_only": ["M6", "M11", "M12", "M16"]
+  },
+  "scores": {
+    "search_seo": {
+      "value": 70,
+      "raw_value": 70,
+      "band": "C",
+      "state": "scored",
+      "capped": false,
+      "cap_reasons": [],
+      "needs_api_count": 1,
+      "manual_review_count": 0,
+      "unscored_count": 1,
+      "dropped_count": 0,
+      "interpretation": "Synthetic fixture: the search axis of the reference run.",
+      "categories": [
+        { "name": "Indexability & Crawl", "weight": 22, "value": 60, "active": true, "modules": ["M1", "M2", "M3"], "activation": "always", "conditional": false, "scored": 2, "needs_api": 0, "manual_review": 0 },
+        { "name": "On-Page & Meta", "weight": 12, "value": 50, "active": true, "modules": ["M7"], "activation": "always", "conditional": false, "scored": 2, "needs_api": 0, "manual_review": 0 },
+        { "name": "Core Web Vitals / Performance", "weight": 16, "value": 0, "active": false, "modules": ["M15"], "activation": "always", "conditional": false, "scored": 0, "needs_api": 1, "manual_review": 0 },
+        { "name": "Social Cards", "weight": 2, "value": 100, "active": true, "modules": ["M8"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 }
+      ]
+    },
+    "ai_visibility": {
+      "value": 60,
+      "raw_value": 60,
+      "band": "D",
+      "state": "scored",
+      "capped": false,
+      "cap_reasons": [],
+      "needs_api_count": 0,
+      "manual_review_count": 0,
+      "unscored_count": 0,
+      "dropped_count": 0,
+      "interpretation": "Synthetic fixture: the AI axis of the reference run.",
+      "categories": [
+        { "name": "AI Crawler Access", "weight": 14, "value": 100, "active": true, "modules": ["M14"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 },
+        { "name": "Images / Multimodal", "weight": 4, "value": 40, "active": true, "modules": ["M9"], "activation": "always", "conditional": false, "scored": 1, "needs_api": 0, "manual_review": 0 }
+      ]
+    }
+  },
+  "pages": [
+    { "url": "https://example.com/a", "slug": "a--aaaa0001", "role": "target", "template": "/a|", "weight": 2, "findings_count": 3, "search": { "value": 70, "raw_value": 70, "band": "C", "state": "scored", "capped": false }, "ai": { "value": 60, "raw_value": 60, "band": "D", "state": "scored", "capped": false } },
+    { "url": "https://example.com/b", "slug": "b--aaaa0002", "role": "sample", "template": "/b|", "weight": 1, "findings_count": 1, "search": { "value": 50, "raw_value": 50, "band": "F", "state": "scored", "capped": false }, "ai": { "value": 40, "raw_value": 40, "band": "F", "state": "scored", "capped": false } }
+  ],
+  "findings": [
+    {
+      "id": "M7.title.missing",
+      "module": "M7",
+      "title": "Page has no <title>",
+      "status": "fail",
+      "severity": 4,
+      "scope": "page",
+      "location": { "url": "https://example.com/a" },
+      "evidence": { "observed": "No <title> element in the head of https://example.com/a." },
+      "expected": "Every indexable page declares one non-empty <title>.",
+      "recommendation": "Add a descriptive <title> to this template.",
+      "fixable": "auto",
+      "verification": { "method": "dom_assert", "assertion": "The document has exactly one non-empty <title>.", "reproduce": "node scripts/parse-html.mjs --url https://example.com/a" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Google documents the title as the primary source of the search result link." }
+    },
+    {
+      "id": "M7.description.too_short",
+      "module": "M7",
+      "title": "Meta description below the pass band",
+      "status": "warn",
+      "severity": 2,
+      "scope": "page",
+      "location": { "url": "https://example.com/b" },
+      "evidence": { "observed": "The meta description of https://example.com/b is 41 characters." },
+      "expected": "A meta description of 70-160 characters.",
+      "recommendation": "Extend the description so it summarises the page.",
+      "fixable": "proposed",
+      "verification": { "method": "dom_assert", "assertion": "The meta description length is inside the pass band.", "reproduce": "node scripts/parse-html.mjs --url https://example.com/b" },
+      "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "low", "rationale": "A short description is more often rewritten by the engine." }
+    },
+    {
+      "id": "M2.canonical.missing",
+      "module": "M2",
+      "title": "No rel=canonical on an indexable page",
+      "status": "fail",
+      "severity": 4,
+      "scope": "page",
+      "location": { "url": "https://example.com/c" },
+      "evidence": { "observed": "No <link rel=\"canonical\"> and no Link header on https://example.com/c." },
+      "expected": "Every indexable URL declares the canonical version of itself.",
+      "recommendation": "Add a self-referential canonical to this template.",
+      "fixable": "auto",
+      "verification": { "method": "dom_assert", "assertion": "The head carries exactly one self-referential rel=canonical.", "reproduce": "node scripts/parse-html.mjs --url https://example.com/c" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Google documents rel=canonical as its strongest canonicalisation signal." }
+    },
+    {
+      "id": "M8.og.image_missing",
+      "module": "M8",
+      "title": "og:image present",
+      "status": "pass",
+      "severity": 2,
+      "scope": "page",
+      "location": { "url": "https://example.com/d" },
+      "evidence": { "observed": "og:image resolves to https://example.com/img/card.png (1200x630)." },
+      "expected": "A reachable og:image of at least 200x200.",
+      "recommendation": "Keep the social card image reachable.",
+      "fixable": "advisory",
+      "verification": { "method": "dom_assert", "assertion": "og:image is present and resolves.", "reproduce": "node scripts/parse-html.mjs --url https://example.com/d" },
+      "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "low", "rationale": "Social cards affect click-through on shared links." }
+    },
+    {
+      "id": "M10.links.broken_internal",
+      "module": "M10",
+      "title": "Internal link returns 404",
+      "status": "warn",
+      "severity": 3,
+      "scope": "page",
+      "location": { "url": "https://example.com/e" },
+      "evidence": { "observed": "1 of 12 internal links on https://example.com/e answered 404." },
+      "expected": "Internal links resolve to 2xx URLs.",
+      "recommendation": "Repoint or remove the broken link.",
+      "fixable": "proposed",
+      "verification": { "method": "link_graph", "assertion": "Every internal link answers 2xx.", "reproduce": "node scripts/link-graph.mjs --url https://example.com/e" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Broken internal links waste crawl budget and lose link equity." }
+    },
+    {
+      "id": "M15.cwv.field_data",
+      "module": "M15",
+      "title": "Core Web Vitals field data unavailable",
+      "status": "needs_api",
+      "severity": 0,
+      "scope": "site",
+      "location": { "url": "https://example.com/a" },
+      "evidence": { "observed": "No PSI_API_KEY in the environment, so no CrUX field data was requested." },
+      "expected": "Field data for the origin from the CrUX dataset.",
+      "recommendation": "Set PSI_API_KEY and re-run to measure this.",
+      "fixable": "advisory",
+      "verification": { "method": "psi_api", "assertion": "The PSI response carries loadingExperience for the URL.", "reproduce": "PSI_API_KEY=… node scripts/psi-client.mjs --url https://example.com/a" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "low", "rationale": "Core Web Vitals are a documented ranking signal; unmeasured is not the same as passing." }
+    },
+    {
+      "id": "M17.sitemap.missing_indexable_url",
+      "module": "M17",
+      "title": "Indexable URLs missing from the sitemap",
+      "status": "fail",
+      "severity": 3,
+      "scope": "site",
+      "evidence": { "observed": "4 indexable URLs found by the crawl are absent from every sitemap." },
+      "expected": "Every indexable URL appears in a sitemap.",
+      "recommendation": "Add the missing URLs to the sitemap.",
+      "fixable": "proposed",
+      "verification": { "method": "xml_parse", "assertion": "Each indexable crawl URL appears in a sitemap <loc>.", "reproduce": "node scripts/parse-robots-sitemap.mjs --url https://example.com/" },
+      "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "medium", "rationale": "Google documents sitemaps as a discovery aid for URLs that internal linking reaches poorly." }
+    },
+    {
+      "id": "M9.images.alt_missing",
+      "module": "M9",
+      "title": "Content images without alt text",
+      "status": "fail",
+      "severity": 3,
+      "scope": "page",
+      "location": { "url": "https://example.com/only-in-a" },
+      "evidence": { "observed": "6 of 9 content images on https://example.com/only-in-a have no alt attribute." },
+      "expected": "Content images carry descriptive alt text.",
+      "recommendation": "Add alt text to the content images of this template.",
+      "fixable": "proposed",
+      "verification": { "method": "dom_assert", "assertion": "Every content <img> has an alt attribute.", "reproduce": "node scripts/parse-html.mjs --url https://example.com/only-in-a" },
+      "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "medium", "rationale": "Alt text is the documented textual description of an image for search and assistive technology." }
+    }
+  ],
+  "data_sources": { "render": "none", "psi": "needs_api", "gsc": null },
+  "warnings": []
+}

@@ -22,9 +22,10 @@
 // only — no values, ever.
 
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
-import { loadFixRun, openFixRun, requireTicket, resolveDataDir } from '../lib/adapter.mjs';
+import { loadFixRun, openFixRun, requireTicket, resolveDataDir, updateManifest } from '../lib/adapter.mjs';
 import { redactObject } from '../lib/credentials.mjs';
 import { readJson, writeText } from '../lib/store.mjs';
+import { logOpEvent, opThrew } from './_shared.mjs';
 import * as webflow from './providers/webflow.mjs';
 import * as wix from './providers/wix.mjs';
 import * as ghost from './providers/ghost.mjs';
@@ -215,6 +216,7 @@ export async function main(args = {}) {
     try { out = await mod.publish(change, ctx, options); }
     catch (e) { out = { ok: false, error: String((e && e.message) || e) }; }
     run.log({ event: 'publish', adapter: ADAPTER, provider: options.provider, ok: !!out.ok });
+    updateManifest(run, { op: 'publish', adapter: ADAPTER, changes: out.change ? [out.change] : [], wrote: !!out.ok });
     return { result: redactObject({ adapter: ADAPTER, provider: options.provider, op, run: run.id, ...out }, { env: process.env }), code: out.ok ? EXIT.OK : EXIT.RUNTIME };
   }
 
@@ -229,13 +231,13 @@ export async function main(args = {}) {
     if (op === 'apply') {
       const gate = requireTicket(dataDir, { ticket: args.ticket, run: run.id, change: change.id });
       if (!gate.ok) {
-        results.push({ change: change.id, ok: false, error: op + ' needs a valid confirmation ticket (' + gate.reason + ')' });
+        results.push({ change: change.id, ok: false, refused: gate.reason, error: op + ' needs a valid confirmation ticket (' + gate.reason + ')' });
         continue;
       }
     }
     let out;
     try { out = await runOp(op, change, ctx, options); }
-    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
+    catch (e) { out = opThrew(change, e); }
     if (out.change) updated.push(out.change);
     results.push(redactObject({
       change: change.id, provider: (change.payload && change.payload.provider) || options.provider,
@@ -248,7 +250,8 @@ export async function main(args = {}) {
     }, { env: process.env }));
   }
   persist(run, updated);
-  run.log({ event: op, adapter: ADAPTER, provider: options.provider, changes: results.length });
+  logOpEvent(run, { op, adapter: ADAPTER, results, extra: { provider: options.provider } });
+  updateManifest(run, { op, adapter: ADAPTER, changes: updated });
   const failed = results.some((r) => r.ok === false);
   return { result: { adapter: ADAPTER, provider: options.provider, op, run: run.id, run_dir: run.dir, results }, code: failed ? EXIT.RUNTIME : EXIT.OK };
 }

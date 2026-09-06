@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 Head hygiene is cheap, deterministic, and the first thing every crawler reads. Reference: `references/schema-tier1.md` for the structured-data layer that sits alongside the head (owned by M5).
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`title`, `metas[]`, `robots_meta[]`, `canonicals[]`, `word_count`) plus `headers` (`content-language`, `x-robots-tag`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`title`, `metas[]`, `robots_meta[]`, `canonicals[]`, `word_count`) plus `headers` (`content-language`, `x-robots-tag`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
@@ -27,7 +27,7 @@ Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none
 - **Never fabricate** a title, description, or `lang` — when content is too thin to derive a value, leave a clearly-marked `TODO:` placeholder for the user to fill.
 
 ## Verification
-- Method `dom_assert`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — returns `title` (value/length/ok), `meta_description` (value/length/ok), `robots_meta`, `canonical`, and `head_hygiene` (viewport/charset/lang) so each head element's presence and length is asserted directly against the snapshot. <!-- reconcile-flags-v0.2 -->
+- Method `dom_assert`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — returns `title` (value/length/ok), `meta_description` (value/length/ok), `robots_meta`, `canonical`, and `head_hygiene` (viewport/charset/lang) so each head element's presence and length is asserted directly against the snapshot.
 - Duplicate-title/description checks need the full crawl set; when only a single page is available the cross-URL assertion is reported `needs_api`, **never** a false `pass`.
 
 ## Findings

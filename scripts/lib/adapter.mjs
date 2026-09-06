@@ -375,16 +375,37 @@ function uniqueRunId(dataDir, now) {
   return candidate;
 }
 
+const looksLikePath = (raw) => raw.includes('/') || raw.includes(sep) || raw === '.' || raw === '..' || isAbsolute(raw);
+
 /**
- * Reopen an existing run from its directory (what adapters get as `--run <fix-run-dir>`).
- * The data dir is derived from the layout (<DATA>/fix/runs/<id>) unless `dataDir` is given.
+ * Reopen an existing run. `ref` is either a directory (what adapters get as `--run <fix-run-dir>`)
+ * or the bare run id that fix-plan prints — resolved under <DATA>/fix/runs/<id>, so the two forms
+ * the fix flow hands around are interchangeable.
+ *
+ * The data dir is derived from the layout (<DATA>/fix/runs/<id>) unless `dataDir` is given; an id
+ * without a `dataDir` falls back to the usual resolution ($CLAUDE_SEO_AI_HOME > … > ~/.claude-seo-ai).
  */
-export function loadFixRun(runDir, { dataDir = null } = {}) {
-  const dir = resolve(runDir);
-  if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error('fix run directory not found: ' + dir);
-  const id = dir.split(sep).filter(Boolean).pop();
-  const base = dataDir ? resolve(dataDir) : resolve(dir, '..', '..', '..');
-  return fixRunHandle(dir, base, id);
+export function loadFixRun(ref, { dataDir = null } = {}) {
+  const raw = String(ref == null ? '' : ref).trim();
+  if (!raw) throw new Error('loadFixRun needs a fix run id or directory');
+  const tried = [];
+  if (!looksLikePath(raw)) {
+    const base = resolve(dataDir || resolveDataDir({}));
+    let byId = null;
+    try { byId = fixRunDir(base, raw); } catch { /* not a usable run id — fall through to the path form */ }
+    if (byId) {
+      if (existsSync(byId) && statSync(byId).isDirectory()) return fixRunHandle(byId, base, byId.split(sep).filter(Boolean).pop());
+      tried.push(byId);
+    }
+  }
+  const dir = resolve(raw);
+  if (existsSync(dir) && statSync(dir).isDirectory()) {
+    const id = dir.split(sep).filter(Boolean).pop();
+    const base = dataDir ? resolve(dataDir) : resolve(dir, '..', '..', '..');
+    return fixRunHandle(dir, base, id);
+  }
+  tried.push(dir);
+  throw new Error('fix run not found: ' + raw + ' (looked in ' + tried.join(', ') + ')');
 }
 
 /** Every run id under <DATA>/fix/runs, newest first. */
@@ -392,6 +413,72 @@ export function listFixRuns(dataDir) {
   const dir = join(fixRoot(dataDir), 'runs');
   try { return readdirSync(dir).filter((n) => { try { return statSync(join(dir, n)).isDirectory(); } catch { return false; } }).sort().reverse(); }
   catch { return []; }
+}
+
+// ---------------------------------------------------------------------------
+// Manifest bookkeeping
+
+/** Ops that touch the site (or a staging copy of it): after one of these the run is no longer a dry run. */
+export const WRITE_OPS = Object.freeze(['apply', 'publish', 'rollback']);
+
+/** Statuses that mean the write actually landed. */
+const APPLIED_STATUSES = new Set(['applied', 'verified', 'pending_cache']);
+
+/** manifest key that records when an op last ran. */
+const OP_TIMESTAMP_KEY = Object.freeze({
+  plan: 'planned_at', preview: 'previewed_at', apply: 'applied_at',
+  verify: 'verified_at', rollback: 'rolled_back_at', publish: 'published_at',
+});
+
+/**
+ * Record the outcome of one adapter op in manifest.json — the single place every adapter's
+ * apply/rollback/publish reports through, so the manifest never keeps claiming `dry_run: true`
+ * after something was written.
+ *
+ * What it maintains: `dry_run` (false once a write op actually landed), the `applied` /
+ * `rolled_back` / `failed` id lists, a per-change `results` map ({status, op, adapter, at, error})
+ * and `last_op` + a `<op>_at` timestamp.
+ *
+ * `wrote` overrides the derivation for ops with no changes of their own (a theme `publish`).
+ * Nothing is invented: a change only enters `applied` when its own status says so.
+ *
+ * @param {object|null} run     fix-run handle (openFixRun/loadFixRun); null is a no-op
+ * @param {object} outcome { op, adapter, changes: [{id,status,error}], wrote, now }
+ * @returns {object|null} the manifest as written
+ */
+export function updateManifest(run, { op, adapter = null, changes = [], wrote = undefined, now = new Date() } = {}) {
+  if (!run || typeof run.updateManifest !== 'function') return null;
+  const opName = String(op || '').trim() || 'op';
+  const list = Array.isArray(changes) ? changes.filter((c) => c && c.id) : [];
+  const at = (now instanceof Date ? now : new Date(now)).toISOString();
+  const landed = list.some((c) => APPLIED_STATUSES.has(c.status) || c.status === 'rolled_back');
+  const touched = wrote === undefined ? (WRITE_OPS.includes(opName) && landed) : !!wrote;
+
+  return run.updateManifest((m) => {
+    const next = { ...m };
+    if (touched) next.dry_run = false;
+    const applied = new Set(Array.isArray(next.applied) ? next.applied : []);
+    const rolledBack = new Set(Array.isArray(next.rolled_back) ? next.rolled_back : []);
+    const failed = new Set(Array.isArray(next.failed) ? next.failed : []);
+    const results = { ...(next.results && typeof next.results === 'object' ? next.results : {}) };
+    for (const c of list) {
+      const id = String(c.id);
+      if (APPLIED_STATUSES.has(c.status)) { applied.add(id); rolledBack.delete(id); failed.delete(id); }
+      else if (c.status === 'rolled_back') { rolledBack.add(id); applied.delete(id); }
+      else if (c.status === 'failed') { failed.add(id); applied.delete(id); }
+      results[id] = {
+        status: c.status || null, op: opName, adapter: adapter || c.adapter || null, at,
+        ...(c.error ? { error: String(c.error) } : {}),
+      };
+    }
+    next.applied = [...applied];
+    next.rolled_back = [...rolledBack];
+    next.failed = [...failed];
+    next.results = results;
+    next.last_op = { op: opName, adapter, at, changes: list.length, wrote: touched };
+    next[OP_TIMESTAMP_KEY[opName] || opName + '_at'] = at;
+    return next;
+  });
 }
 
 // ---------------------------------------------------------------------------

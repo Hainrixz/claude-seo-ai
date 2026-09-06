@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 A clean, single-rooted heading tree and proper semantic landmarks make a page's outline machine-readable — the same structure that AI engines use to extract answer blocks and that search engines use to understand content scope. Schema/entity context: `references/schema-tier1.md`.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`headings[]` with `region`, `landmarks`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`headings[]` with `region`, `landmarks`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
@@ -30,7 +30,7 @@ Mark each finding's `fixable` field consistent with `schema/finding.schema.json`
 
 ## Verification
 - Method: `dom_assert`. Re-parse the snapshot, rebuild the outline, and assert the specific condition (one H1, no level skip, landmark present).
-- Offline reproduce: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — returns the `headings` block (`counts` per level, `h1_count`, and `skipped_levels`), which counts H1s and walks the H1-H6 tree for skipped levels. <!-- reconcile-flags-v0.2 -->
+- Offline reproduce: `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-html.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>` / `--file <path>`) — returns the `headings` block (`counts` per level, `h1_count`, and `skipped_levels`), which counts H1s and walks the H1-H6 tree for skipped levels.
 - When the rendered DOM tier is required but unavailable (heading injected client-side and only `raw_html_path` is present), status is `needs_api`, never a false `pass`.
 
 ## Findings

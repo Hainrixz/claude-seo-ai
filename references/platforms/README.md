@@ -2,7 +2,7 @@
 
 One card per detected id (`references/platforms/<id>.md`). `scripts/detect-platform.mjs` names the
 cards it wants in `profile.cards[]`; the orchestrator passes those paths to every subagent as
-`PLATFORM_CARDS`. A card is the only place a subagent may learn what the platform generates by
+`platform_cards`. A card is the only place a subagent may learn what the platform generates by
 itself, what it refuses to let anyone change, and how a fix would actually be written.
 
 Cards are **read by agents**, not by users. Keep them short, imperative and specific. A sentence

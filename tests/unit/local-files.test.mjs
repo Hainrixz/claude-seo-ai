@@ -330,9 +330,13 @@ test('CLI: plan writes the run, apply refuses without a ticket and works with on
     assert.ok(!readFileSync(join(project, 'about', 'index.html'), 'utf8').includes('name="description"'));
 
     const log = A.loadFixRun(runDir).readLog().map((e) => e.event);
-    // every op is logged once by the CLI; apply/rollback log again from inside when they act,
-    // and the refused apply still leaves its attempt in the audit log
-    assert.deepEqual(log, ['plan', 'apply', 'apply', 'apply', 'verify', 'rollback', 'rollback']);
+    // every op is logged once by the CLI; apply/rollback log again from inside when they act.
+    // The apply that was refused for want of a ticket wrote nothing, so it is logged as `refused`
+    // — an `apply` line there would put a write in the audit trail that never happened.
+    assert.deepEqual(log, ['plan', 'refused', 'apply', 'apply', 'verify', 'rollback', 'rollback']);
+    const refusedEvent = A.loadFixRun(runDir).readLog().find((e) => e.event === 'refused');
+    assert.equal(refusedEvent.op, 'apply');
+    assert.equal(refusedEvent.reason, 'no-ticket', 'the audit log says why it was refused');
   } finally { cleanup(); }
 });
 

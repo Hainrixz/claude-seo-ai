@@ -2,7 +2,7 @@
 name: fix
 description: Opt-in fixer (the /claude-seo-ai:fix command). Applies the safe, deterministic SEO/AI-search fixes from a persisted audit to the user's site — meta viewport/charset/lang, JSON-LD, robots.txt AI directives, hreflang, sitemaps, OG/Twitter cards, image dimensions, canonical, AI discovery files — through the adapter that matches the platform (local files, Shopify theme/Admin, WordPress REST/WP-CLI, page APIs, or step-by-step instructions). Dry-run preview by default; writes only after explicit per-change confirmation. Runs only when the user invokes it — never auto-triggered.
 disable-model-invocation: true
-argument-hint: "<url|path> [--target auto|local|shopify-theme|shopify-admin|wordpress-rest|wordpress-wpcli|page-api|instructions] [--category schema|meta|robots|sitemap|hreflang|alt|canonical|social|ai-discovery] [--include-proposed] [--store <shop>] [--theme <id>] [--site <id>] [--wp-url <u>] [--ssh user@host:/path] [--project <dir>] [--dev-url <u>] [--run <run_id|latest>] [--report <path>] [--lang en|es] [--dry-run] [--publish] [--rollback <run_id>] [--force]"
+argument-hint: "<url|path> [--target auto|local|shopify|shopify-theme|shopify-admin|wordpress|wordpress-rest|wordpress-wpcli|page-api|webflow|wix|ghost|hubspot|bigcommerce|instructions] [--category M5 --category auto] [--include-proposed] [--store <shop>] [--provider <webflow|wix|ghost|hubspot|bigcommerce>] [--site <id>] [--wp-url <u>] [--ssh user@host:/path] [--project <dir>] [--dev-url <u>] [--run <run_id|latest>] [--report <path>] [--lang en|es] [--dry-run] [--publish] [--rollback <run_id>] [--force]"
 allowed-tools: Read, Grep, Glob, Bash, Agent
 ---
 
@@ -10,9 +10,16 @@ allowed-tools: Read, Grep, Glob, Bash, Agent
 
 `disable-model-invocation: true` means the model can **never** trigger this on its own — only the
 user running `/claude-seo-ai:fix`. Writes happen only through the **seo-fixer-writer** subagent (the
-one agent with Write/Edit) and only after explicit confirmation. `--category` takes a pipe list
-(`schema|meta|robots|sitemap|hreflang|alt|canonical|social|ai-discovery`; `llms` is an alias of
-`ai-discovery`).
+one agent with Write/Edit) and only after explicit confirmation.
+
+`--category` filters the report's findings and matches on a finding's **module id** (`M5`, `M7`, `M17`, …),
+its **axis** (`search`, `ai`, or `both` — which matches both of the other two), its **fixable class**
+(`auto`, `proposed`, `advisory`), or its **scope** (`page`, `site`, …), case-insensitively. It is **not**
+a topic vocabulary and it does **not** split on commas: repeat the flag to widen the filter
+(`--category M5 --category M17`). Translate what the user asks for into those words — "fix my schema"
+is `--category M5`, "just the safe ones" is `--category auto` — and say which filter you applied.
+`--target` accepts the adapter ids plus the aliases `local`, `shopify`, `wordpress`, `manual`, and the
+provider names `webflow`/`wix`/`ghost`/`hubspot`/`bigcommerce` (each expands to `page-api`).
 
 Two absolutes, before anything else:
 - **Never fix from memory.** Every change comes from a persisted `report.json` on disk. If there is

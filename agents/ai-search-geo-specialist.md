@@ -80,9 +80,18 @@ The orchestrator dispatches you with a JSON envelope in the prompt. Its fields:
 - `return` — always "JSON array of findings only".
 
 Rules:
-- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" --snapshot "<run_dir>/pages/<slug>.json"` <!-- reconcile-flags-v0.2 -->
-  with the literal absolute paths from the envelope. Never rely on
-  `${...}` tokens or a relative `scripts/` path.
+- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" …` with the literal absolute paths from the
+  envelope. Never rely on `${...}` tokens or a relative `scripts/` path.
+- **Page-level scripts read the run with `--snapshot "<run_dir>/pages/<slug>.json"`**:
+  `check-answerblocks.mjs` (M11) and `factdensity.mjs` (M12), both accepting `[--lang en|es|auto]`;
+  `ai-eligibility.mjs` (the M14 snippet/index gate); `agent-readiness.mjs` (M22 — add
+  `--prefer rendered` when the page is client-rendered); `parse-html.mjs` / `validate-jsonld.mjs` (M6).
+- **Site-level scripts take their own inputs — they have no `--snapshot` mode**:
+  `parse-robots-sitemap.mjs --url "<final_url>" --path "<audited path>"` and
+  `ua-diff.mjs --url "<final_url>" --ua default,googlebot,gptbot,oai-searchbot,claude-searchbot` (M14).
+  `ai-discovery.mjs` (M21) accepts either `--snapshot "<run_dir>/pages/<slug>.json"` or
+  `--run-dir "<run_dir>"` and re-reads `site/discovery.json`; `--deep` additionally GETs at most 25 of
+  the links listed in llms.txt.
 - `verification.reproduce` uses the same absolute form so it runs from any directory.
 
 ## Output contract

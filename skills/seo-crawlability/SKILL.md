@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 Crawl access is the precondition for every other search signal: if Googlebot/Bingbot can't fetch the page and its assets, nothing else ranks. This module covers general-purpose crawl access only. AI-specific bot directives (GPTBot, Claude-SearchBot, etc.) live in `seo-ai-crawlers` (M14) and AI discovery files (`llms.txt`, `agents.md`, UCP) in `seo-ai-discovery` (M21); see `references/ai-crawlers.md` for that boundary.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` plus `status_chain` and `headers`, and the parsed robots file in `<run_dir>/site/robots.json` (syntax, groups, Googlebot/Bingbot verdicts for the audited URL, `Sitemap:` lines); Grep `pages/<slug>.html` for verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` plus `status_chain` and `headers`, and the parsed robots file in `<run_dir>/site/robots.json` (syntax, groups, Googlebot/Bingbot verdicts for the audited URL, `Sitemap:` lines); Grep `pages/<slug>.html` for verbatim evidence. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`) plus `site/robots.json`:
@@ -29,7 +29,7 @@ Generated edits are a diff for `fix`, mapped to the schema `fixable` field:
 Never fabricate a sitemap URL or path: if the canonical sitemap location is unknown, emit a clearly-marked `TODO` placeholder for the user to fill, or ask.
 
 ## Verification
-- `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --url <final_url> --path <audited path>` — fetches and parses `/robots.txt`, resolves the effective allow/deny for `Googlebot`/`Bingbot` **against the audited path** (not the root), and checks for the `Sitemap:` directive (method `robots_parse`). Use `--robots <robots_url>` or `--file <path>` for an offline robots file. <!-- reconcile-flags-v0.2 -->
+- `node "${CLAUDE_PLUGIN_ROOT}/scripts/parse-robots-sitemap.mjs" --url <final_url> --path <audited path>` — fetches and parses `/robots.txt`, resolves the effective allow/deny for `Googlebot`/`Bingbot` **against the audited path** (not the root), and checks for the `Sitemap:` directive (method `robots_parse`). Use `--robots <robots_url>` or `--file <path>` for an offline robots file.
 - When `/robots.txt` cannot be fetched (network/auth/edge block) the status is `needs_api`, never a false `pass`.
 
 ## Findings

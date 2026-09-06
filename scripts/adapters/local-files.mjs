@@ -24,6 +24,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
 import {
   canTransition, ensureConfirmed, loadFixRun, makeChange, openFixRun, requireTicket, resolveDataDir, transition,
+  updateManifest,
 } from '../lib/adapter.mjs';
 import { AUTO_STRATEGIES, classFor, normalizePath, resolveRoute, scanProject } from '../lib/route-map.mjs';
 import { DEFAULT_MARKER, applyInsertAt, hasMarker, insertInHead, unifiedDiff } from '../lib/diff.mjs';
@@ -31,6 +32,7 @@ import { mergeFrontmatter, parseFrontmatter } from '../lib/frontmatter.mjs';
 import { readJson, writeJson, writeText } from '../lib/store.mjs';
 import { resolveFetch } from '../lib/http.mjs';
 import { reproduceCommand } from '../lib/finding.mjs';
+import { logOpEvent, matchesCategory, opThrew, withheldProposedNote } from './_shared.mjs';
 
 export const ADAPTER = 'local-files';
 const OPS = ['capabilities', 'plan', 'preview', 'apply', 'verify', 'rollback'];
@@ -114,22 +116,11 @@ export function strategyForFile(relPath) {
 const ROBOTS_RE = /robots/i;
 const SITEMAP_RE = /sitemap/i;
 
-/** Does this finding match the requested `--category` (module id, axis, or 'auto'/'proposed')? */
-export function matchesCategory(finding, category) {
-  if (!category) return true;
-  const wanted = (Array.isArray(category) ? category : [category]).map((c) => String(c).toLowerCase().trim()).filter(Boolean);
-  if (!wanted.length) return true;
-  const axis = finding.expected_impact && finding.expected_impact.axis ? String(finding.expected_impact.axis) : '';
-  const values = new Set([
-    String(finding.module || '').toLowerCase(),
-    String(finding.id || '').split('.')[0].toLowerCase(),
-    axis.toLowerCase(),
-    String(finding.fixable || '').toLowerCase(),
-    String(finding.scope || '').toLowerCase(),
-  ]);
-  if (axis === 'both') { values.add('search'); values.add('ai'); }
-  return wanted.some((w) => values.has(w));
-}
+// One home for the `--category` predicate: it lives in _shared.mjs (the adapters' shared plumbing)
+// and is re-exported here because every file adapter already imports its finding helpers from this
+// module. Two copies of it drifting apart would mean `--category M7` selecting different findings
+// depending on which adapter ran.
+export { matchesCategory };
 
 /** Findings a file-writing adapter may act on at all. */
 export function fixableFindings(findings, { includeProposed = false, category = null } = {}) {
@@ -290,6 +281,8 @@ export async function plan(options = {}, ctx = {}) {
   const notes = [];
 
   const answers = normalizeAnswers(options.answers);
+  const withheld = withheldProposedNote(findings, { includeProposed: options.includeProposed === true, category: options.category });
+  if (withheld) notes.push(withheld);
   for (const finding of fixableFindings(findings, { includeProposed: options.includeProposed, category: options.category })) {
     const answer = answers[finding.id];
     const preview = parseFixPreview(finding.fix_preview || answer || '');
@@ -633,19 +626,20 @@ export async function main(args = {}) {
     if (op === 'apply') {
       const gate = requireTicket(dataDir, { ticket: args.ticket, run: run.id, change: change.id });
       if (!gate.ok) {
-        results.push({ change: change.id, ok: false, error: 'apply needs a valid confirmation ticket (' + gate.reason + ')' });
+        results.push({ change: change.id, ok: false, refused: gate.reason, error: 'apply needs a valid confirmation ticket (' + gate.reason + ')' });
         continue;
       }
     }
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
+    catch (e) { out = opThrew(change, e); }
     if (out.change) updated.push(out.change);
     results.push({ change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok, ...(out.error ? { error: out.error } : {}), ...(out.checks ? { checks: out.checks } : {}), ...(out.reason ? { reason: out.reason } : {}), ...(out.note ? { note: out.note } : {}), ...(out.drifted ? { drifted: true } : {}) });
   }
   persist(run, updated);
-  run.log({ event: op, adapter: ADAPTER, changes: results.length });
+  logOpEvent(run, { op, adapter: ADAPTER, results });
+  updateManifest(run, { op, adapter: ADAPTER, changes: updated });
   const failed = results.some((r) => r.ok === false);
   return { result: { adapter: ADAPTER, op, run: run.id, run_dir: run.dir, results }, code: failed ? EXIT.RUNTIME : EXIT.OK };
 }

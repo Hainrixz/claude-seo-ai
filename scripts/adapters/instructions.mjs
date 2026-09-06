@@ -16,9 +16,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
-import { canTransition, changeId, ensureConfirmed, loadFixRun, makeChange, openFixRun, resolveDataDir, transition } from '../lib/adapter.mjs';
+import {
+  canTransition, changeId, ensureConfirmed, loadFixRun, makeChange, openFixRun, resolveDataDir, transition,
+  updateManifest,
+} from '../lib/adapter.mjs';
 import { PLUGIN_ROOT, reproduceCommand } from '../lib/finding.mjs';
 import { readJson, writeText } from '../lib/store.mjs';
+import { logOpEvent, opThrew } from './_shared.mjs';
 
 export const ADAPTER = 'instructions';
 const OPS = ['capabilities', 'plan', 'preview', 'apply', 'verify', 'rollback'];
@@ -381,13 +385,15 @@ export async function main(args = {}) {
   for (const change of changes) {
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
+    catch (e) { out = opThrew(change, e); }
     if (out.change) updated.push(out.change);
     results.push({ change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok, ...(out.note ? { note: out.note } : {}), ...(out.error ? { error: out.error } : {}), ...(out.reason ? { reason: out.reason } : {}) });
   }
   const byId = new Map(updated.map((c) => [c.id, c]));
   run.setChanges((planFile.changes || []).map((c) => (byId.has(c.id) ? byId.get(c.id) : c)));
-  run.log({ event: op, adapter: ADAPTER, changes: results.length });
+  logOpEvent(run, { op, adapter: ADAPTER, results });
+  // this adapter writes nothing: a finished instruction never turns the run into a live one
+  updateManifest(run, { op, adapter: ADAPTER, changes: updated, wrote: false });
   return { result: { adapter: ADAPTER, op, run: run.id, run_dir: run.dir, results }, code: results.some((r) => r.ok === false && r.error) ? EXIT.RUNTIME : EXIT.OK };
 }
 

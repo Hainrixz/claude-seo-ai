@@ -9,7 +9,7 @@ allowed-tools: Read, Grep, Glob, WebFetch, Bash
 Structured data is the single highest-leverage signal for both classic rich results and AI citation. Reference: `references/schema-tier1.md`. Templates: `schema/jsonld-templates/`.
 
 ## Inputs
-Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `microdata_items`, `headings[]`, `images[]`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path. <!-- reconcile-flags-v0.2 -->
+Work from the PageSnapshot named in your dispatch envelope: read `parsed` from `<run_dir>/pages/<slug>.json` (`jsonld[]`, `microdata_items`, `headings[]`, `images[]`); Grep `pages/<slug>.html` for verbatim evidence; site artifacts live in `<run_dir>/site/{robots.json,sitemaps.json,discovery.json}`. Deterministic findings already emitted by `audit.mjs` are listed in `<run_dir>/findings.deterministic.json` — do not re-emit those ids; add model-judged findings only. If invoked directly with a URL/path and no snapshot exists, first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/snapshot.mjs" <target> --out "${CLAUDE_PLUGIN_DATA}/runs"` and use the printed snapshot path.
 
 ## Audits
 Working from the PageSnapshot (`parsed_rendered` when `render.used` is not `none`, else `parsed`):
@@ -30,7 +30,7 @@ Generate complete, valid JSON-LD blocks **inferred from page content** for any m
 Use a single `@graph` with stable `@id`s. Inject missing `dateModified`/`@id`. The block is a diff for `fix` (AUTO). **Never invent** prices, dates, ratings, or `sameAs` identity links — ask or leave a clearly-marked TODO placeholder the user fills.
 
 ## Verification
-- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-jsonld.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — checks JSON validity + required properties against the templates. <!-- reconcile-flags-v0.2 -->
+- Offline: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-jsonld.mjs" --snapshot <pages/<slug>.json>` (or `--url <u>`) — checks JSON validity + required properties against the templates.
 - Tier 1: confirm eligibility with Google Rich Results Test / schema.org validator. When unavailable, status is `needs_api`, not `pass`.
 
 ## Findings

@@ -20,7 +20,7 @@ Turns findings (conforming to `schema/finding.schema.json`) into the two scores.
 7. M21 (AI discovery & agent endpoints — llms.txt, agents.md, UCP, agentic sitemap) weight is 0 — report it, never let it move the AI score.
 
 ## Determinism
-Prefer `node "${CLAUDE_PLUGIN_ROOT}/scripts/score.mjs" --run latest` (or `--run <run-dir>` / `--run latest:<host>` / `--findings <path>`, with `--vertical a,b --multilingual` when scoring a bare findings file) so the number is reproducible and CI-checkable; if Node is unavailable, compute by hand following the same formula and note the fallback. <!-- reconcile-flags-v0.2 --> Either way the math must match `references/scoring-model.md`.
+Prefer `node "${CLAUDE_PLUGIN_ROOT}/scripts/score.mjs" --run <run-dir>` (it reads `<run-dir>/findings.json`) or `--findings <path>` for a bare findings file, adding `--vertical a,b`, `--multilingual` and `--environment production|preview|staging|local` when the file carries no run context, so the number is reproducible and CI-checkable. `--run` takes a path, never the word `latest`: the `score` command resolves `latest[:host]` from `<root>/<host>/latest.json` first and passes the directory. If Node is unavailable, compute by hand following the same formula and note the fallback. Either way the math must match `references/scoring-model.md`.
 
 ## Output
 ```json

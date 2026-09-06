@@ -7,6 +7,10 @@
 // needs no credentials: a missing token downgrades a target to `instructions`, it never fails the
 // run and it is never silently dropped from the summary.
 //
+// Nothing is dropped quietly either: `coverage` (in the result, in plan.json and in the printed
+// summary) accounts for every finding in the report — considered, planned auto, planned proposed,
+// held back for want of --include-proposed (with the ids), advisory, and the ones no adapter owns.
+//
 // Target selection (plan 3g step 3): an explicit --targets wins; otherwise the profile's
 // write_targets decide — a local project gets `local-files`, Shopify gets theme + admin, WordPress
 // gets REST when its credentials are present and WP-CLI when only --ssh/WP_SSH is, hosted builders
@@ -25,6 +29,9 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { EXIT, isMain, runCli } from './lib/util.mjs';
 import { fixRunDir, loadFixRun, openFixRun, resolveDataDirInfo } from './lib/adapter.mjs';
+// Not an adapter (it is the adapters' shared plumbing), so it is imported statically: the same
+// predicate must decide what `--category` means here and inside every adapter.
+import { matchesCategory } from './adapters/_shared.mjs';
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -146,6 +153,158 @@ export async function loadAdapter(adapter, { scriptsDir = SCRIPTS_DIR } = {}) {
 const previewExt = (kind) => (kind === 'diff' ? '.diff' : kind === 'payload' ? '.json' : kind === 'command' ? '.sh' : '.md');
 const badge = (impact) => (impact === 'live' ? '[LIVE]' : impact === 'staged' ? '[staged]' : '[none]');
 
+// ---------------------------------------------------------------------------
+// Coverage accounting
+//
+// The gap this closes: without --include-proposed every adapter silently drops every
+// `fixable: 'proposed'` finding, so a plan could print "2 changes" over a report of 30 findings and
+// say nothing about the other 28. Every finding in the report now lands in exactly one bucket, and
+// the plan says which.
+
+/** Ids the fix flow can act on at all: a failing or warning finding with a fixable class. */
+export const ACTIONABLE_STATUSES = Object.freeze(['fail', 'warn']);
+
+const idsOf = (list) => [...new Set(list.map((f) => String((f && f.id) || f)).filter(Boolean))];
+
+/**
+ * Bucket a report's findings before any adapter sees them.
+ * @returns {{actionable, considered, withheld_proposed, advisory, considered_ids:Set<string>}}
+ *   actionable        — fail/warn findings that pass --category
+ *   considered        — the ones actually handed to the adapters (proposed only with the flag)
+ *   withheld_proposed — proposed findings kept back because --include-proposed was not passed
+ *   advisory          — `fixable: 'advisory'`: never written by this tool, by design
+ */
+export function classifyFindings(findings, { category = null, includeProposed = false } = {}) {
+  const actionable = (Array.isArray(findings) ? findings : []).filter(
+    (f) => f && typeof f === 'object' && ACTIONABLE_STATUSES.includes(f.status) && matchesCategory(f, category),
+  );
+  const advisory = actionable.filter((f) => f.fixable === 'advisory');
+  const proposed = actionable.filter((f) => f.fixable === 'proposed');
+  const considered = actionable.filter((f) => f.fixable === 'auto' || (includeProposed && f.fixable === 'proposed'));
+  return {
+    actionable,
+    considered,
+    withheld_proposed: includeProposed ? [] : proposed,
+    advisory,
+    considered_ids: new Set(idsOf(considered)),
+  };
+}
+
+/** Distinct finding ids a list of changes claims, split by change class. */
+function claimedBy(changes) {
+  const auto = new Set();
+  const proposed = new Set();
+  for (const c of changes || []) {
+    for (const id of c.finding_ids || []) (c.class === 'auto' ? auto : proposed).add(String(id));
+  }
+  return { auto: [...auto], proposed: [...proposed], all: new Set([...auto, ...proposed]) };
+}
+
+export const INCLUDE_PROPOSED_HINT = 're-run with --include-proposed to plan them (each one still needs your yes before it is written)';
+
+/**
+ * Per-adapter and run-level coverage: what was considered, what was planned, and what was not —
+ * with the reason. Called after every adapter has planned.
+ *
+ * Two pools, because they are not the same thing: a WRITE adapter may only act on a fixable
+ * (`auto`, or `proposed` with the flag) finding, while `instructions` renders any actionable one,
+ * advisory included — that is precisely what advisory means. So `considered` is the union of what
+ * the adapters in this run were actually handed and could act on, which keeps
+ * `planned ⊆ considered` true and makes `unroutable = considered − planned` mean something.
+ *
+ * @param {object} args { findings, category, includeProposed, groups }
+ *   groups: [{ adapter, available, changes, skipped, handed }] where `handed` is the finding list
+ *           the adapter was given (instructions gets a reduced one when it is the fallback).
+ */
+export function buildCoverage({ findings = [], category = null, includeProposed = false, groups = [] } = {}) {
+  const buckets = classifyFindings(findings, { category, includeProposed });
+  const withheldIds = new Set(idsOf(buckets.withheld_proposed));
+  const advisoryIds = new Set(idsOf(buckets.advisory));
+  const actionableIds = new Set(idsOf(buckets.actionable));
+
+  const by_adapter = {};
+  const plannedAuto = new Set();
+  const plannedProposed = new Set();
+  const consideredIds = new Set();
+  for (const group of groups) {
+    const handedIds = idsOf(group.handed || findings);
+    const claimed = claimedBy(group.changes);
+    for (const id of claimed.auto) plannedAuto.add(id);
+    for (const id of claimed.proposed) plannedProposed.add(id);
+    // `instructions` writes nothing, so nothing is out of its reach but a withheld proposed item.
+    const reach = group.adapter === 'instructions'
+      ? handedIds.filter((id) => actionableIds.has(id) && !withheldIds.has(id))
+      : handedIds.filter((id) => buckets.considered_ids.has(id));
+    for (const id of reach) consideredIds.add(id);
+    by_adapter[group.adapter] = {
+      considered: reach.length,
+      planned: claimed.all.size,
+      planned_auto: claimed.auto.length,
+      planned_proposed: claimed.proposed.length,
+      skipped: (group.skipped || []).length,
+      // Withheld before this adapter ever saw them, so it could not have planned them.
+      withheld_proposed: handedIds.filter((id) => withheldIds.has(id)).length,
+      available: group.available !== false,
+    };
+  }
+
+  const planned = new Set([...plannedAuto, ...plannedProposed]);
+  const unroutable = buckets.actionable.filter((f) => consideredIds.has(String(f.id)) && !planned.has(String(f.id)));
+  const advisoryRendered = buckets.advisory.filter((f) => planned.has(String(f.id)));
+
+  return {
+    findings: Array.isArray(findings) ? findings.length : 0,
+    actionable: buckets.actionable.length,
+    considered: consideredIds.size,
+    writable: buckets.considered.length,
+    include_proposed: !!includeProposed,
+    planned: planned.size,
+    planned_auto: plannedAuto.size,
+    planned_proposed: plannedProposed.size,
+    skipped_proposed: {
+      count: buckets.withheld_proposed.length,
+      ids: idsOf(buckets.withheld_proposed),
+      hint: buckets.withheld_proposed.length ? INCLUDE_PROPOSED_HINT : null,
+    },
+    advisory: {
+      count: buckets.advisory.length,
+      ids: [...advisoryIds],
+      rendered_as_instructions: idsOf(advisoryRendered),
+      note: 'advisory findings are never written by this tool; a person decides what to do with them',
+    },
+    unroutable: {
+      count: unroutable.length,
+      ids: idsOf(unroutable),
+      note: unroutable.length ? 'no adapter available for this profile owns these findings — they stay in the report, unplanned' : null,
+    },
+    by_adapter,
+  };
+}
+
+/** The coverage block the dry-run summary prints. */
+export function renderCoverage(coverage) {
+  if (!coverage) return [];
+  const L = [];
+  L.push('coverage: ' + coverage.actionable + ' actionable finding(s) in the report · ' + coverage.considered +
+    ' reached an adapter · ' + coverage.planned + ' planned (' + coverage.planned_auto + ' auto, ' +
+    coverage.planned_proposed + ' proposed).');
+  const sp = coverage.skipped_proposed;
+  if (sp && sp.count) {
+    L.push('  held back as proposed (' + sp.count + '): ' + sp.ids.join(', '));
+    L.push('  → ' + sp.hint);
+  }
+  if (coverage.advisory && coverage.advisory.count) {
+    const rendered = coverage.advisory.rendered_as_instructions || [];
+    L.push('  advisory, never written (' + coverage.advisory.count + '): ' + coverage.advisory.ids.join(', ') +
+      (rendered.length ? ' — ' + rendered.length + ' of them rendered as an instruction card' : ''));
+  }
+  if (coverage.unroutable && coverage.unroutable.count) {
+    L.push('  no adapter for this profile (' + coverage.unroutable.count + '): ' + coverage.unroutable.ids.join(', '));
+    L.push('  → ' + coverage.unroutable.note);
+  }
+  return L;
+}
+
 /** The grouped dry-run summary the `fix` skill prints. Text, because a plan is read by a human. */
 export function renderSummary(result) {
   const L = [];
@@ -168,6 +327,12 @@ export function renderSummary(result) {
       L.push('    ' + c.id + '  ' + String(c.class).padEnd(8) + ' ' + badge(c.live_impact).padEnd(8) + ' ' +
         String(c.target && c.target.locator ? c.target.locator : '-') + '   ' + (c.finding_ids || []).join(', '));
     }
+    const cov = result.coverage && result.coverage.by_adapter ? result.coverage.by_adapter[group.adapter] : null;
+    if (cov) {
+      L.push('    coverage: ' + cov.considered + ' considered here · ' + cov.planned + ' planned (' +
+        cov.planned_auto + ' auto, ' + cov.planned_proposed + ' proposed) · ' + cov.skipped + ' skipped by the adapter' +
+        (cov.withheld_proposed ? ' · ' + cov.withheld_proposed + ' held back as proposed' : ''));
+    }
     for (const s of group.skipped || []) L.push('    skipped ' + (s.finding || s.id || '?') + ': ' + (s.reason || ''));
     for (const n of group.notes || []) L.push('    note: ' + n);
     L.push('');
@@ -178,6 +343,7 @@ export function renderSummary(result) {
   L.push('');
   L.push(result.changes_count + ' change(s): ' + result.auto_count + ' auto, ' + result.proposed_count + ' proposed · ' +
     staged + ' staged, ' + live + ' live-impact.');
+  for (const line of renderCoverage(result.coverage)) L.push(line);
   L.push('Nothing here is applied: preview each change, confirm it, and only then does /claude-seo-ai:fix issue a ticket and dispatch seo-fixer-writer.');
   return L.join('\n');
 }
@@ -245,6 +411,7 @@ export async function main(args) {
   const all = [];
   const failures = [];
   const notes = [...selection.notes];
+  const allFindings = Array.isArray(report.value && report.value.findings) ? report.value.findings : [];
   for (const adapter of selection.targets) {
     const loaded = await loadAdapter(adapter);
     if (!loaded.available) {
@@ -269,11 +436,13 @@ export async function main(args) {
           : 'every fixable finding is claimed by a write adapter, so instructions has nothing left to render.');
       }
     }
+    // What this adapter was actually given, for the coverage accounting below.
+    const handed = Array.isArray(scoped.findings) ? scoped.findings : allFindings;
     let out;
     try { out = await loaded.mod.plan(scoped, ctx); }
     catch (e) {
       failures.push(adapter + ': ' + msg(e));
-      groups.push({ adapter, available: true, ready: caps ? caps.ready !== false : null, needs: (caps && caps.needs) || [], changes: [], skipped: [], notes: ['plan() failed: ' + msg(e)], error: msg(e) });
+      groups.push({ adapter, available: true, ready: caps ? caps.ready !== false : null, needs: (caps && caps.needs) || [], changes: [], skipped: [], notes: ['plan() failed: ' + msg(e)], error: msg(e), handed });
       continue;
     }
     const changes = Array.isArray(out && out.changes) ? out.changes : [];
@@ -282,14 +451,29 @@ export async function main(args) {
       adapter, available: true,
       ready: out && out.ready !== undefined ? out.ready !== false : (caps ? caps.ready !== false : null),
       needs: (caps && caps.needs) || [],
-      changes, skipped: (out && out.skipped) || [], notes: (out && out.notes) || [],
+      changes, skipped: (out && out.skipped) || [], notes: (out && out.notes) || [], handed,
     });
+  }
+
+  const coverage = buildCoverage({
+    findings: allFindings, category: options.category, includeProposed: options.includeProposed, groups,
+  });
+  if (coverage.skipped_proposed.count) {
+    notes.push(coverage.skipped_proposed.count + ' fixable finding(s) are classed "proposed" and were not planned: '
+      + coverage.skipped_proposed.ids.join(', ') + ' — ' + coverage.skipped_proposed.hint + '.');
+  }
+  if (coverage.unroutable.count) {
+    notes.push(coverage.unroutable.count + ' finding(s) reached no adapter in this run: '
+      + coverage.unroutable.ids.join(', ') + ' — ' + coverage.unroutable.note + '.');
   }
 
   // Persist: replace the changes of the adapters this run planned for, keep everyone else's.
   const planned = run.readPlan() || { changes: [] };
   const kept = (planned.changes || []).filter((c) => !selection.targets.includes(c.adapter));
   run.setChanges([...kept, ...all]);
+  // …and record where every finding went, so plan.json answers "why is this not here?" on its own.
+  const planFile = run.readPlan();
+  if (planFile) { planFile.coverage = coverage; run.writePlan(planFile); }
   for (const c of all) {
     if (c && c.preview && typeof c.preview.body === 'string' && c.preview.body) {
       try { writeFileSync(run.previewPath(c.id, previewExt(c.preview.kind)), c.preview.body); } catch { /* preview is a convenience, not the contract */ }
@@ -300,11 +484,22 @@ export async function main(args) {
     ...m,
     report: reportPath, profile: profilePath, target: reportTarget || m.target || null,
     adapters: selection.targets, target_source: selection.source,
-    planned_at: new Date().toISOString(), dry_run: true,
+    planned_at: new Date().toISOString(),
+    // Re-planning a run that already applied something must not reset the manifest to "dry run":
+    // lib/adapter.updateManifest clears the flag when a write lands, and only a write may set it back.
+    dry_run: m.dry_run === false ? false : true,
     confirmed: Array.isArray(m.confirmed) ? m.confirmed : [],
-    counts: { changes: all.length, auto: auto_count, proposed: all.length - auto_count },
+    counts: {
+      changes: all.length, auto: auto_count, proposed: all.length - auto_count,
+      considered: coverage.considered, planned_findings: coverage.planned,
+      skipped_proposed: coverage.skipped_proposed.count, advisory: coverage.advisory.count,
+      unroutable: coverage.unroutable.count,
+    },
   }));
-  run.log({ event: 'fix-plan', adapters: selection.targets, changes: all.length, dry_run: true });
+  run.log({
+    event: 'fix-plan', adapters: selection.targets, changes: all.length, dry_run: true,
+    considered: coverage.considered, skipped_proposed: coverage.skipped_proposed.count, unroutable: coverage.unroutable.count,
+  });
 
   const platformLabel = profile && profile.platform && profile.platform.id
     ? profile.platform.id + (profile.platform.confidence ? ' (' + profile.platform.confidence + ')' : '') : null;
@@ -327,7 +522,13 @@ export async function main(args) {
     auto_count,
     proposed_count: all.length - auto_count,
     changes: all.map((c) => ({ id: c.id, adapter: c.adapter, class: c.class, op: c.op, live_impact: c.live_impact, target: c.target, finding_ids: c.finding_ids, requires: c.requires, status: c.status })),
-    groups: groups.map((g) => ({ ...g, changes: g.changes.map((c) => ({ id: c.id, class: c.class, live_impact: c.live_impact, target: c.target, finding_ids: c.finding_ids, op: c.op })) })),
+    // `handed` is dropped from the printed group: it is the whole findings array, not a summary.
+    groups: groups.map(({ handed: _handed, ...g }) => ({
+      ...g,
+      coverage: coverage.by_adapter[g.adapter] || null,
+      changes: g.changes.map((c) => ({ id: c.id, class: c.class, live_impact: c.live_impact, target: c.target, finding_ids: c.finding_ids, op: c.op })),
+    })),
+    coverage,
     notes,
     failures,
   };

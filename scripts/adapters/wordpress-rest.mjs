@@ -26,15 +26,15 @@ import { join } from 'node:path';
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
 import {
   canTransition, changeId, ensureConfirmed, loadFixRun, makeChange, openFixRun,
-  requireTicket, resolveDataDir, transition,
+  requireTicket, resolveDataDir, transition, updateManifest,
 } from '../lib/adapter.mjs';
 import { basicAuth } from '../lib/http.mjs';
 import { explainKeys, missingKeys, redactObject, resolveKey } from '../lib/credentials.mjs';
 import { reproduceCommand } from '../lib/finding.mjs';
 import { readJson, writeJson, writeText } from '../lib/store.mjs';
 import {
-  checkPublicUrl, describeFailure, fieldsMatch, groupByPage, httpFor,
-  normalizeAnswers, pathOf, publicUrlFor, renderRequestPreview, slugOf,
+  checkPublicUrl, describeFailure, fieldsMatch, groupByPage, httpFor, logOpEvent, normalizeAnswers, opThrew,
+  pathOf, publicUrlFor, renderRequestPreview, slugOf,
 } from './_shared.mjs';
 
 export const ADAPTER = 'wordpress-rest';
@@ -956,14 +956,14 @@ export async function main(args = {}) {
     if (op === 'apply') {
       const gate = requireTicket(dataDir, { ticket: args.ticket, run: run.id, change: change.id });
       if (!gate.ok) {
-        results.push({ change: change.id, ok: false, error: op + ' needs a valid confirmation ticket (' + gate.reason + ')' });
+        results.push({ change: change.id, ok: false, refused: gate.reason, error: op + ' needs a valid confirmation ticket (' + gate.reason + ')' });
         continue;
       }
     }
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
+    catch (e) { out = opThrew(change, e); }
     if (out.change) updated.push(out.change);
     results.push(redactObject({
       change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok,
@@ -974,7 +974,8 @@ export async function main(args = {}) {
     }, { env: process.env }));
   }
   persist(run, updated);
-  run.log({ event: op, adapter: ADAPTER, changes: results.length });
+  logOpEvent(run, { op, adapter: ADAPTER, results });
+  updateManifest(run, { op, adapter: ADAPTER, changes: updated });
   const failed = results.some((r) => r.ok === false);
   return { result: { adapter: ADAPTER, op, run: run.id, run_dir: run.dir, results }, code: failed ? EXIT.RUNTIME : EXIT.OK };
 }

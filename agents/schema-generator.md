@@ -59,9 +59,14 @@ The orchestrator dispatches you with a JSON envelope in the prompt. Its fields:
 - `return` — always "JSON array of findings only".
 
 Rules:
-- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" --snapshot "<run_dir>/pages/<slug>.json"` <!-- reconcile-flags-v0.2 -->
-  with the literal absolute paths from the envelope. Never rely on
-  `${...}` tokens or a relative `scripts/` path.
+- Run scripts as `node "<plugin_root>/scripts/<x>.mjs" …` with the literal absolute paths from the
+  envelope. Never rely on `${...}` tokens or a relative `scripts/` path.
+- `validate-jsonld.mjs --snapshot "<run_dir>/pages/<slug>.json"` is your validator (add
+  `--prefer rendered` when the JSON-LD is injected client-side, `--type <Type>` to focus one type).
+- The two site-level scripts your conditional modules use take their own inputs instead:
+  `acp-feed-lint.mjs --feed "<path>" [--format jsonl|csv|tsv|auto] [--sample 500]` (M18 feed lint —
+  without a feed that check stays `needs_api`) and `ai-discovery.mjs --snapshot "<…>"` or
+  `--run-dir "<run_dir>"` (M18 `/.well-known/ucp` readiness).
 - `verification.reproduce` uses the same absolute form so it runs from any directory.
 
 ## Output contract
@@ -74,7 +79,7 @@ orchestrator aggregates and renders.
 For a schema proposal, put the complete JSON-LD block (or unified diff) in `fix_preview` and set
 `fixable: auto` (additive/verifiable) or `proposed` (needs per-item accept).
 `verification.reproduce` must be the absolute validator command built from the envelope —
-`node "<plugin_root>/scripts/validate-jsonld.mjs" --snapshot "<run_dir>/pages/<slug>.json"` <!-- reconcile-flags-v0.2 -->
+`node "<plugin_root>/scripts/validate-jsonld.mjs" --snapshot "<run_dir>/pages/<slug>.json"`
 — and `verification.method` is `schema_validator`.
 `expected_impact` is banded + confidence-tagged — never a naked percentage.
 
@@ -84,8 +89,11 @@ For a schema proposal, put the complete JSON-LD block (or unified diff) in `fix_
 - Templates without a resolvable `@type` (`localbusiness.json` ships `TODO:LocalBusiness_or_subtype`;
   the `@id`-only attach node in `review-aggregaterating.json`) match no entry of the validator's
   `@type`-keyed SPEC until filled/merged — an unfilled or partly filled block is a `fail` (`TODO:`
-  present), never a validated block. TO-VERIFY in the script pass that `validate-jsonld.mjs` reports
-  a missing/unknown `@type` instead of skipping the node.
+  present), never a validated block. Verified against the script: an unknown or `TODO:` `@type` is
+  still listed as a node with `known_type: false` and empty `missing_required`, so never read that
+  empty list as "complete". A node carrying **no** `@type` at all is not listed among `nodes[]` —
+  `blocks_found` exceeding `nodes_total` is the only signal that one was dropped, so compare the two
+  before claiming a page has no orphan blocks.
 - FAQPage/HowTo: parseable by AI but no Google rich results — do not count as a SERP win.
 - Google states no special structured data is required for its AI features; schema helps
   eligibility and consistency, so label AI-axis impact `directional`, not `established`.

@@ -30,6 +30,7 @@ import { dirname, join, resolve } from 'node:path';
 import { EXIT, isMain, runCli } from '../lib/util.mjs';
 import {
   ensureConfirmed, loadFixRun, makeChange, openFixRun, requireTicket, resolveDataDir, transition,
+  updateManifest,
 } from '../lib/adapter.mjs';
 import {
   DEFAULT_MARKER, findHeadAnchor, markerBlock, markerComment, replaceBetween, unifiedDiff, upsertMarkerBlock,
@@ -40,7 +41,7 @@ import { readJson, writeJson, writeText } from '../lib/store.mjs';
 import { parseRobots, isAllowed } from '../lib/robots.mjs';
 import { reproduceCommand } from '../lib/finding.mjs';
 import { fixableFindings, normalizeAnswers, parseFixPreview } from './local-files.mjs';
-import { whichOnPath } from './_shared.mjs';
+import { logOpEvent, opThrew, whichOnPath, withheldProposedNote } from './_shared.mjs';
 import { snapshotUrl } from '../snapshot.mjs';
 
 // re-exported so callers and tests keep one import site for the PATH probe
@@ -338,9 +339,21 @@ export const THEME_FIX_MAP = Object.freeze([
   { id: /^M20\.lang\.mismatch$/, file: 'layout/theme.liquid', block: 'html-lang', strategy: 'liquid-html-lang', cls: 'auto', op: 'replace' },
   { id: /^M20\.shopify\.duplicate_hreflang$/, file: 'layout/theme.liquid', block: 'hreflang', strategy: 'manual', cls: 'proposed', op: 'remove' },
   { id: /^M8\.(og|twitter)\./, file: 'layout/theme.liquid', block: 'social', strategy: 'liquid-head', cls: 'auto', op: 'insert', needs_snippet: true },
-  { id: /^M1\.shopify\.(tag_combo_urls_crawlable|filter_sort_urls_crawlable)$/, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'liquid-robots', cls: 'auto', op: 'insert' },
-  { id: /^M1\.(robots|sitemap|crawl_delay)\./, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'liquid-robots', cls: 'auto', op: 'insert' },
-  { id: /^M17\.robots\.no_sitemap_line$/, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'liquid-robots', cls: 'auto', op: 'insert' },
+  // robots.txt.liquid. The only edit this module can make to that template is an APPEND: a marked
+  // block after everything else, plus the `default_groups` loop put back when the template dropped
+  // it. So the class follows what the edit really is (`robots_kind`):
+  //   additive        — a directive that only adds (a `Sitemap:` line, an AI-crawler group the user
+  //                     supplied). Deterministic and appendable, so it may be `auto`. It still needs
+  //                     the exact line from the report or from --answers; none is ever invented.
+  //   restore-defaults— putting Shopify's default groups back. Deterministic, but it re-imposes
+  //                     every platform Disallow, which changes what is crawlable: `proposed`.
+  //   edit-existing   — removing a Disallow, repairing a broken directive, lowering a Crawl-delay.
+  //                     An append cannot perform any of those, so these are `manual`/`proposed` and
+  //                     the preview says a person makes the edit.
+  { id: /^(M1\.sitemap\.missing_directive|M17\.robots\.no_sitemap_line)$/, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'liquid-robots', cls: 'auto', op: 'insert', robots_kind: 'additive' },
+  { id: /^M1\.shopify\.(tag_combo_urls_crawlable|filter_sort_urls_crawlable)$/, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'liquid-robots', cls: 'proposed', op: 'insert', robots_kind: 'restore-defaults' },
+  { id: /^M1\.(robots|sitemap|crawl_delay)\./, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'manual', cls: 'proposed', op: 'replace', robots_kind: 'edit-existing' },
+  { id: /^M17\.robots\./, file: 'templates/robots.txt.liquid', block: 'robots', strategy: 'manual', cls: 'proposed', op: 'replace', robots_kind: 'edit-existing' },
   // Per-resource markup lives in the section that renders the resource, and rewriting the Liquid
   // that builds it is not an exact-anchor edit — those stay manual.
   { id: /^M5\.shopify\.(theme_jsonld_gaps|duplicate_product_jsonld)$/, file: 'sections/main-product.liquid', block: 'product-jsonld', strategy: 'manual', cls: 'proposed', op: 'replace' },
@@ -353,13 +366,17 @@ export const THEME_FIX_MAP = Object.freeze([
 ]);
 
 /**
- * Ids the Shopify card marks platform-owned or unobservable: the theme adapter must never claim them.
- * `M17.shopify.sitemap_platform_owned` is Shopify's own sitemap (§4) and
- * `M1.shopify.robots_liquid_drops_defaults` is emitted as `needs_api` (§10).
+ * Ids the Shopify card marks platform-owned, unobservable or advisory-only: the theme adapter must
+ * never claim them, so they are not routed to a file at all.
+ * `M17.shopify.sitemap_platform_owned` is Shopify's own sitemap (§4),
+ * `M1.shopify.robots_liquid_drops_defaults` is emitted as `needs_api` (§10), and
+ * `M1.robots.unreachable` reports that /robots.txt does not answer — a server or hosting problem
+ * that no theme file can repair, and one that would otherwise fall into the robots routing above.
  */
 export const NOT_THEME_FIXABLE = Object.freeze([
   'M17.shopify.sitemap_platform_owned',
   'M1.shopify.robots_liquid_drops_defaults',
+  'M1.robots.unreachable',
   'M7.wordpress.plugin_owned_head',
 ]);
 
@@ -698,7 +715,11 @@ function verifyMethodFor(block) {
   return 'dom_assert';
 }
 
-function assertionFor(block, file) {
+function assertionFor(block, file, entry = {}) {
+  if (block === 'robots') {
+    if (entry.robots_kind === 'additive') return 'robots.txt on the preview theme serves the added directive and still emits Shopify\'s default groups';
+    if (entry.robots_kind === 'edit-existing') return 'a person made the edit in ' + file + ' and robots.txt on the preview theme no longer carries the rule this finding named';
+  }
   switch (block) {
     case 'canonical': return 'the previewed page carries a single <link rel="canonical"> pointing at the base product URL';
     case 'viewport': return 'the previewed page carries a viewport meta tag';
@@ -746,6 +767,8 @@ export async function plan(options = {}, ctx = {}) {
   const skipped = [];
   const notes = [];
   if (!store) notes.push('no store resolved: --store or SHOPIFY_STORE is required before preview/apply can run');
+  const withheld = withheldProposedNote(findings, { includeProposed: options.includeProposed === true, category: options.category });
+  if (withheld) notes.push(withheld);
 
   const answers = normalizeAnswers(options.answers);
   const runDir = ctx.run ? ctx.run.dir : '<run>';
@@ -771,6 +794,16 @@ export async function plan(options = {}, ctx = {}) {
     }
 
     const rules = entry.strategy === 'liquid-robots' ? robotsRulesFrom(supplied) : [];
+    // An additive robots change IS its directive: with no line to add, appending the marked block
+    // would write nothing and the change would report "already-present" — a fix that is not one.
+    if (entry.robots_kind === 'additive' && !rules.length) {
+      skipped.push({
+        finding: finding.id,
+        reason: 'needs the exact robots directive to add (e.g. "Sitemap: https://<store>/sitemap.xml") — '
+          + 'the audit gave no fix_preview and no --answers entry, and a robots line is never invented',
+      });
+      continue;
+    }
     const url = (finding.location && finding.location.url) || (report && report.target && report.target.kind === 'url' ? report.target.value : null);
     const cls = entry.strategy === 'manual' ? 'proposed' : (finding.fixable === 'auto' ? entry.cls : 'proposed');
 
@@ -782,6 +815,7 @@ export async function plan(options = {}, ctx = {}) {
       snippet,
       source: supplied ? (answer && !finding.fix_preview ? 'answers' : 'fix_preview') : 'platform-default',
       ...(rules.length ? { rules } : {}),
+      ...(entry.robots_kind ? { robots_kind: entry.robots_kind } : {}),
       ...(entry.block === 'html-lang' ? { lang: HTML_LANG_VALUE } : {}),
     };
 
@@ -807,7 +841,7 @@ export async function plan(options = {}, ctx = {}) {
       verify: {
         method: verifyMethodFor(entry.block),
         command: reproduceCommand('adapters/shopify-theme.mjs', ['verify', '--run', runDir, '--change', id]),
-        assertion: assertionFor(entry.block, entry.file),
+        assertion: assertionFor(entry.block, entry.file, entry),
         url: url || undefined,
       },
     }, { mode: 'return', phase: 'preview' });
@@ -1096,6 +1130,12 @@ export function assertBlock(change, { snapshot = null, robots = null, text = '' 
     }
     case 'robots': {
       if (!robots) return { ok: null, detail: 'robots.txt could not be parsed on the preview theme' };
+      const kind = (change.payload && change.payload.robots_kind) || null;
+      // An `edit-existing` change is made by hand, so there is no marked block to look for and no
+      // rule this module can name: the operator says whether the edit landed.
+      if (kind === 'edit-existing') {
+        return { ok: null, detail: 'this one is a hand edit of robots.txt.liquid — re-read the file and the previewed robots.txt yourself' };
+      }
       // What this block guarantees is that Shopify's default groups still emit; the tag-combination
       // rule is the observable proof of that. Literal custom rules are checked too; wildcard ones
       // are named as not asserted rather than counted as a pass.
@@ -1105,12 +1145,22 @@ export function assertBlock(change, { snapshot = null, robots = null, text = '' 
       const kept = !!(combo && combo.allowed === false);
       if (!kept) return { ok: false, detail: 'tag-combination URLs are allowed — the default_groups loop is not emitting' };
       const rules = Array.isArray(change.payload && change.payload.rules) ? change.payload.rules : [];
+      // A `Sitemap:` line is the whole point of an additive change: assert the served file declares it.
+      const wantedSitemaps = rules.map((r) => /^\s*sitemap\s*:\s*(\S+)\s*$/i.exec(r)).filter(Boolean).map((m) => m[1]);
+      const servedSitemaps = new Set((robots.sitemaps || []).map((s) => String(s).trim()));
+      const missingSitemaps = wantedSitemaps.filter((s) => !servedSitemaps.has(s));
+      if (missingSitemaps.length) return { ok: false, detail: 'robots.txt does not declare ' + missingSitemaps.join(', ') };
       const literal = rules.map((r) => /^\s*disallow\s*:\s*(\S+)\s*$/i.exec(r)).filter(Boolean).map((m) => m[1]).filter((p) => p.startsWith('/') && !/[*$]/.test(p));
       const notBlocked = literal.filter((p) => { const v = isAllowed(robots, 'Googlebot', origin + p); return !v || v.allowed !== false; });
-      const wildcards = rules.length - literal.length;
-      const suffix = wildcards > 0 ? '; ' + wildcards + ' rule(s) with wildcards were not asserted automatically' : '';
+      const unasserted = rules.length - literal.length - wantedSitemaps.length;
+      const suffix = unasserted > 0 ? '; ' + unasserted + ' rule(s) (wildcards, Allow, Crawl-delay) were not asserted automatically' : '';
       if (notBlocked.length) return { ok: false, detail: 'still crawlable: ' + notBlocked.join(', ') + suffix };
-      return { ok: true, detail: 'the default group still disallows tag-combination URLs' + (literal.length ? ' and ' + literal.join(', ') + ' is blocked' : '') + suffix };
+      const proved = [
+        'the default group still disallows tag-combination URLs',
+        wantedSitemaps.length ? 'robots.txt declares ' + wantedSitemaps.join(', ') : null,
+        literal.length ? literal.join(', ') + ' is blocked' : null,
+      ].filter(Boolean);
+      return { ok: true, detail: proved.join(' and ') + suffix };
     }
     default:
       return { ok: null, detail: 'no automatic assertion for the "' + block + '" block — review it on the preview theme' };
@@ -1354,11 +1404,13 @@ export async function main(args = {}) {
     }
     const out = await publish(ctx);
     run.log({ event: 'publish', adapter: ADAPTER, ok: out.ok });
+    updateManifest(run, { op: 'publish', adapter: ADAPTER, wrote: out.published === true });
     return { result: { ...out, run: run.id, run_dir: run.dir }, code: out.ok ? EXIT.OK : EXIT.RUNTIME };
   }
 
   if (op === 'rollback' && args.all === true) {
     const out = await rollbackAll(ctx);
+    updateManifest(run, { op: 'rollback', adapter: ADAPTER, wrote: !!(out.results && out.results.length) });
     return { result: { ...out, run: run.id, run_dir: run.dir }, code: out.ok ? EXIT.OK : EXIT.RUNTIME };
   }
 
@@ -1373,14 +1425,14 @@ export async function main(args = {}) {
     if (op === 'apply') {
       const gate = requireTicket(dataDir, { ticket: args.ticket, run: run.id, change: change.id });
       if (!gate.ok) {
-        results.push({ change: change.id, ok: false, error: 'apply needs a valid confirmation ticket (' + gate.reason + ')' });
+        results.push({ change: change.id, ok: false, refused: gate.reason, error: 'apply needs a valid confirmation ticket (' + gate.reason + ')' });
         continue;
       }
     }
     const fn = { preview, apply, verify, rollback }[op];
     let out;
     try { out = await fn(change, ctx); }
-    catch (e) { out = { change, ok: false, error: String((e && e.message) || e) }; }
+    catch (e) { out = opThrew(change, e); }
     if (out.change) updated.push(out.change);
     results.push({
       change: change.id, status: out.change ? out.change.status : change.status, ok: out.ok,
@@ -1391,7 +1443,8 @@ export async function main(args = {}) {
     });
   }
   persist(run, updated);
-  run.log({ event: op, adapter: ADAPTER, changes: results.length });
+  logOpEvent(run, { op, adapter: ADAPTER, results });
+  updateManifest(run, { op, adapter: ADAPTER, changes: updated });
   const failed = results.some((r) => r.ok === false);
   return { result: { adapter: ADAPTER, op, run: run.id, run_dir: run.dir, store: ctx.store, results }, code: failed ? EXIT.RUNTIME : EXIT.OK };
 }
