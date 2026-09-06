@@ -1,0 +1,51 @@
+# Copy this file into your own repository to audit a site on demand or on a schedule.
+# It runs the deterministic subset only — the model-judged modules need Claude Code, so the two
+# scores here describe what a script can prove, not everything the full audit covers.
+name: SEO + AI-search audit (example)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL to audit'
+        required: true
+        default: 'https://example.com/'
+      pages:
+        description: 'Pages to sample'
+        required: false
+        default: '5'
+  # schedule:
+  #   - cron: '0 6 * * 1'   # Mondays, 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit ${{ inputs.url }}
+    runs-on: ubuntu-latest
+    steps:
+      # Only needed because this example lives inside the action's own repository.
+      - uses: actions/checkout@v4
+
+      - id: seo
+        name: claude-seo-ai audit
+        uses: ./
+        # In your repository, drop the checkout above and pin the released action instead:
+        # uses: Hainrixz/claude-seo-ai@v0.2.0
+        with:
+          url: ${{ inputs.url }}
+          pages: ${{ inputs.pages }}
+          render: static
+          lang: en
+          fail-under-search: '70'
+          fail-under-ai: '60'
+          fail-on-gated: 'true'
+          out: ./seo-audit
+
+      - name: Show the two scores
+        if: always()
+        run: |
+          echo "Search SEO:     ${{ steps.seo.outputs.search-score }} (${{ steps.seo.outputs.search-band }})"
+          echo "AI Visibility:  ${{ steps.seo.outputs.ai-score }} (${{ steps.seo.outputs.ai-band }})"
+          echo "Report:         ${{ steps.seo.outputs.report-json }}"

@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Zero dependencies on purpose: there is nothing to install.
+      - name: Repo health (syntax, manifests, skill frontmatter)
+        run: node scripts/check.mjs
+
+      - name: Test suite
+        run: node tests/run.mjs
+
+  smoke:
+    name: action smoke (local fixture site)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The fixture site must live in its own process: a child that fetched from a server hosted in
+      # its own parent would deadlock while spawnSync blocks the parent's event loop.
+      - name: Start the fixture site
+        run: |
+          set -u
+          node tests/helpers/serve.mjs --url-file "$RUNNER_TEMP/fixture-url.txt" --timeout 300 --quiet &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+          for _ in $(seq 1 80); do
+            [ -s "$RUNNER_TEMP/fixture-url.txt" ] && break
+            sleep 0.25
+          done
+          URL="$(cat "$RUNNER_TEMP/fixture-url.txt")"
+          test -n "$URL"
+          echo "FIXTURE_URL=$URL" >> "$GITHUB_ENV"
+          echo "fixture site on $URL"
+
+      - name: Audit the fixture site
+        run: |
+          # The default shell runs with -e: turn it off so the summary is printed either way.
+          set -u +e
+          node scripts/audit.mjs "$FIXTURE_URL" \
+            --out "$RUNNER_TEMP/seo-audit" \
+            --pages 5 --render static --format json \
+            --fail-under search=0,ai=0 \
+            --summary-md "$GITHUB_STEP_SUMMARY" > "$RUNNER_TEMP/audit-summary.json"
+          code=$?
+          cat "$RUNNER_TEMP/audit-summary.json"
+          exit $code
+
+      - name: Assert the run is complete and schema-valid
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const s = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/audit-summary.json", "utf8"));
+            if (s.exit_code !== 0) throw new Error("audit exit_code " + s.exit_code);
+            for (const key of ["report_json", "report_md", "findings_json"]) {
+              if (!s[key] || !fs.existsSync(s[key])) throw new Error("missing " + key);
+            }
+            if (!(s.findings.total > 0)) throw new Error("no findings were produced");
+            if (s.checks.errors !== 0) throw new Error(s.checks.errors + " check(s) failed");
+            console.log("smoke ok:", JSON.stringify(s.scores));
+          '
+          node -e '
+            const fs = require("node:fs");
+            const s = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/audit-summary.json", "utf8"));
+            import("./scripts/report.mjs").then(({ validateReport }) => {
+              const r = validateReport(JSON.parse(fs.readFileSync(s.report_json, "utf8")));
+              if (!r.ok) throw new Error("report.json is not schema-valid: " + r.errors.join("; "));
+              console.log("report.json validates against schema/audit-report.schema.json");
+            });
+          '
+
+      - name: Stop the fixture site
+        if: always()
+        run: kill "$SERVER_PID" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seo-audit-smoke
+          path: ${{ runner.temp }}/seo-audit
+          if-no-files-found: warn

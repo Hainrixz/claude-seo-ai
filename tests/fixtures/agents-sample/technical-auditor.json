@@ -1,0 +1,47 @@
+[
+  {
+    "id": "M7.title.missing",
+    "module": "M7",
+    "title": "Home page has no <title>",
+    "status": "fail",
+    "severity": 4,
+    "scope": "page",
+    "location": { "url": "https://example.test/" },
+    "evidence": { "observed": "The document head contains no <title> element (0 title tags in the raw HTML)." },
+    "expected": "Every indexable page states its subject in a <title> of roughly 50-60 characters.",
+    "recommendation": "Add a <title> to the home template that names the brand and what it sells.",
+    "fixable": "proposed",
+    "verification": { "method": "dom_assert", "assertion": "document.querySelectorAll('title').length === 1", "reproduce": "node \"/plugin/scripts/parse-html.mjs\" --snapshot pages/home.json" },
+    "expected_impact": { "axis": "search", "confidence": "established", "magnitude": "high", "rationale": "Google uses the title element as the primary source of the result link text." }
+  },
+  {
+    "id": "M10.orphan.no_inlinks",
+    "module": "M10",
+    "title": "Article has no internal inbound links",
+    "status": "warn",
+    "severity": 3,
+    "scope": "page",
+    "location": { "url": "https://example.test/blog/a" },
+    "evidence": { "observed": "The crawl graph records 0 internal links pointing at /blog/a across 2 sampled pages." },
+    "expected": "Every article is reachable from at least one in-body link on another page.",
+    "recommendation": "Link the article from its section index and from a related post.",
+    "fixable": "proposed",
+    "verification": { "method": "link_graph", "assertion": "crawl.json graph edges targeting /blog/a > 0", "reproduce": "node \"/plugin/scripts/link-graph.mjs\" --snapshot pages/blog-a.json" },
+    "expected_impact": { "axis": "search", "confidence": "directional", "magnitude": "medium", "rationale": "Internal links distribute crawl attention and describe the target with anchor text." }
+  },
+  {
+    "id": "M4.render.csr_only_primary_content",
+    "module": "M4",
+    "title": "Could not decide whether the body is client-rendered",
+    "status": "needs_api",
+    "severity": 0,
+    "scope": "page",
+    "location": { "url": "https://example.test/" },
+    "evidence": { "observed": "No renderer was available in this environment, so the raw-vs-rendered delta was not measured." },
+    "expected": "The primary content is present in the server response.",
+    "recommendation": "Re-run with a renderer available to settle this.",
+    "fixable": "advisory",
+    "verification": { "method": "render_diff", "assertion": "rendered word_count / raw word_count < 2", "reproduce": "node \"/plugin/scripts/snapshot.mjs\" --snapshot pages/home.json --render js" },
+    "expected_impact": { "axis": "both", "confidence": "directional", "magnitude": "high", "rationale": "Content only present after hydration is invisible to crawlers that do not execute JavaScript." }
+  }
+]

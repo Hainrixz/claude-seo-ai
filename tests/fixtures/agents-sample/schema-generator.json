@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "M5.jsonld.invalid_json",
+      "module": "M5",
+      "title": "One JSON-LD block does not parse",
+      "status": "fail",
+      "severity": 4,
+      "scope": "page",
+      "page": "https://example.test/blog/a",
+      "evidence": { "observed": "The second application/ld+json block ends with a trailing comma before }, so JSON.parse throws at position 118." },
+      "expected": "Every application/ld+json block parses as JSON.",
+      "recommendation": "Remove the trailing comma; serialize the block with a JSON encoder instead of a template string.",
+      "fixable": "proposed",
+      "verification": { "method": "schema_validator", "assertion": "every ld+json block parses", "reproduce": "node \"/plugin/scripts/validate-jsonld.mjs\" --snapshot pages/blog-a.json" },
+      "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "high", "rationale": "A block that does not parse contributes nothing: search engines and answer engines skip it entirely." }
+    },
+    {
+      "id": "M7.title.missing",
+      "module": "M7",
+      "title": "Home page title could not be judged",
+      "status": "manual_review",
+      "severity": 0,
+      "scope": "page",
+      "location": { "url": "https://example.test" },
+      "evidence": { "observed": "Synthetic duplicate of the technical-auditor finding at the same location, with a weaker status." },
+      "expected": "The merge keeps the most severe status for one id at one location.",
+      "recommendation": "Nothing — this row proves manual_review never overrides a scored duplicate.",
+      "fixable": "advisory",
+      "verification": { "method": "manual_review", "assertion": "the merged set keeps the fail, not this row", "reproduce": "node \"/plugin/scripts/report.mjs\" <run> --merge \"agents/*.json\"" },
+      "expected_impact": { "axis": "search", "confidence": "speculative", "magnitude": "low", "rationale": "Fixture row for the merge precedence test." }
+    }
+  ]
+}

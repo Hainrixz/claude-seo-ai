@@ -1,0 +1,31 @@
+[
+  {
+    "id": "M16.author.missing_person_schema",
+    "module": "M16",
+    "title": "Article byline is not backed by Person markup",
+    "status": "fail",
+    "severity": 3,
+    "scope": "page",
+    "location": { "url": "https://example.test/blog/a" },
+    "evidence": { "observed": "The byline reads \"by A. Writer\" but no Person node appears in the page's JSON-LD (1 Article block, author is a plain string)." },
+    "expected": "The article author is a Person entity with a name and a stable identifier.",
+    "recommendation": "Emit author as a Person object with name, url and sameAs.",
+    "fixable": "proposed",
+    "verification": { "method": "schema_validator", "assertion": "Article.author is an object with @type Person", "reproduce": "node \"/plugin/scripts/validate-jsonld.mjs\" --snapshot pages/blog-a.json" },
+    "expected_impact": { "axis": "both", "confidence": "established", "magnitude": "medium", "rationale": "Google's author markup guidance asks for a Person entity rather than a text byline." }
+  },
+  {
+    "id": "M16.transparency.no_disclosure",
+    "module": "M16",
+    "title": "This finding is deliberately invalid (no expected_impact) so the merge drops it",
+    "status": "warn",
+    "severity": 3,
+    "scope": "page",
+    "location": { "url": "https://example.test/blog/a" },
+    "evidence": { "observed": "Synthetic fixture: the required expected_impact block is missing." },
+    "expected": "Every finding carries a banded, confidence-tagged expected_impact.",
+    "recommendation": "Nothing — this row exists to prove invalid agent output is dropped, not scored.",
+    "fixable": "advisory",
+    "verification": { "method": "manual_review", "assertion": "schema/finding.schema.json rejects this object", "reproduce": "node \"/plugin/scripts/report.mjs\" <run> --merge \"agents/*.json\"" }
+  }
+]

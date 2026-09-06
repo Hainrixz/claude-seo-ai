@@ -1,0 +1,174 @@
+name: 'claude-seo-ai audit'
+description: 'Deterministic SEO + AI-search (GEO/AEO) audit of a URL: two never-blended scores, a schema-valid report.json and a job summary. Exits 3 when a gate trips.'
+author: 'Hainrixz'
+branding:
+  icon: 'search'
+  color: 'orange'
+
+inputs:
+  url:
+    description: 'URL to audit (the crawl starts here).'
+    required: true
+  pages:
+    description: 'How many pages to sample.'
+    required: false
+    default: '5'
+  max:
+    description: 'Upper bound on the URL frontier.'
+    required: false
+    default: '40'
+  render:
+    description: 'static | auto | js. The default never launches a browser.'
+    required: false
+    default: 'static'
+  lang:
+    description: 'Report language: en | es.'
+    required: false
+    default: 'en'
+  environment:
+    description: 'production | preview | staging | local. On a non-production host the expected noindex/robots caps are suppressed.'
+    required: false
+    default: ''
+  vertical:
+    description: 'Declare the vertical (ecommerce, local-business, saas, blog-publisher, docs, generic) instead of inferring it.'
+    required: false
+    default: ''
+  fail-under-search:
+    description: 'Fail the job when the Search SEO score is below this number. Empty = no gate.'
+    required: false
+    default: ''
+  fail-under-ai:
+    description: 'Fail the job when the AI Visibility score is below this number. Empty = no gate.'
+    required: false
+    default: ''
+  fail-on-gated:
+    description: 'Fail the job when a severity-5 established failure caps a score.'
+    required: false
+    default: 'false'
+  fail-on-severity:
+    description: 'Fail the job when any finding fails at this severity or above (0-5). Empty = no gate.'
+    required: false
+    default: ''
+  out:
+    description: 'Directory for the run (snapshots, findings, report).'
+    required: false
+    default: './seo-audit'
+  node-version:
+    description: 'Node.js version to run the audit with (>= 18).'
+    required: false
+    default: '20'
+  upload-artifact:
+    description: 'Upload the run directory as a build artifact.'
+    required: false
+    default: 'true'
+  artifact-name:
+    description: 'Name of the uploaded artifact.'
+    required: false
+    default: 'seo-audit'
+
+outputs:
+  search-score:
+    description: 'Search SEO score (0-100), or an empty string when the axis is unscored.'
+    value: ${{ steps.audit.outputs.search-score }}
+  ai-score:
+    description: 'AI Visibility score (0-100), or an empty string when the axis is unscored.'
+    value: ${{ steps.audit.outputs.ai-score }}
+  search-band:
+    description: 'Letter band of the Search SEO score (A-F, or unscored).'
+    value: ${{ steps.audit.outputs.search-band }}
+  ai-band:
+    description: 'Letter band of the AI Visibility score (A-F, or unscored).'
+    value: ${{ steps.audit.outputs.ai-band }}
+  report-json:
+    description: 'Absolute path of the written report.json.'
+    value: ${{ steps.audit.outputs.report-json }}
+  report-md:
+    description: 'Absolute path of the written report.md.'
+    value: ${{ steps.audit.outputs.report-md }}
+  run-dir:
+    description: 'Absolute path of the run directory (snapshots, findings, report).'
+    value: ${{ steps.audit.outputs.run-dir }}
+  exit-code:
+    description: '0 ok · 2 runtime · 3 a gate tripped.'
+    value: ${{ steps.audit.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Run the audit
+      id: audit
+      shell: bash
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_PAGES: ${{ inputs.pages }}
+        INPUT_MAX: ${{ inputs.max }}
+        INPUT_RENDER: ${{ inputs.render }}
+        INPUT_LANG: ${{ inputs.lang }}
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        INPUT_VERTICAL: ${{ inputs.vertical }}
+        INPUT_FAIL_UNDER_SEARCH: ${{ inputs.fail-under-search }}
+        INPUT_FAIL_UNDER_AI: ${{ inputs.fail-under-ai }}
+        INPUT_FAIL_ON_GATED: ${{ inputs.fail-on-gated }}
+        INPUT_FAIL_ON_SEVERITY: ${{ inputs.fail-on-severity }}
+        INPUT_OUT: ${{ inputs.out }}
+      run: |
+        # `shell: bash` runs with -e: turn it off so a tripped gate still reaches the output step.
+        set -u +e
+        mkdir -p "$INPUT_OUT"
+        OUT_ABS="$(cd "$INPUT_OUT" && pwd)"
+
+        args=("$INPUT_URL" --out "$OUT_ABS" --pages "$INPUT_PAGES" --max "$INPUT_MAX"
+              --render "$INPUT_RENDER" --lang "$INPUT_LANG" --format json
+              --summary-md "$GITHUB_STEP_SUMMARY")
+        [ -n "$INPUT_ENVIRONMENT" ] && args+=(--environment "$INPUT_ENVIRONMENT")
+        [ -n "$INPUT_VERTICAL" ] && args+=(--vertical "$INPUT_VERTICAL")
+        [ -n "$INPUT_FAIL_ON_SEVERITY" ] && args+=(--fail-on-severity "$INPUT_FAIL_ON_SEVERITY")
+        [ "$INPUT_FAIL_ON_GATED" = "true" ] && args+=(--fail-on-gated)
+
+        gate=""
+        [ -n "$INPUT_FAIL_UNDER_SEARCH" ] && gate="search=$INPUT_FAIL_UNDER_SEARCH"
+        if [ -n "$INPUT_FAIL_UNDER_AI" ]; then
+          [ -n "$gate" ] && gate="$gate,ai=$INPUT_FAIL_UNDER_AI" || gate="ai=$INPUT_FAIL_UNDER_AI"
+        fi
+        [ -n "$gate" ] && args+=(--fail-under "$gate")
+
+        node "$GITHUB_ACTION_PATH/scripts/audit.mjs" "${args[@]}" > "$OUT_ABS/audit-summary.json"
+        code=$?
+        cat "$OUT_ABS/audit-summary.json"
+
+        # No jq on every runner image, but node is right here.
+        node -e '
+          const fs = require("fs");
+          let s = {};
+          try { s = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { }
+          const sc = s.scores || {};
+          const val = (a) => (sc[a] && sc[a].value !== null && sc[a].value !== undefined ? String(sc[a].value) : "");
+          const band = (a) => (sc[a] && sc[a].band ? String(sc[a].band) : "unscored");
+          const out = [
+            "search-score=" + val("search_seo"),
+            "ai-score=" + val("ai_visibility"),
+            "search-band=" + band("search_seo"),
+            "ai-band=" + band("ai_visibility"),
+            "report-json=" + (s.report_json || ""),
+            "report-md=" + (s.report_md || ""),
+            "run-dir=" + (s.run_dir || ""),
+            "exit-code=" + (s.exit_code === undefined ? process.argv[2] : s.exit_code),
+          ].join("\n") + "\n";
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, out);
+          if (Array.isArray(s.gates)) for (const g of s.gates) console.log("::error title=SEO gate::" + JSON.stringify(g));
+        ' "$OUT_ABS/audit-summary.json" "$code"
+
+        exit $code
+
+    - name: Upload the run
+      if: ${{ always() && inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.out }}
+        if-no-files-found: warn
