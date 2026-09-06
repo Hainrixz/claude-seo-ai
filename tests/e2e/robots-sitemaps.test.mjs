@@ -104,7 +104,17 @@ describe('parse-robots-sitemap.mjs --url (live robots + sitemaps)', () => {
     const posts = all.files.find((f) => f.url === U('/sitemap-posts.xml'));
     assert.equal(posts.lastmod.count, 3);
     assert.deepEqual(posts.errors, []);
-    assert.ok(all.files.some((f) => f.url === U('/wp-sitemap.xml') && f.status === 404), 'well-known candidates are probed and reported');
+    assert.ok(all.files.some((f) => f.url === U('/sitemap-index.xml') && f.status === 404), 'well-known candidates are probed and reported');
+    // /wp-sitemap.xml -> 301 -> /sitemap_index.xml -> 302 -> /sitemap.xml is one sitemap under three
+    // names. Keying each file on the REQUESTED url with the POST-redirect status made it three live
+    // sources with identical url counts, and walked the same index three times.
+    for (const alias of ['/wp-sitemap.xml', '/sitemap_index.xml']) {
+      const f = all.files.find((x) => x.url === U(alias));
+      assert.equal(f.status, 200, alias + ' answers, after redirects');
+      assert.equal(f.final_url, U('/sitemap.xml'), alias + ' resolves to the one sitemap');
+      assert.equal(f.alias_of, U('/sitemap.xml'));
+    }
+    assert.equal(all.files.filter((f) => f.parent === U('/sitemap.xml')).length, 2, 'the index is walked once, not three times');
     assert.equal(all.lastmod.min, '2026-07-01T00:00:00.000Z');
     assert.equal(all.lastmod.max, '2026-08-15T00:00:00.000Z');
     assert.ok(all.sample.includes(U('/blog/b?ref=sitemap&v=2')), 'entity-decoded loc');

@@ -46,7 +46,7 @@ rejected, so the fix planner must truncate at the word boundary and say it did.
 ## 6. Write method & credentials
 
 BigCommerce Catalog API (store-scoped). Credential key names: `BIGCOMMERCE_STORE_HASH`,
-`BIGCOMMERCE_ACCESS_TOKEN`. Writes are **channel-aware**: confirm which channel the audited
+`BIGCOMMERCE_TOKEN` (`BIGCOMMERCE_ACCESS_TOKEN` still resolves). Writes are **channel-aware**: confirm which channel the audited
 storefront belongs to before writing, or a change can land on a channel nobody is looking at.
 
 ## 7. Preview & publish

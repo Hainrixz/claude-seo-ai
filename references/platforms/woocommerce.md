@@ -49,8 +49,7 @@ Product **prices, stock and variations are never written by this plugin.** They 
 
 ## 6. Write method & credentials
 
-Same as `wordpress.md` §6 (`WORDPRESS_URL`, `WORDPRESS_USER`, `WORDPRESS_APP_PASSWORD`, or
-`WORDPRESS_SSH` for WP-CLI). The WooCommerce REST API (`wc/v3`) needs its own consumer key/secret and
+Same as `wordpress.md` §6 (`WP_URL`, `WP_USER`, `WP_APP_PASSWORD`, or `WP_SSH` for WP-CLI). The WooCommerce REST API (`wc/v3`) needs its own consumer key/secret and
 is **not** used here: it writes commerce data, which is out of scope.
 
 ## 7. Preview & publish

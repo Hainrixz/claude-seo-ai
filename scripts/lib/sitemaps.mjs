@@ -133,6 +133,8 @@ function bodyBuffer(r) {
  * breadth-first walk over sitemap indexes. `fetchImpl(url, opts)` must resolve to a fetchRaw-shaped
  * object ({ status, ok, body:{ text | buffer } , error }); it is called with { returnBuffer: true }
  * so gzip files can be inflated here even when the fetcher did not.
+ * Each file records `final_url` (after redirects) and, when another requested path resolved to the
+ * same document first, `alias_of` — an alias contributes no URLs, no children and no `found` count.
  * @returns {Promise<{origin:string, declared:string[], files:Array, urls:Array<{loc,lastmod,sitemap}>, truncated:boolean, truncated_files:boolean, truncated_urls:boolean, found:number}>}
  */
 export async function discoverSitemaps(origin, robots, fetchImpl, { maxFiles = 50, maxUrls = 100000, wellKnown = true, fetchOpts = {}, onParsed = null } = {}) {
@@ -153,6 +155,12 @@ export async function discoverSitemaps(origin, robots, fetchImpl, { maxFiles = 5
   if (wellKnown) for (const p of WELL_KNOWN_SITEMAPS) enqueue(base + p, 'well-known');
 
   const files = [], urls = [];
+  // Two well-known paths that redirect to the same file are ONE sitemap. Recording the requested URL
+  // beside the post-redirect status made /wp-sitemap.xml -> /sitemap_index.xml -> /sitemap.xml look
+  // like three live sources on a WordPress site that has one, walked the same index three times and
+  // spent the file budget doing it. The alias is still recorded (with `alias_of`), so a caller can
+  // say what each path serves — it just does not contribute URLs or children a second time.
+  const finalSeen = new Map();
   let truncatedFiles = false, truncatedUrls = false;
   while (queue.length) {
     if (files.length >= maxFiles) { truncatedFiles = true; break; }
@@ -163,8 +171,10 @@ export async function discoverSitemaps(origin, robots, fetchImpl, { maxFiles = 5
     const raw = bodyBuffer(r);
     const inflated = maybeGunzip(raw);
     const gz = inflated.gz || !!(r && r.body && r.body.gunzipped);
+    const finalUrl = (r && typeof r.final_url === 'string' && r.final_url) || item.url;
     const file = {
-      url: item.url, source: item.source, parent: item.parent, depth: item.depth, status: r ? r.status : 0, bytes: inflated.buf.length, gz,
+      url: item.url, final_url: finalUrl, redirected: finalUrl !== item.url, alias_of: null,
+      source: item.source, parent: item.parent, depth: item.depth, status: r ? r.status : 0, bytes: inflated.buf.length, gz,
       kind: null, url_count: 0, over_50k: false, over_50mb: false, errors: [], lastmod: null, error: null,
     };
     if (!r || !(r.status >= 200 && r.status < 300)) {
@@ -181,6 +191,14 @@ export async function discoverSitemaps(origin, robots, fetchImpl, { maxFiles = 5
     file.errors.push(...sm.errors);
     file.lastmod = sm.lastmod;
     file.namespaces = sm.namespaces;
+    const alias = finalSeen.get(finalUrl);
+    if (alias !== undefined && alias !== item.url) {
+      // The same document under a second name: describe it, then stop.
+      file.alias_of = alias;
+      files.push(file);
+      continue;
+    }
+    finalSeen.set(finalUrl, item.url);
     files.push(file);
     if (typeof onParsed === 'function') { try { onParsed(file, sm); } catch { /* observer errors never abort discovery */ } }
     if (sm.kind === 'sitemapindex') {
@@ -193,6 +211,7 @@ export async function discoverSitemaps(origin, robots, fetchImpl, { maxFiles = 5
       }
     }
   }
-  const found = files.filter((f) => f.kind && f.kind !== 'invalid').length;
+  // An alias is not a second sitemap: it is the same document reached by another name.
+  const found = files.filter((f) => f.kind && f.kind !== 'invalid' && !f.alias_of).length;
   return { origin: base, declared, files, urls, truncated: truncatedFiles || truncatedUrls, truncated_files: truncatedFiles, truncated_urls: truncatedUrls, found };
 }

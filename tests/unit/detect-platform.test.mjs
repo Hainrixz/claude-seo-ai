@@ -14,6 +14,7 @@ import {
   probeWordPress, readProject, runProbes, scoreLayer, testRule, RULES, PROFILE_VERSION,
 } from '../../scripts/detect-platform.mjs';
 import { CARD_IDS, confidenceOf } from '../../scripts/lib/platform-rules.mjs';
+import { canonicalKey } from '../../scripts/lib/credentials.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
@@ -420,13 +421,18 @@ describe('credentials and tools', () => {
     assert.equal(hasCredential('SHOPIFY_STORE', { SHOPIFY_STORE: '' }), true, 'presence, not truthiness');
     assert.equal(hasCredential('SHOPIFY_STORE', { CLAUDE_PLUGIN_OPTION_SHOPIFY_STORE: 'x' }), true);
     assert.equal(hasCredential('SHOPIFY_STORE', { OTHER: 'x' }), false);
+    // The catalog name is what the profile asks for; the historical spelling still resolves, so an
+    // operator who exported the old variable is not told the key is missing.
+    assert.equal(hasCredential('SHOPIFY_THEME_TOKEN', { SHOPIFY_CLI_THEME_TOKEN: 'x' }), true);
+    assert.equal(hasCredential('WP_URL', { CLAUDE_PLUGIN_OPTION_WORDPRESS_URL: 'x' }), true);
   });
 
   it('a write target is ready only when every key AND every tool is present', () => {
     const base = { ...load('shopify'), tools: { shopify: false } };
     const none = detect(base);
     const theme = none.write_targets.find((t) => t.adapter === 'shopify-theme');
-    assert.deepEqual(theme.needs, ['SHOPIFY_STORE', 'SHOPIFY_CLI_THEME_TOKEN']);
+    // Catalog/UI names — the same ones plugin.json userConfig prompts for and the docs quote.
+    assert.deepEqual(theme.needs, ['SHOPIFY_STORE', 'SHOPIFY_THEME_TOKEN']);
     assert.deepEqual(theme.tools, { shopify: false });
     assert.equal(theme.ready, false);
 
@@ -442,14 +448,15 @@ describe('credentials and tools', () => {
     const keys = {
       webflow: ['WEBFLOW_TOKEN', 'WEBFLOW_SITE_ID'],
       wix: ['WIX_API_KEY', 'WIX_SITE_ID'],
-      ghost: ['GHOST_ADMIN_API_URL', 'GHOST_ADMIN_API_KEY'],
-      hubspot: ['HUBSPOT_ACCESS_TOKEN'],
-      bigcommerce: ['BIGCOMMERCE_STORE_HASH', 'BIGCOMMERCE_ACCESS_TOKEN'],
+      ghost: ['GHOST_URL', 'GHOST_ADMIN_KEY'],
+      hubspot: ['HUBSPOT_TOKEN'],
+      bigcommerce: ['BIGCOMMERCE_STORE_HASH', 'BIGCOMMERCE_TOKEN'],
     };
     for (const [id, needs] of Object.entries(keys)) {
       const t = detect(load(id)).write_targets.find((x) => x.adapter === 'page-api');
       assert.ok(t, `${id}: no page-api target`);
-      assert.deepEqual(t.needs, needs);
+      assert.deepEqual(t.needs, needs, `${id}: needs[] must name the catalog keys, not an alias`);
+      for (const key of needs) assert.equal(canonicalKey(key), key, `${key} is not a catalog name`);
     }
     for (const id of ['squarespace', 'framer']) {
       const p = detect(load(id));

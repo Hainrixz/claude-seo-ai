@@ -45,7 +45,8 @@ cannot), the built-in JSON-LD graph, and the members/portal scripts. `not_applic
 
 ## 6. Write method & credentials
 
-Ghost Admin API. Credential key names: `GHOST_ADMIN_API_URL`, `GHOST_ADMIN_API_KEY`. A post update
+Ghost Admin API. Credential key names: `GHOST_URL`, `GHOST_ADMIN_KEY` (the `GHOST_ADMIN_API_*`
+spellings still resolve). A post update
 **requires the current `updated_at`** in the payload — Ghost uses it for collision detection and
 rejects the write without it. Read the post first, always.
 

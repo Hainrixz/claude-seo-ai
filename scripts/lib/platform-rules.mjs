@@ -355,24 +355,34 @@ export const PLATFORM_CAPABILITIES = Object.freeze({
   payload: CAP({ page_api: true, head_owner: 'framework' }),
 });
 
-/** Adapter catalogue: credential KEY NAMES only (values are never read) and required CLI tools. */
+/**
+ * Adapter catalogue: credential KEY NAMES only (values are never read) and required CLI tools.
+ *
+ * The names are the CATALOG names — the ones `lib/credentials.mjs` KEY_CATALOG declares and
+ * `.claude-plugin/plugin.json` `userConfig` prompts for. They travel into profile.json and into the
+ * fix plan's "missing …" note, so a longer historical spelling here asked the operator for a
+ * variable the plugin prompt and the docs no longer offer. Both spellings still RESOLVE (the
+ * catalog carries them as aliases), and the Shopify CLI still receives its token as
+ * SHOPIFY_CLI_THEME_TOKEN through the child env — see lib/shell.mjs `env_from_keys`.
+ */
 export const ADAPTERS = Object.freeze({
-  'shopify-theme': { for: ['head', 'jsonld', 'robots', 'llms', 'hreflang'], needs: ['SHOPIFY_STORE', 'SHOPIFY_CLI_THEME_TOKEN'], tools: ['shopify'] },
+  'shopify-theme': { for: ['head', 'jsonld', 'robots', 'llms', 'hreflang'], needs: ['SHOPIFY_STORE', 'SHOPIFY_THEME_TOKEN'], tools: ['shopify'] },
   'shopify-admin': { for: ['seo-fields', 'redirects', 'seo-hidden'], needs: ['SHOPIFY_STORE', 'SHOPIFY_ADMIN_TOKEN'], tools: [] },
-  'wordpress-rest': { for: ['title', 'description', 'slug', 'excerpt', 'image-alt', 'options'], needs: ['WORDPRESS_URL', 'WORDPRESS_USER', 'WORDPRESS_APP_PASSWORD'], tools: [] },
-  'wordpress-wpcli': { for: ['seo-meta', 'options', 'redirects'], needs: ['WORDPRESS_SSH'], tools: ['wp', 'ssh'] },
+  'wordpress-rest': { for: ['title', 'description', 'slug', 'excerpt', 'image-alt', 'options'], needs: ['WP_URL', 'WP_USER', 'WP_APP_PASSWORD'], tools: [] },
+  'wordpress-wpcli': { for: ['seo-meta', 'options', 'redirects'], needs: ['WP_SSH'], tools: ['wp', 'ssh'] },
   'page-api': { for: ['title', 'description', 'og', 'canonical'], needs: [], tools: [] },
   'local-files': { for: ['head', 'jsonld', 'robots', 'sitemap', 'config', 'front-matter'], needs: [], tools: [] },
   instructions: { for: ['*'], needs: [], tools: [] },
 });
 
-/** Per-platform credential keys for the generic `page-api` adapter. */
+/** Per-platform credential keys for the generic `page-api` adapter (catalog names, as above). */
 export const PAGE_API_KEYS = Object.freeze({
   webflow: ['WEBFLOW_TOKEN', 'WEBFLOW_SITE_ID'],
   wix: ['WIX_API_KEY', 'WIX_SITE_ID'],
-  ghost: ['GHOST_ADMIN_API_URL', 'GHOST_ADMIN_API_KEY'],
-  hubspot: ['HUBSPOT_ACCESS_TOKEN'],
-  bigcommerce: ['BIGCOMMERCE_STORE_HASH', 'BIGCOMMERCE_ACCESS_TOKEN'],
+  ghost: ['GHOST_URL', 'GHOST_ADMIN_KEY'],
+  hubspot: ['HUBSPOT_TOKEN'],
+  bigcommerce: ['BIGCOMMERCE_STORE_HASH', 'BIGCOMMERCE_TOKEN'],
+  // Payload has no catalog entry yet: these two names are the adapter's own, and resolve unchanged.
   payload: ['PAYLOAD_URL', 'PAYLOAD_API_KEY'],
 });
 

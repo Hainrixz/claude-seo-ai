@@ -313,6 +313,14 @@ function parseSrcset(v) {
   return String(v).split(',').map((c) => c.trim()).filter(Boolean).map((c) => c.split(/\s+/)[0]).filter(Boolean);
 }
 
+/**
+ * Framework-bound `src`/`alt`: Vue `:src` / `v-bind:alt`, Alpine `x-bind:src`, Angular `[src]`.
+ * The real value is written by JavaScript, so the plain attribute is ABSENT from the static HTML
+ * rather than empty in it — a distinction a finding that quotes the tag has to be able to make.
+ */
+const BOUND_ATTR_RE = /^(?::|v-bind:|x-bind:|\[)(src|alt)\]?$/;
+const boundAttrs = (attrs) => Object.keys(attrs).filter((k) => BOUND_ATTR_RE.test(k));
+
 const JSONLD_MIME = 'application/ld+json';
 function isJsonLdType(type) {
   if (type == null) return false;
@@ -471,7 +479,7 @@ export function parseDocument(html, baseUrl = null, opts = {}) {
         doc.images.push({
           src: src_, abs: abs(src_), srcset: parseSrcset(a.srcset), data_src: dataSrc, lazy: (a.loading || '').trim().toLowerCase() === 'lazy' || (placeholder && dataSrc != null),
           alt: a.alt ?? null, alt_present: a.alt !== undefined, width: a.width ?? null, height: a.height ?? null, sized: w !== null && h !== null,
-          region: t.region, in_content: inContent(t),
+          bound: boundAttrs(a), region: t.region, in_content: inContent(t),
         });
         break;
       }

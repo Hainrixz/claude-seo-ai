@@ -71,8 +71,8 @@ function snapshotTree(dir, prefix = '') {
   return out;
 }
 
-function runCli(args) {
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+function runCli(args, env = null) {
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env: env ? { ...process.env, ...env } : process.env });
   let out = null;
   try { out = JSON.parse(r.stdout); } catch { /* asserted by the caller */ }
   return { status: r.status, out, stdout: r.stdout, stderr: r.stderr };
@@ -97,16 +97,19 @@ test('resolveTargets falls back to the profile, and to instructions when credent
   const shopifyProfile = {
     platform: { id: 'shopify', confidence: 'high' },
     write_targets: [
-      { adapter: 'shopify-theme', ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_THEME_TOKEN'] },
+      { adapter: 'shopify-theme', ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_THEME_TOKEN'], tools: { shopify: true } },
       { adapter: 'shopify-admin', ready: true, needs: [] },
     ],
   };
-  const picked = FP.resolveTargets({ profile: shopifyProfile });
+  // `env: {}` on purpose: readiness is read from the environment now, so the assertion must not
+  // depend on what the developer running the suite happens to have exported.
+  const picked = FP.resolveTargets({ profile: shopifyProfile, env: {} });
   assert.equal(picked.source, 'profile');
   assert.deepEqual(picked.targets, ['shopify-admin', 'instructions']);
   assert.match(picked.notes.join(' '), /SHOPIFY_THEME_TOKEN/, 'the missing key is named, never the value');
 
   const wp = FP.resolveTargets({
+    env: {},
     profile: {
       platform: { id: 'wordpress', confidence: 'high' },
       write_targets: [{ adapter: 'wordpress-rest', ready: false, needs: ['WP_APP_PASSWORD'] }, { adapter: 'wordpress-wpcli', ready: true, needs: [] }],
@@ -114,9 +117,53 @@ test('resolveTargets falls back to the profile, and to instructions when credent
   });
   assert.deepEqual(wp.targets, ['wordpress-wpcli', 'instructions'], 'WP-CLI is the fallback when REST has no credentials');
 
-  const bare = FP.resolveTargets({ profile: { platform: { id: 'squarespace', confidence: 'high' }, write_targets: [] } });
+  const bare = FP.resolveTargets({ profile: { platform: { id: 'squarespace', confidence: 'high' }, write_targets: [] }, env: {} });
   assert.deepEqual(bare.targets, ['instructions']);
   assert.equal(bare.targets[bare.targets.length - 1], 'instructions', 'instructions is always the last resort');
+});
+
+test('resolveTargets reads the credentials this process can see, not the audit-time snapshot', () => {
+  // The documented flow is: export the keys (or fill the /plugin prompts), then run fix. The profile
+  // was written when the audit ran — trusting its frozen `ready:false` printed "shopify-admin … is
+  // missing SHOPIFY_STORE, SHOPIFY_ADMIN_TOKEN" in a shell where both were exported, and collapsed
+  // the default --targets auto flow to instructions.
+  const profile = {
+    platform: { id: 'shopify', confidence: 'high' },
+    write_targets: [
+      { adapter: 'shopify-theme', ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_THEME_TOKEN'], tools: { shopify: false } },
+      { adapter: 'shopify-admin', ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_ADMIN_TOKEN'], tools: {} },
+    ],
+  };
+  const env = { SHOPIFY_STORE: 'my-store.myshopify.com', SHOPIFY_ADMIN_TOKEN: 'shpat_thisisafake', SHOPIFY_THEME_TOKEN: 'shptka_thisisafake' };
+  const now = FP.resolveTargets({ profile, env });
+  assert.deepEqual(now.targets, ['shopify-admin', 'instructions'], 'the keys are here; only the CLI is still missing');
+  const rows = Object.fromEntries(now.readiness.map((r) => [r.adapter, r]));
+  assert.deepEqual(rows['shopify-admin'].missing, [], 'no key is missing in this environment');
+  assert.equal(rows['shopify-admin'].ready, true);
+  assert.equal(rows['shopify-admin'].ready_in_profile, false, 'and the plan says the profile disagreed');
+  assert.deepEqual(rows['shopify-theme'].missing_tools, ['shopify'], 'a tool the profile could not find still blocks');
+  assert.match(now.notes.join(' '), /cannot find `shopify` on PATH/);
+  assert.doesNotMatch(now.notes.join(' '), /missing SHOPIFY_STORE/, 'never name a key that is present');
+
+  // The plugin-option spelling and the historical alias resolve too (lib/credentials lookupOrder).
+  const viaPlugin = FP.resolveTargets({ profile, env: { CLAUDE_PLUGIN_OPTION_SHOPIFY_STORE: 's', SHOPIFY_ACCESS_TOKEN: 'shpat_thisisafake' } });
+  assert.ok(viaPlugin.targets.includes('shopify-admin'));
+
+  const withCli = FP.resolveTargets({ profile, env, tools: { shopify: true } });
+  assert.deepEqual(withCli.targets, ['shopify-theme', 'shopify-admin', 'instructions']);
+
+  // WordPress REST wins over WP-CLI as soon as its three keys are exported.
+  const wp = FP.resolveTargets({
+    profile: {
+      platform: { id: 'wordpress', confidence: 'high' },
+      write_targets: [
+        { adapter: 'wordpress-rest', ready: false, needs: ['WP_URL', 'WP_USER', 'WP_APP_PASSWORD'] },
+        { adapter: 'wordpress-wpcli', ready: false, needs: ['WP_SSH'], tools: { wp: true, ssh: true } },
+      ],
+    },
+    env: { WP_URL: 'https://e.test', WP_USER: 'jo', WP_APP_PASSWORD: 'a b c d' },
+  });
+  assert.deepEqual(wp.targets, ['wordpress-rest', 'instructions']);
 });
 
 test('a dry run groups changes per adapter and writes plan.json without touching the project', async () => {
@@ -159,6 +206,31 @@ test('a dry run groups changes per adapter and writes plan.json without touching
     assert.match(out.summary, /DRY RUN, nothing has been applied/);
     assert.match(out.summary, /local-files — 2 changes/);
     assert.match(out.summary, /\[none\]/, 'every change carries a live_impact badge');
+  } finally { s.cleanup(); }
+});
+
+test('the dry-run summary prints per-adapter readiness from the live environment, key names only', () => {
+  const s = sandbox();
+  try {
+    const shopifyProfile = join(s.base, 'shopify-profile.json');
+    writeFileSync(shopifyProfile, JSON.stringify({
+      version: 1,
+      platform: { id: 'shopify', confidence: 'high' },
+      capabilities: { theme_files: true, admin_api: true },
+      write_targets: [
+        { adapter: 'shopify-theme', for: ['head'], ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_THEME_TOKEN'], tools: { shopify: false } },
+        { adapter: 'shopify-admin', for: ['seo-fields'], ready: false, needs: ['SHOPIFY_STORE', 'SHOPIFY_ADMIN_TOKEN'], tools: {} },
+      ],
+    }));
+    const token = 'shpat_thisisafaketoken';
+    const r = runCli(['--report', s.reportPath, '--profile', shopifyProfile, '--data', s.data, '--run', 'ready1'],
+      { SHOPIFY_STORE: 'my-store.myshopify.com', SHOPIFY_ADMIN_TOKEN: token });
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    assert.ok(r.out.targets.includes('shopify-admin'), 'the exported keys select the adapter the audit could not');
+    assert.match(r.out.summary, /write targets \(credentials re-checked against this environment\)/);
+    assert.match(r.out.summary, /shopify-admin\s+ready\s+needs: SHOPIFY_STORE, SHOPIFY_ADMIN_TOKEN/);
+    assert.match(r.out.summary, /shopify-theme\s+not ready.*missing: SHOPIFY_THEME_TOKEN.*not on PATH: shopify/);
+    assert.ok(!r.stdout.includes(token), 'a credential value never reaches the output');
   } finally { s.cleanup(); }
 });
 

@@ -21,6 +21,7 @@ import { validateFinding } from '../../scripts/lib/validate-finding.mjs';
 import { snapshotUrl } from '../../scripts/snapshot.mjs';
 import { loadRunContext, runChecks } from '../../scripts/checks/index.mjs';
 import { check as sitemapsCheck } from '../../scripts/checks/sitemaps.mjs';
+import { check as wordpressCheck } from '../../scripts/checks/platform-wordpress.mjs';
 
 let srv, out, ctx, findings, stats;
 
@@ -183,6 +184,20 @@ test('sitemap URLs that redirect or error are classified from the statuses the c
   const errored = out2.find((f) => f.id === 'M17.sitemap.error_url');
   assert.ok(errored, 'expected M17.sitemap.error_url');
   assert.match(errored.evidence.observed, /HTTP 404/);
+});
+
+test('a legacy sitemap path that redirects onto the declared one is not a second source', async () => {
+  // End to end over the real fixture server, where /wp-sitemap.xml 301s to /sitemap_index.xml, which
+  // 302s to /sitemap.xml. This is the shape that made the check tell a WordPress publisher it was
+  // serving three sitemaps and to "disable the core sitemap" — the site was doing the right thing.
+  const wpCtx = { ...ctx, profile: { platform: { id: 'wordpress', confidence: 'high' }, cms_plugins: [], target: {} } };
+  const out = await wordpressCheck.run(wpCtx);
+  for (const f of out) assert.ok(validateFinding(f).ok, f.id);
+  const dupe = out.find((f) => f.id === 'M17.wordpress.duplicate_sitemaps');
+  assert.ok(dupe, 'the check still reports what the extra paths serve, got ' + out.map((f) => f.id).join(', '));
+  assert.equal(dupe.status, 'pass', dupe.evidence.observed);
+  assert.match(dupe.evidence.observed, /redirects to/);
+  assert.equal(out.some((f) => f.id === 'M17.wordpress.no_sitemap_any'), false);
 });
 
 test('the Content-Signal line in robots.txt is reported without ever claiming it is enforced', () => {

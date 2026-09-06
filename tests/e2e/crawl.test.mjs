@@ -336,9 +336,13 @@ test('manifestFromSinglePage synthesizes the same shape for a snapshot-only run'
 test('the site artifacts a crawl writes: expected well-known 404s are probe misses, not sitemap errors', async () => {
   const r = await run({ _: [U('/about')], pages: 1, 'link-status': 0, json: true });
   const sm = readJson(join(r.result.run_dir, 'site', 'sitemaps.json'));
-  assert.equal(sm.found, 3, 'the declared index and its two children');
-  assert.equal(sm.probe_misses, 4, 'the four well-known paths this site does not use');
+  assert.equal(sm.found, 3, 'the declared index and its two children — the two redirect aliases are not extra sitemaps');
+  assert.equal(sm.probe_misses, 2, 'the two well-known paths this site does not serve at all');
   assert.equal(sm.errors_total, 0, 'a guessed path that 404s is the probe answering "no", not a site error');
+  const aliases = sm.files.filter((f) => f.alias_of);
+  assert.deepEqual(aliases.map((f) => f.url).sort(), [U('/sitemap_index.xml'), U('/wp-sitemap.xml')].sort(),
+    'the legacy paths redirect onto the declared sitemap and are recorded as aliases of it');
+  assert.ok(aliases.every((f) => f.final_url === U('/sitemap.xml')));
   assert.equal(r.result.sitemaps.probe_hits, 0, 'nothing was found by guessing: everything came from robots.txt');
 });
 

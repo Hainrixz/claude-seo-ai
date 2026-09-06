@@ -74,6 +74,10 @@ export function startServer(opts = {}) {
       if (p === '/sitemap-posts.xml') return send(200, fixture('sitemap-posts.xml', origin), { 'content-type': 'application/xml; charset=utf-8' });
       if (p === '/sitemap-pages.xml.gz') return send(200, gzipSync(Buffer.from(fixture('sitemap-pages.xml', origin))), { 'content-type': 'application/gzip' });
       if (p === '/sitemap_agentic_discovery.xml') return send(200, fixture('sitemap_agentic_discovery.xml', origin), { 'content-type': 'application/xml; charset=utf-8' });
+      // The WordPress shape: the legacy core path and the plugin path both redirect onto the one
+      // sitemap. Three well-known paths answer 200; there is still exactly ONE sitemap source.
+      if (p === '/wp-sitemap.xml') return redirect(301, '/sitemap_index.xml');
+      if (p === '/sitemap_index.xml') return redirect(302, '/sitemap.xml');
       // discovery endpoints
       if (p === '/.well-known/ucp') return send(200, fixture('well-known-ucp.json', origin), { 'content-type': 'application/json; charset=utf-8' });
       // error / soft-404 / header-controlled pages

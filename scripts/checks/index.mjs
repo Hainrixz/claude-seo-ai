@@ -27,7 +27,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { readJson, pageSlug } from '../lib/store.mjs';
-import { newRunState, takeDropped } from './_shared.mjs';
+import { isHtmlResponse, newRunState, takeDropped } from './_shared.mjs';
 import { fetchRaw } from '../lib/fetch.mjs';
 import { manifestFromSinglePage } from '../crawl.mjs';
 import { main as psiMain } from '../psi-client.mjs';
@@ -175,11 +175,16 @@ export function loadRunContext(runDir, options = {}) {
     const page = buildPage(dir, abs, entry);
     if (page) { pages.push(page); seen.add(basename(abs)); }
   }
-  // Any snapshot the manifest does not mention (a manually added page) still gets checked.
+  // Any snapshot the manifest does not mention (a manually added page) still gets checked — but the
+  // manifest also drops snapshots ON PURPOSE: crawl.mjs takes a 200 that is not an HTML document
+  // (/agents.md, llms.txt, a JSON endpoint) out of `pages` and leaves the snapshot on disk as
+  // evidence. Adding it back here would undo that decision, and the site-scoped checks that iterate
+  // ctx.pages directly (crawlability, sitemaps, links-site, _shared's template grouping) would score
+  // a markdown file as a web page. Same rule as the crawler's, from the same helper.
   for (const file of snapshotFiles(pagesDir)) {
     if (seen.has(file)) continue;
     const page = buildPage(dir, join(pagesDir, file), null);
-    if (page) pages.push(page);
+    if (page && isHtmlResponse(page)) pages.push(page);
   }
 
   const vertical = options.vertical !== undefined

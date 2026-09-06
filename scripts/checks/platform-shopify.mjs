@@ -11,10 +11,10 @@
 
 import { isAllowed } from '../lib/robots.mjs';
 import {
-  mk, push, clip, listing, contentPages, finalUrl, platformId, originOf, urlKey,
+  mk, push, clip, listing, plural, contentPages, finalUrl, platformId, originOf, urlKey,
   hreflangEntries, jsonldBlocks,
 } from './_shared.mjs';
-import { flattenNodes } from '../lib/jsonld.mjs';
+import { flattenNodes, disambiguateRootPaths, classifyProductNodes, isProductNode, variantNodeSet } from '../lib/jsonld.mjs';
 
 /** Synthetic paths used to ask robots.txt what it allows; they are never fetched. */
 export const PROBE_PATHS = Object.freeze({
@@ -29,8 +29,30 @@ const productNodesOf = (page) => {
     if (b.data === undefined) continue;
     for (const n of flattenNodes(b.data)) out.push(n);
   }
-  return out;
+  return disambiguateRootPaths(out);
 };
+
+/**
+ * The nodes that together describe one declaration: a ProductGroup plus the variants it carries.
+ * Google documents a variant as inheriting the group's properties and the group as the parent of
+ * the variants' offers, so identifiers are looked for across the pair. Judging a `hasVariant` entry
+ * on its own reported a correctly marked-up store as "ProductGroup.hasVariant[0] lacks brand, sku,
+ * gtin, offers.url" when the group carried all three.
+ *
+ * Membership is object identity, never the path text: two sibling root ProductGroups (a theme and
+ * an app both emitting one — exactly what duplicate_product_jsonld exists to report) share the
+ * flatten path "ProductGroup", so a prefix match judged every group against the union of all their
+ * variants: one group's brand satisfied the other, and a genuinely missing gtin was masked.
+ */
+const declarationGroup = (nodes, entry) => {
+  const members = variantNodeSet(entry.node);
+  return members.size ? [entry, ...nodes.filter((n) => n !== entry && members.has(n.node))] : [entry];
+};
+
+/** True when any node in the group carries `key` (or one of its gtin spellings). */
+const anyHas = (group, key) => group.some((n) => n.node[key] || n.node[key + '13'] || n.node[key + '12'] || n.node[key + '14'] || n.node[key + '8']);
+
+const offersOf = (node) => (Array.isArray(node.offers) ? node.offers : node.offers ? [node.offers] : []);
 
 export const check = {
   id: 'platform-shopify',
@@ -177,17 +199,27 @@ export const check = {
     }
 
     /* ---- theme JSON-LD ------------------------------------------------------------------------- */
+    // Which nodes count is lib/jsonld.mjs's classifyProductNodes(), the same rule M5 and M18 use:
+    // a `hasVariant` member, a review's `itemReviewed` and a url-only stub are pointers at a product
+    // described elsewhere, not extra Product blocks the theme emitted. Counting them told a store
+    // with one ProductGroup and 28 variants that it had "29 Product nodes" and asked it to delete
+    // markup Google documents as correct.
     for (const page of pages) {
       const nodes = productNodesOf(page);
-      const products = nodes.filter((n) => n.types.includes('Product'));
-      if (!products.length) continue;
+      const { declarations, variants, stubs, back_references: backRefs } = classifyProductNodes(nodes);
+      if (!declarations.length) continue;
       const url = finalUrl(page);
+      const pointers = [...variants, ...stubs, ...backRefs];
+      const pointerNote = pointers.length
+        ? ' (' + pointers.length + ' further Product-typed node' + (pointers.length === 1 ? '' : 's')
+          + ' — ' + listing(pointers.map((n) => n.path), 3) + ' — point at items declared elsewhere and are not counted)'
+        : '';
 
-      if (products.length >= 2) {
+      if (declarations.length >= 2) {
         push(out, mk({
           id: 'M5.shopify.duplicate_product_jsonld', title: 'Two or more Product blocks on one product page', status: 'warn', severity: 3, scope: 'page',
           location: { url, resource: 'snippets/seo-structured-data.liquid' },
-          evidence: { observed: products.length + ' Product nodes on ' + url + ': ' + listing(products.map((p) => p.path + ' "' + clip(p.node.name, 40) + '"'), 4) + '.' },
+          evidence: { observed: declarations.length + ' Product nodes declared on ' + url + ': ' + listing(declarations.map((p) => p.path + ' "' + clip(p.node.name, 40) + '"'), 4) + pointerNote + '.' },
           expected: 'One Product node per product page.',
           recommendation: 'Usually the theme and an app both emit Product markup: remove one of the two sources.',
           fixable: 'proposed',
@@ -198,17 +230,21 @@ export const check = {
       }
 
       const gaps = [];
-      for (const p of products) {
-        const miss = ['brand', 'sku', 'gtin'].filter((k) => !p.node[k] && !p.node[k + '13'] && !p.node[k + '12'] && !p.node[k + '14'] && !p.node[k + '8']);
-        const offers = Array.isArray(p.node.offers) ? p.node.offers : p.node.offers ? [p.node.offers] : [];
-        if (!offers.some((o) => o && o.url)) miss.push('offers.url');
-        if (miss.length) gaps.push({ path: p.path, miss });
+      for (const p of declarations) {
+        // A ProductGroup is judged with its variants: the group carries brand, the variants carry
+        // sku/gtin and the variant URLs, and Google documents the inheritance between them.
+        const group = declarationGroup(nodes, p);
+        const miss = ['brand', 'sku', 'gtin'].filter((k) => !anyHas(group, k));
+        if (!group.some((n) => offersOf(n.node).some((o) => o && o.url))) miss.push('offers.url');
+        // Count the products under `hasVariant`, not the group's size: the group also holds each
+        // variant's nested Offer nodes, which reported 83 variants as "97 variant nodes".
+        if (miss.length) gaps.push({ path: p.path, miss, variants: group.filter((n) => isProductNode(n)).length - 1 });
       }
       if (gaps.length) {
         push(out, mk({
           id: 'M5.shopify.theme_jsonld_gaps', title: 'Theme Product markup omits identifiers Google asks for', status: 'warn', severity: 3, scope: 'template',
           location: { url, resource: 'snippets/seo-structured-data.liquid' },
-          evidence: { observed: listing(gaps.map((g) => g.path + ' lacks ' + listing(g.miss, 4)), 3) + ' on ' + url + '.' },
+          evidence: { observed: listing(gaps.map((g) => g.path + (g.variants > 0 ? ' (with its ' + plural(g.variants, 'variant node') + ')' : '') + ' lacks ' + listing(g.miss, 4)), 3) + ' on ' + url + '.' },
           expected: 'Product carries brand, sku, a gtin when one exists, and offers.url.',
           recommendation: 'Extend the theme\'s structured-data snippet with product.vendor (brand), variant.sku, variant.barcode (gtin) and the variant URL.',
           fixable: 'proposed',

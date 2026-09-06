@@ -48,7 +48,8 @@ Emit findings per `schema/finding.schema.json`. On a non-commerce page every id 
 - `M18.offer.missing_price` — Product without `Offer.price`/`priceCurrency` (`fail`, severity **4**, `fixable: auto`, confidence `established`).
 - `M18.offer.price_feed_mismatch` — schema price differs from the on-page or feed price (`warn`, severity **3**, `fixable: advisory`, confidence `directional`; `needs_api` when no feed is supplied).
 - `M18.facets.uncanonicalized` — indexable faceted URLs with no canonical and no `noindex` (`warn`, severity **3**, `fixable: proposed`, confidence `directional`).
-- `M18.variants.no_productgroup` — per-SKU duplicate `Product` blocks instead of `ProductGroup` + `hasVariant` (`warn`, severity 3, `fixable: proposed`, confidence `directional`).
+- `M18.variants.no_productgroup` — per-SKU duplicate `Product` blocks instead of `ProductGroup` + `hasVariant` (`warn`, severity 3, `fixable: proposed`, confidence `directional`). Counts declarations only: a page that already models variants with `hasVariant` never fires it, however many variants it lists.
+- Catalog eligibility judges the ProductGroup itself, and prices it from the variants' offers when the group carries none of its own — a group whose variants each carry a price is not "missing a price".
 
 **Agentic commerce readiness** — ecommerce only:
 - `M18.agentic.ucp_profile_missing` — no `/.well-known/ucp` on a store (`warn`, severity 3, axis `ai`, `fixable: advisory`, confidence `directional`).

@@ -26,6 +26,9 @@ import {
   ADAPTERS, BUILD_CONFIG_FILES, CARD_IDS, ENVIRONMENT_RULES, PAGE_API_KEYS,
   PLATFORM_CAPABILITIES, RULES, VERTICAL_HINTS, confidenceOf,
 } from './lib/platform-rules.mjs';
+// Key names travel through the catalog so a historical spelling still resolves: the catalog name is
+// what profile.json reports, and both it and its aliases are accepted from the environment.
+import { lookupOrder } from './lib/credentials.mjs';
 
 export { RULES };
 
@@ -297,10 +300,13 @@ export function detectEnvironment(ev) {
 // ---------------------------------------------------------------------------
 // Capabilities, write targets
 
-/** Credential presence: key names only — `CLAUDE_PLUGIN_OPTION_<KEY>` or `<KEY>`. Values are never read. */
+/**
+ * Credential presence: key names only — `CLAUDE_PLUGIN_OPTION_<KEY>` or `<KEY>`, for the catalog
+ * name and every alias of it. Values are never read, and presence is presence: an exported empty
+ * string means the operator set the variable, so it is not reported as missing here.
+ */
 export function hasCredential(key, env = process.env) {
-  const k = String(key);
-  return Object.prototype.hasOwnProperty.call(env, 'CLAUDE_PLUGIN_OPTION_' + k) || Object.prototype.hasOwnProperty.call(env, k);
+  return lookupOrder(String(key)).some((name) => Object.prototype.hasOwnProperty.call(env || {}, name));
 }
 
 /** Is `name` an executable on PATH? (presence only — never executed here.) */

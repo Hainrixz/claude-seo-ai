@@ -7,7 +7,7 @@
 // Nothing is reported twice.
 
 import { readFileSync } from 'node:fs';
-import { flattenNodes, isBackReference, isReferenceStub, ownProps } from '../lib/jsonld.mjs';
+import { flattenNodes, disambiguateRootPaths, isProductDeclaration, ownProps, variantNodeSet } from '../lib/jsonld.mjs';
 import { detectFormat, parseFeed, canonicalizeRow, parsePrice } from '../acp-feed-lint.mjs';
 import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, isEcommerce, snapRepro, urlKey, numericPrice } from './_shared.mjs';
 
@@ -25,13 +25,16 @@ function productNodes(page) {
     if (!b || b.ok === false || b.data === undefined) continue;
     for (const n of flattenNodes(b.data)) out.push(n);
   }
-  return out;
+  return disambiguateRootPaths(out);
 }
 
 const first = (v) => (Array.isArray(v) ? v[0] : v);
 
-/** A node that DECLARES a product here — not a `hasVariant` pointer, not a review's itemReviewed. */
-const declaresProduct = (n) => n.types.some((t) => t === 'Product' || t === 'ProductGroup') && !isBackReference(n) && !isReferenceStub(n);
+/**
+ * A node that DECLARES a product here — not a `hasVariant` member, not a review's itemReviewed,
+ * not a url-only pointer. lib/jsonld.mjs owns the rule so M5, M18 and the Shopify check agree.
+ */
+const declaresProduct = (n) => isProductDeclaration(n);
 
 /**
  * The node this page is about, so title, price and availability all describe ONE product.
@@ -55,15 +58,33 @@ export function primaryProduct(nodes, url) {
 
 /**
  * The Offer that belongs to THIS node: its own `offers` (matched by identity, since two sibling
- * root nodes share a flatten path). A page-wide Offer is borrowed only when the page has exactly
- * one — quoting one node's price beside another node's title describes a product that does not exist.
- * @returns {{offer: object|null, source: 'node'|'page'|'none'}}
+ * root nodes share a flatten path). A ProductGroup that carries no `offers` of its own is priced by
+ * the offers under its own `hasVariant` members, matched the same way — Google documents the group
+ * as the parent of the variant offers — so the cheapest
+ * variant offer stands for the group the way a price range does; reading "price missing" off a group
+ * whose variants each carry a price would be a false claim about the page. A page-wide Offer is
+ * borrowed only when the page has exactly one: quoting one node's price beside another node's title
+ * describes a product that does not exist.
+ * @returns {{offer: object|null, source: 'node'|'variants'|'page'|'none', variant_count?: number}}
  */
 export function offerFor(product, offers) {
   const own = first(product.node.offers);
   if (own && typeof own === 'object') {
     const match = offers.find((o) => o.node === own);
     return { offer: match || { path: product.path + '.offers', node: own }, source: 'node' };
+  }
+  if (product.types.includes('ProductGroup')) {
+    // Identity, never the path text: two sibling ProductGroups flatten to the same path, and a
+    // prefix match then priced a group from the OTHER group's variants — a false price on the page.
+    const members = variantNodeSet(product.node);
+    const fromVariants = members.size ? offers.filter((o) => members.has(o.node)) : [];
+    if (fromVariants.length) {
+      const priceOf = (o) => numericPrice(o.node.price != null ? o.node.price : o.node.lowPrice);
+      const priced = fromVariants.filter((o) => priceOf(o) != null);
+      const pool = priced.length ? priced : fromVariants;
+      const best = pool.reduce((a, b) => (priced.length && priceOf(b) < priceOf(a) ? b : a));
+      return { offer: best, source: 'variants', variant_count: fromVariants.length };
+    }
   }
   if (offers.length === 1) return { offer: offers[0], source: 'page' };
   return { offer: null, source: 'none' };
@@ -96,7 +117,9 @@ export const check = {
   run(ctx) {
     const out = [];
     const pages = contentPages(ctx);
-    const withProduct = pages.filter((p) => productNodes(p).some((n) => n.types.includes('Product')));
+    // A page qualifies on what it DECLARES: a review widget's `itemReviewed` Product, or a variant
+    // pointer, is not this page announcing a product of its own.
+    const withProduct = pages.filter((p) => productNodes(p).some(declaresProduct));
     if (!isEcommerce(ctx) && !withProduct.length) return out;
 
     const feedPath = ctx.options && ctx.options.feed_path;
@@ -147,7 +170,7 @@ export const check = {
       /* ---- catalogue eligibility -------------------------------------------------------------- */
       const p = primaryProduct(nodes, url);
       if (p) {
-        const { offer, source: offerSource } = offerFor(p, offers);
+        const { offer, source: offerSource, variant_count: variantOffers } = offerFor(p, offers);
         const price = offer ? numericPrice(offer.node.price != null ? offer.node.price : offer.node.lowPrice) : null;
         const checks = {
           title: !!clip(p.node.name || '', 200),
@@ -162,7 +185,9 @@ export const check = {
           id: 'M18.agentic.catalog_eligibility', title: 'Per-product catalogue eligibility', status, severity: 3, scope: 'page', ...at,
           evidence: { observed: url + ' — ' + p.path + ': title=' + (checks.title ? '"' + clip(p.node.name, 50) + '"' : 'missing')
             + ', image=' + (checks.image ? 'present' : 'missing')
-            + ', price=' + (price != null ? price + ' (' + offer.path + (offerSource === 'page' ? ', the page\'s only Offer' : '') + ')' : 'missing')
+            + ', price=' + (price != null ? price + ' (' + offer.path
+              + (offerSource === 'page' ? ', the page\'s only Offer' : '')
+              + (offerSource === 'variants' ? ', the lowest of ' + plural(variantOffers, 'variant offer') + ' the group carries' : '') + ')' : 'missing')
             + ', url=present, availability=' + (checks.availability ? clip(first(offer.node.availability), 40) : 'missing') + '.' },
           expected: 'A product an agent can list carries a title, an image, a price above zero, a stable URL and a visible availability state.',
           recommendation: missing.length ? 'Supply the missing field(s): ' + listing(missing, 5) + '.' : 'No action needed — the product carries everything an agent needs to list it.',

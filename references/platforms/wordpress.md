@@ -84,11 +84,11 @@ overwrite a post body — the adapter's payload builder must refuse both keys.
 
 ## 6. Write method & credentials
 
-REST: Application Passwords over HTTPS Basic auth. Credential key names: `WORDPRESS_URL`,
-`WORDPRESS_USER`, `WORDPRESS_APP_PASSWORD`. Some hosts disable Application Passwords entirely — that
-is a `needs_api`, not a failure to try harder.
+REST: Application Passwords over HTTPS Basic auth. Credential key names: `WP_URL`, `WP_USER`,
+`WP_APP_PASSWORD` (the longer `WORDPRESS_*` spellings still resolve). Some hosts disable Application
+Passwords entirely — that is a `needs_api`, not a failure to try harder.
 
-WP-CLI: `WORDPRESS_SSH` (an ssh target), with `wp` and `ssh` on PATH. Every command is printed
+WP-CLI: `WP_SSH` (an ssh target), with `wp` and `ssh` on PATH. Every command is printed
 before it runs.
 
 Official MCP: `WordPress/mcp-adapter` (Abilities API). `Automattic/wordpress-mcp` is deprecated. A
@@ -119,7 +119,10 @@ regenerated as a side effect (sitemap caches, schema caches) — those rebuild o
 
 Unlocked by this card:
 
-- `M17.wordpress.duplicate_sitemaps` — warn · 3 · search · established · advisory (core **and** plugin sitemap both 200)
+- `M17.wordpress.duplicate_sitemaps` — warn · 3 · search · established · advisory, when two DIFFERENT
+  documents both serve a usable sitemap and their URL sets differ (`directional` when only one of the
+  two URL lists was collected). A legacy path that redirects onto the plugin sitemap, or a second path
+  serving the same URL set, is one source under two names and is reported `pass`.
 - `M17.wordpress.no_sitemap_any` — fail · 3 · search · established · advisory
 - `M2.wordpress.blog_public_off` — fail · 5 · search · established · proposed(wpcli)
 - `M1.wordpress.replytocom_crawlable` — warn · 1 · search · directional · advisory

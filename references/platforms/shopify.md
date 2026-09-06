@@ -86,8 +86,10 @@ object exposes `robots`, `group`, `rule`, `user_agent`, `sitemap`, `request`.
 
 **Theme** — Shopify CLI. `shopify theme pull` → edit → `shopify theme check --path <work> -o json
 --fail-level error` → `shopify theme push --path <work> --unpublished --theme "<name>" --json`.
-Credential key names: `SHOPIFY_STORE`, `SHOPIFY_CLI_THEME_TOKEN` (a Theme Access token). Passed to
-the child process through `env`, never on argv. `shopify` must be on PATH.
+Credential key names: `SHOPIFY_STORE`, `SHOPIFY_THEME_TOKEN` (a Theme Access token). The CLI reads
+it as `SHOPIFY_CLI_THEME_TOKEN`, which the toolkit sets in the child process `env`, never on argv.
+The older `SHOPIFY_CLI_THEME_TOKEN` spelling still resolves if it is what you exported. `shopify`
+must be on PATH.
 
 **Admin GraphQL** — `https://<store>/admin/api/2026-07/graphql.json` with an
 `X-Shopify-Access-Token` header. Credential key names: `SHOPIFY_STORE`, `SHOPIFY_ADMIN_TOKEN`.
@@ -142,8 +144,12 @@ Unlocked by this card:
   instead — there is no observable `warn` variant of this id.
 - `M2.shopify.collections_all_indexable` — warn · 1 · search · directional · advisory
 - `M20.shopify.duplicate_hreflang` — fail · 3 · search · established · proposed(theme)
-- `M5.shopify.theme_jsonld_gaps` — warn · 3 · both · established · proposed(theme)
-- `M5.shopify.duplicate_product_jsonld` — warn · 3 · both · established · proposed
+- `M5.shopify.theme_jsonld_gaps` — warn · 3 · both · established · proposed(theme). Judged per
+  DECLARATION, and a ProductGroup is judged together with its `hasVariant` entries: the group carries
+  brand, the variants carry sku/gtin and the variant URLs, and Google documents the inheritance.
+- `M5.shopify.duplicate_product_jsonld` — warn · 3 · both · established · proposed. Counts declared
+  Product/ProductGroup nodes only (`lib/jsonld.mjs` `classifyProductNodes`): variant members, review
+  back-references and url-only stubs are pointers at one product, not extra Product blocks.
 - `M7.shopify.description_is_body_fallback` — warn · 2 · search · directional · proposed(admin)
 
 Not implemented: `M2.shopify.seo_hidden_detected`. From the storefront, a resource hidden with the

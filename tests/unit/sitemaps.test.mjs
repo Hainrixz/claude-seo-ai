@@ -155,6 +155,32 @@ describe('discoverSitemaps (injected fetcher, no network)', () => {
     const relative = await discoverSitemaps(origin, { sitemaps: ['/sitemap.xml'] }, fetchImpl, { wellKnown: false });
     assert.equal(relative.files[0].url, origin + '/sitemap.xml', 'relative Sitemap: lines resolve against the origin');
   });
+  it('records the final URL and walks a redirect alias only once', async () => {
+    // /wp-sitemap.xml -> 301 -> /sitemap_index.xml -> 302 -> /sitemap.xml is ONE sitemap. Keying the
+    // file on the requested URL made it three live sources with identical url_counts, walked the same
+    // index three times, and spent the 50-file budget on the duplicates.
+    const redirecting = async (url, opts) => {
+      const target = (url === origin + '/wp-sitemap.xml' || url === origin + '/sitemap_index.xml') ? origin + '/sitemap.xml' : url;
+      const r = await fetchImpl(target, opts);
+      return { ...r, final_url: target };
+    };
+    const d = await discoverSitemaps(origin, robots, redirecting);
+    const by = Object.fromEntries(d.files.map((f) => [f.url, f]));
+    assert.equal(by[origin + '/sitemap.xml'].alias_of, null, 'the first path to reach the document owns it');
+    assert.equal(by[origin + '/sitemap.xml'].final_url, origin + '/sitemap.xml');
+    for (const alias of ['/wp-sitemap.xml', '/sitemap_index.xml']) {
+      const f = by[origin + alias];
+      assert.equal(f.final_url, origin + '/sitemap.xml', alias + ' resolves to the one document');
+      assert.equal(f.redirected, true);
+      assert.equal(f.alias_of, origin + '/sitemap.xml');
+      assert.equal(f.kind, 'sitemapindex', 'what the path serves is still described honestly');
+    }
+    assert.equal(d.found, 3, 'index + its two children — the aliases are not counted as extra sitemaps');
+    assert.equal(d.urls.filter((u) => u.loc === 'https://example.com/blog/a?x=1&y=2').length, 1,
+      'an alias contributes no second copy of the same URLs');
+    assert.equal(d.files.filter((f) => f.parent === origin + '/sitemap.xml').length, 2, 'the index is walked once');
+  });
+
   it('survives a throwing fetcher and a robotsFromFetch-shaped robots argument', async () => {
     const d = await discoverSitemaps(origin, { mode: 'parsed', robots }, async () => { throw new Error('boom'); }, { wellKnown: false });
     assert.equal(d.files.length, 1);

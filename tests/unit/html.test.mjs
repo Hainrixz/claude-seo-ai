@@ -166,6 +166,13 @@ describe('parseDocument on malformed.html', () => {
     assert.equal(product.abs, 'https://example.test/img/product.jpg');
     assert.deepEqual([noalt.alt, noalt.alt_present, noalt.sized], [null, false, true]);
     assert.equal(doc.images.find((i) => i.src === 'decoy.png' || i.src === '/pixel.gif' || i.src === '/script-decoy.png'), undefined);
+    assert.deepEqual(doc.images.map((i) => i.bound), [[], [], [], [], []], 'no framework bindings in this fixture');
+  });
+  it('images: a framework-bound src/alt is recorded, so an absent attribute is not read as an empty one', () => {
+    const bound = parseDocument('<main><img v-if="p" :src="p.image" :alt="p.title" width="96" height="96">'
+      + '<img x-bind:src="s" [alt]="t"><img v-bind:alt="t" src="/x.png"><img src="/y.png" alt="plain"></main>', 'https://example.test/').images;
+    assert.deepEqual(bound.map((i) => i.bound), [[':src', ':alt'], ['x-bind:src', '[alt]'], ['v-bind:alt'], []]);
+    assert.deepEqual([bound[0].src, bound[0].alt_present], [null, false], 'the plain attributes really are absent from the static HTML');
   });
   it('jsonld: MIME match ignores params/case/whitespace; invalid JSON reported, never guessed', () => {
     assert.deepEqual(doc.jsonld.map((b) => [b.ok, b.type]), [[true, ['Organization']], [true, ['WebSite']], [false, []]]);

@@ -109,7 +109,7 @@ a framework card disagree about the head, `capabilities.head_owner` settles it.
     "redirects": "admin-api | plugin | file | none",
     "head_owner": "theme | seo-plugin | framework | builder"
   },
-  "write_targets": [{ "adapter": "shopify-theme", "for": ["head", "jsonld", "robots", "llms"], "ready": false, "needs": ["SHOPIFY_STORE", "SHOPIFY_CLI_THEME_TOKEN"], "tools": { "shopify": false } }],
+  "write_targets": [{ "adapter": "shopify-theme", "for": ["head", "jsonld", "robots", "llms"], "ready": false, "needs": ["SHOPIFY_STORE", "SHOPIFY_THEME_TOKEN"], "tools": { "shopify": false } }],
   "candidates": { "platform": [], "framework": [] },
   "vertical_hints": ["ecommerce"],
   "cards": ["references/platforms/shopify.md"],

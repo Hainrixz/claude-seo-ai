@@ -43,8 +43,8 @@ canonical for multi-domain portals); the tracking script; CTA and form markup; l
 
 ## 6. Write method & credentials
 
-HubSpot CMS API v3. Credential key name: `HUBSPOT_ACCESS_TOKEN` (a private app token with CMS
-scopes). Page ids come from the pages listing, not from the URL.
+HubSpot CMS API v3. Credential key name: `HUBSPOT_TOKEN` (a private app token with CMS scopes;
+`HUBSPOT_ACCESS_TOKEN` still resolves). Page ids come from the pages listing, not from the URL.
 
 ## 7. Preview & publish
 

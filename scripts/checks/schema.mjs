@@ -9,7 +9,7 @@
 // price and none of the displayed prices matches the marked-up one. A page with no visible price is
 // reported as nothing, because "the markup disagrees with the page" would then be unfalsifiable.
 
-import { flattenNodes, typesOf, isBackReference, isReferenceStub, pathProperty, ownProps } from '../lib/jsonld.mjs';
+import { flattenNodes, disambiguateRootPaths, typesOf, classifyProductNodes, pathProperty, ownProps } from '../lib/jsonld.mjs';
 import { contentMask, visibleText, classifyNumbers } from '../lib/passages.mjs';
 import { detectLang } from '../lib/lang.mjs';
 import { mk, push, clip, listing, plural, agree, finalUrl, isContentPage, snapRepro, tokensFor, numericPrice } from './_shared.mjs';
@@ -41,7 +41,9 @@ function nodesOf(page) {
     if (!b || b.ok === false || b.data === undefined) return;
     for (const n of flattenNodes(b.data)) out.push({ ...n, block: i });
   });
-  return out;
+  // Two roots of the same type (two blocks, or two members of one array) both flatten to their type
+  // name, so the second is renamed "Product[1]": a finding that quotes a path must name one node.
+  return disambiguateRootPaths(out);
 }
 
 export const check = {
@@ -99,24 +101,28 @@ export const check = {
     // location, so a finding per node would collapse to one in report.mjs's dedupe anyway — and the
     // reader would be told "21 duplicates merged" instead of which nodes are short an Offer.
     //
-    // Two node shapes are pointers rather than declarations and are excluded:
-    //   - a nested node carrying nothing but url/name/@id (a `hasVariant` entry), which is a
-    //     REFERENCE to a variant defined elsewhere — counting it would contradict M18, which owns
-    //     variant-level pricing (M18.offer.missing_price / M18.variants.no_productgroup);
+    // Which nodes count as declarations is lib/jsonld.mjs's classifyProductNodes() — the same rule
+    // M18 and the Shopify check use. Three shapes are pointers rather than declarations:
+    //   - a `hasVariant` member: Google documents a ProductGroup's variants as inheriting the
+    //     group's properties, so the group is the declaration and variant-level pricing is M18's
+    //     (M18.offer.missing_price / M18.variants.no_productgroup);
+    //   - a nested node carrying nothing but url/name/@id, or no substantive property at all — a
+    //     REFERENCE to a product defined elsewhere;
     //   - a node reached through a back-reference property (`itemReviewed`, `isSimilarTo`,
     //     `isRelatedTo`, `isVariantOf`, `mainEntity` under a review node). A review widget's
     //     `aggregateRating.itemReviewed = {"@type":"Product","name":"…"}` describes the item being
     //     reviewed, not an offer the page is short of; claiming otherwise is a false failure about
     //     the merchant's markup — and the page's real Product/ProductGroup usually does carry price.
-    const products = nodes.filter((n) => n.types.includes('Product'));
-    const offerless = [], stubs = [], backRefs = [];
-    for (const p of products) {
-      const offers = p.node && p.node.offers;
-      if (Array.isArray(offers) ? offers.length > 0 : offers && typeof offers === 'object') continue;
-      if (isBackReference(p)) backRefs.push(p);
-      else if (isReferenceStub(p)) stubs.push(p);
-      else offerless.push(p);
-    }
+    const hasOffer = (n) => {
+      const offers = n && n.offers;
+      return Array.isArray(offers) ? offers.length > 0 : !!(offers && typeof offers === 'object');
+    };
+    const groups = classifyProductNodes(nodes);
+    // ProductGroup is M18's subject (it prices through its variants); M5 keeps its Product scope.
+    const offerless = groups.declarations.filter((p) => p.types.includes('Product') && !hasOffer(p.node));
+    const stubs = groups.stubs.filter((p) => !hasOffer(p.node));
+    const variants = groups.variants.filter((p) => !hasOffer(p.node));
+    const backRefs = groups.back_references.filter((p) => !hasOffer(p.node));
     if (offerless.length) {
       const first = offerless[0];
       const names = offerless.map((p) => p.path + ' ("' + clip((p.node && p.node.name) || '(unnamed)', 40) + '")');
@@ -125,6 +131,7 @@ export const check = {
         evidence: { observed: plural(offerless.length, 'Product node') + ' on ' + url + ' ' + agree(offerless.length, 'declares', 'declare') + ' no `offers` property: ' + listing(names, 4)
           + '. Properties present on ' + first.path + ': ' + listing(ownProps(first.node), 8)
           + (stubs.length ? '. ' + plural(stubs.length, 'further reference stub') + ' (url/name/@id only) left to M18, which owns variant pricing' : '')
+          + (variants.length ? '. ' + plural(variants.length, 'further node') + ' ' + agree(variants.length, 'is', 'are') + ' a `hasVariant` member of the ProductGroup that declares it, which Google documents as inheriting the group\'s properties' : '')
           + (backRefs.length ? '. ' + plural(backRefs.length, 'further node') + ' reached through ' + listing([...new Set(backRefs.map((b) => pathProperty(b.path)))], 3) + ' ' + agree(backRefs.length, 'is', 'are') + ' a back-reference to an item declared elsewhere, not a declaration on this page' : '') + '.' },
         expected: 'Product carries an Offer (or AggregateOffer) with price and priceCurrency.',
         recommendation: 'Add an offers node with price, priceCurrency and availability, using schema/jsonld-templates/product-offer.json.',

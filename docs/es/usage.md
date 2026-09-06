@@ -354,9 +354,14 @@ simulación.
 2. **Confirma el perfil de plataforma.** Cuando la confianza de plataforma está por debajo de `high`,
    o `--target auto` deja más de una ruta de escritura plausible, ves qué se detectó —con las
    señales— y lo confirmas o lo corriges. Un perfil equivocado escribe en la superficie equivocada.
-3. **Comprueba la preparación.** La operación `capabilities` de cada adaptador informa qué puede
-   hacer y qué claves de credenciales faltan, **solo por nombre**. Una clave ausente degrada ese
-   destino a `instructions`; nunca detiene la ejecución.
+3. **Comprueba la preparación.** Las credenciales se vuelven a comprobar **en el entorno donde se
+   ejecuta la corrección**, no contra la marca `ready` que la auditoría congeló en `profile.json`:
+   exporta las claves (o rellena las opciones de `/plugin`) y `--target auto` reconoce el adaptador
+   en la siguiente ejecución, sin volver a auditar. El plan imprime una línea por adaptador —listo /
+   no listo, las claves que necesita y las que siguen faltando, **solo por nombre**—. Después, la
+   operación `capabilities` de cada adaptador informa qué puede hacer. Una clave ausente degrada ese
+   destino a `instructions`; nunca detiene la ejecución. (La detección de herramientas —un binario
+   `shopify` o `wp` en el `PATH`— sigue viniendo del perfil de la auditoría.)
 4. **Planifica.** Una sola llamada a `fix-plan.mjs` agrupa los hallazgos corregibles del informe según
    el adaptador dueño de cada superficie y escribe `plan.json` + `manifest.json`. Las entradas del
    mundo real sin resolver —un mapa de locales, URLs de perfil para `sameAs`, el preset de robots, el
@@ -447,8 +452,11 @@ que el manifiesto se puede reproducir con honestidad.
 
 ### Otras garantías de seguridad
 
-- **Consciente de Git**: rechaza escribir en un working tree sucio salvo con `--force`, y prefiere una
-  rama `seo-fix/<date>`.
+- **Consciente de Git** (*protocolo del escritor, no código*): `skills/seo-fix-apply` indica al
+  subagente escritor que ejecute `git status --porcelain` antes de nada, rechace un working tree
+  sucio salvo con `--force` y prefiera una rama `seo-fix/<date>`. Ningún adaptador ejecuta git: esta
+  regla se cumple porque el escritor sigue su protocolo, a diferencia de las garantías siguientes,
+  que se cumplen haga lo que haga el modelo.
 - **Idempotente**: cada cambio lleva un marcador o una comprobación de existencia, así que volver a
   ejecutarlo produce `skipped_idempotent`, nunca un bloque duplicado.
 - **Nunca toca** `.git/`, `.env*`, lockfiles, material de claves, `wp-config.php` ni un

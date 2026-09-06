@@ -217,6 +217,46 @@ reversible.
   (the registry now exports 151 ids, one below the original plan, on purpose).
 - Round-2 fixes across `audit`, `report`, `score`, `psi-client`, `ai-discovery`, `agent-readiness`,
   `lib/util` and thirteen checks, each with regression coverage.
+- **False claims about correct product markup.** "Which nodes declare a product here?" is now one
+  rule in `lib/jsonld.mjs` (`isProductDeclaration` / `classifyProductNodes`), shared by M5, M18 and
+  the Shopify platform check. A `ProductGroup` with url-only `hasVariant` stubs is one product, not
+  one per variant: it no longer produces `M5.product.missing_offer_price`,
+  `M5.shopify.duplicate_product_jsonld` ("29 Product nodes on …"), `M5.shopify.theme_jsonld_gaps`
+  ("ProductGroup.hasVariant[0] lacks brand, sku, gtin") or a failing `M18.agentic.catalog_eligibility`.
+  A ProductGroup is judged with its variants, and priced from their offers when it carries none.
+- **One product priced from another product's offer.** Two sibling root `ProductGroup`s — a theme
+  and an app each emitting one, the case `M5.shopify.duplicate_product_jsonld` exists to report —
+  are both named `"ProductGroup"` by the flattener, so matching variants by path text handed each
+  group the other's: `M18.agentic.catalog_eligibility` quoted the neighbour's cheapest price as this
+  product's, and `M5.shopify.theme_jsonld_gaps` let a neighbour's `gtin` clear a group that had none
+  while claiming a `brand` that was not there — both at `established` confidence. Variant membership
+  is now object identity (`lib/jsonld.mjs` `variantNodeSet`), and repeated root paths are named apart
+  in evidence (`ProductGroup[1]`, `disambiguateRootPaths`). `theme_jsonld_gaps` also counts a group's
+  variants instead of its nodes: 83 variants were reported as "97 variant nodes".
+- **Evidence that quoted markup the page does not ship.** `M9.alt.missing` printed `src=""` for an
+  `<img>` with no `src` attribute — a framework-bound `<img :src=… :alt=…>` in the live theme. The
+  tag is now quoted from the attributes it actually carries, `lib/html.mjs` records `images[].bound`
+  (`:src`, `v-bind:alt`, `x-bind:src`, `[src]`), and the evidence names the binding so the
+  static-render caveat is visible; the claim itself — no `alt` in the HTML a non-JS consumer reads —
+  stands. `M14.citation_bots.blocked` takes the singular verb when one token is excluded.
+- **`M17.wordpress.duplicate_sitemaps` called one sitemap three.** `lib/sitemaps.mjs` now records
+  each file's `final_url` and marks a path that resolves onto an already-fetched document as
+  `alias_of` it — so `/wp-sitemap.xml` -> `/sitemap_index.xml` -> `/sitemap.xml` is walked once
+  instead of three times (which also spent the 50-file budget). The check claims duplication only
+  when two different documents serve materially different URL sets, and reports `pass` with the
+  evidence otherwise; when only one of the two URL lists was collected the claim is `directional`.
+- **`M14.citation_bots.blocked` rested an `established` claim on undocumented tokens.** The
+  confidence is `established` only when a blocked token is vendor-documented including its robots.txt
+  behaviour; a block reaching only legacy tokens (`Claude-Web`, `MistralAI-User`) is still reported,
+  marked as such in the evidence, at `directional`.
+- **`fix --target auto` ignored exported credentials.** `resolveTargets()` re-checks the keys against
+  the environment the fix runs in (through `lib/credentials.mjs`, names only) instead of trusting the
+  `ready` flag `detect-platform.mjs` froze at audit time, and the plan prints ready/needs per adapter.
+- `lib/platform-rules.mjs` `needs[]` and `PAGE_API_KEYS` now name the catalog/`userConfig` keys
+  (`SHOPIFY_THEME_TOKEN`, `WP_URL`, `GHOST_ADMIN_KEY`, …) rather than the longer historical spellings,
+  which still resolve as aliases everywhere, including in `detect-platform.mjs`'s presence check.
+- `loadRunContext()` no longer re-adds the snapshots `crawl.mjs` deliberately dropped as non-HTML, so
+  the checks context and `crawl.json` agree on how many pages a run has.
 - Round-3 fixes across the adapter layer: `updateManifest()` is now the single reporting path for
   every apply/rollback/publish (previously each adapter hand-rolled its own manifest edits, so
   `dry_run` and the result lists could disagree); `loadFixRun(ref)` accepts a run id **or** a

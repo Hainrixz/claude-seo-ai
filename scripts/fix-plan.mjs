@@ -32,6 +32,9 @@ import { fixRunDir, loadFixRun, openFixRun, resolveDataDirInfo } from './lib/ada
 // Not an adapter (it is the adapters' shared plumbing), so it is imported statically: the same
 // predicate must decide what `--category` means here and inside every adapter.
 import { matchesCategory } from './adapters/_shared.mjs';
+// Credential presence is read here, never a value: lib/credentials.mjs is the only resolver, and it
+// looks in both the CLAUDE_PLUGIN_OPTION_<KEY> and <KEY> spellings.
+import { canonicalKey, keysForAdapter, missingKeys } from './lib/credentials.mjs';
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -83,12 +86,23 @@ export function splitList(value) {
 
 /**
  * Which adapters this run plans for.
- * @param {object} opts { targets, profile, project, env }
- * @returns {{targets: string[], provider: string|null, notes: string[], errors: string[], source: 'flag'|'profile'}}
+ *
+ * Readiness is re-evaluated HERE, against the environment this process is running in — not read off
+ * `profile.write_targets[].ready`, which detect-platform.mjs computed when the audit ran. The
+ * documented flow is "export the keys (or fill the /plugin prompts), then run fix": with the frozen
+ * flag, an audit taken before the keys existed collapsed every write adapter to `instructions` even
+ * with the credentials exported, and `--targets shopify-admin` on the same shell reported the group
+ * ready. Tool detection (a `shopify` or `wp` binary on PATH) still comes from the profile, because
+ * this function does not spawn anything; a caller that knows better passes `tools`.
+ *
+ * @param {object} opts { targets, profile, project, env, tools }
+ * @returns {{targets: string[], provider: string|null, notes: string[], errors: string[],
+ *   source: 'flag'|'profile', readiness: Array<{adapter, ready, needs, missing, tools, ready_in_profile}>}}
  */
-export function resolveTargets({ targets = null, profile = null, project = null, env = process.env } = {}) {
+export function resolveTargets({ targets = null, profile = null, project = null, env = process.env, tools = null } = {}) {
   const notes = [];
   const errors = [];
+  const readiness = [];
   const requested = splitList(targets);
   const explicit = requested.filter((t) => t !== 'auto');
   let provider = requested.find((t) => PAGE_API_PROVIDERS.includes(t)) || null;
@@ -110,7 +124,33 @@ export function resolveTargets({ targets = null, profile = null, project = null,
     const wt = profile && Array.isArray(profile.write_targets) ? profile.write_targets : [];
     const byId = new Map(wt.map((t) => [t && t.adapter, t]));
     const platform = (profile && profile.platform && profile.platform.id) || null;
-    const ready = (id) => !!(byId.get(id) && byId.get(id).ready);
+
+    /** Live readiness for one profile target: keys from `env` now, tools from the profile. */
+    const assess = (id) => {
+      const t = byId.get(id) || {};
+      // An empty `needs` in the profile is a statement ("this adapter needs no keys"), not a gap:
+      // only a target with no needs field at all falls back to the catalog.
+      const needs = Array.isArray(t.needs) ? t.needs : keysForAdapter(id);
+      const missing = missingKeys(needs, env);
+      const toolMap = { ...(t.tools || {}), ...(tools || {}) };
+      const missingTools = Object.entries(toolMap).filter(([, ok]) => !ok).map(([name]) => name);
+      const row = {
+        adapter: id,
+        needs: needs.map((k) => canonicalKey(k)),
+        missing,
+        missing_tools: missingTools,
+        tools: toolMap,
+        ready: missing.length === 0 && missingTools.length === 0,
+        ready_in_profile: !!t.ready,
+      };
+      readiness.push(row);
+      return row;
+    };
+    /** "is missing SHOPIFY_ADMIN_TOKEN" / "cannot find the `shopify` CLI" — only what is true now. */
+    const lack = (row) => [
+      row.missing.length ? 'is missing ' + row.missing.join(', ') : null,
+      row.missing_tools.length ? 'cannot find ' + row.missing_tools.map((t) => '`' + t + '`') .join(', ') + ' on PATH' : null,
+    ].filter(Boolean).join(' and ');
 
     if (project) list.push('local-files');
     else if (byId.has('local-files')) notes.push('the profile can write local files, but this run has no --project: pass one to edit the source tree.');
@@ -118,26 +158,35 @@ export function resolveTargets({ targets = null, profile = null, project = null,
     if (platform === 'shopify') {
       for (const id of ['shopify-theme', 'shopify-admin']) {
         if (!byId.has(id)) continue;
-        if (ready(id)) list.push(id);
-        else notes.push(id + ' is the right write path for Shopify but is missing ' + (byId.get(id).needs || []).join(', ') + ' — falling back to instructions.');
+        const row = assess(id);
+        if (row.ready) list.push(id);
+        else notes.push(id + ' is the right write path for Shopify but ' + lack(row) + ' — falling back to instructions.');
       }
     }
     if (platform === 'wordpress') {
-      if (ready('wordpress-rest')) list.push('wordpress-rest');
-      else if (ready('wordpress-wpcli')) list.push('wordpress-wpcli');
-      else notes.push('WordPress: neither the REST credentials (WP_URL, WP_USER, WP_APP_PASSWORD) nor WP_SSH are present — falling back to instructions.');
+      const rest = byId.has('wordpress-rest') ? assess('wordpress-rest') : null;
+      const cli = byId.has('wordpress-wpcli') ? assess('wordpress-wpcli') : null;
+      if (rest && rest.ready) list.push('wordpress-rest');
+      else if (cli && cli.ready) list.push('wordpress-wpcli');
+      else notes.push('WordPress: neither the REST credentials (WP_URL, WP_USER, WP_APP_PASSWORD) nor WP_SSH are usable in this environment'
+        + (rest && rest.missing.length ? ' (REST ' + lack(rest) + ')' : '') + ' — falling back to instructions.');
     }
     if (byId.has('page-api')) {
-      if (ready('page-api')) { list.push('page-api'); provider = provider || platform; }
-      else notes.push('page-api is available for ' + (platform || 'this platform') + ' but is missing ' + (byId.get('page-api').needs || []).join(', ') + ' — falling back to instructions.');
+      const row = assess('page-api');
+      if (row.ready) { list.push('page-api'); provider = provider || platform; }
+      else notes.push('page-api is available for ' + (platform || 'this platform') + ' but ' + lack(row) + ' — falling back to instructions.');
     }
     if (!wt.length) notes.push('the profile carries no write_targets; planning instructions only.');
+    // Say when the environment changed the answer: the operator exported the keys and it worked.
+    for (const row of readiness) {
+      if (row.ready && !row.ready_in_profile) notes.push(row.adapter + ' is ready in this environment (the audit-time profile said it was not): ' + (row.needs.length ? row.needs.join(', ') + ' resolved' : 'no credentials needed') + '.');
+    }
   }
 
   list = uniq(list).filter((a) => a !== 'instructions');
   list.push('instructions'); // always last, always present: every finding has somewhere to go
   if (provider && !PAGE_API_PROVIDERS.includes(provider)) provider = null;
-  return { targets: list, provider, notes, errors, source };
+  return { targets: list, provider, notes, errors, source, readiness };
 }
 
 /** Import one adapter module. A target that does not exist yet is reported, never thrown. */
@@ -331,6 +380,17 @@ export function renderSummary(result) {
   L.push('report: ' + (result.report || 'n/a'));
   L.push('run dir: ' + result.run_dir);
   L.push('');
+  // Names only, never values: the operator needs to know which key is still missing, not what is in it.
+  if ((result.target_readiness || []).length) {
+    L.push('write targets (credentials re-checked against this environment):');
+    for (const r of result.target_readiness) {
+      L.push('  ' + String(r.adapter).padEnd(16) + (r.ready ? 'ready    ' : 'not ready')
+        + '  needs: ' + (r.needs.length ? r.needs.join(', ') : 'no credentials')
+        + (r.missing.length ? '  ·  missing: ' + r.missing.join(', ') : '')
+        + (r.missing_tools.length ? '  ·  not on PATH: ' + r.missing_tools.join(', ') : ''));
+    }
+    L.push('');
+  }
   if (!result.changes_count) L.push('No changes planned. Every fixable finding was skipped — see `skipped` below.');
   for (const group of result.groups) {
     const head = group.adapter + ' — ' + group.changes.length + ' change' + (group.changes.length === 1 ? '' : 's');
@@ -536,6 +596,7 @@ export async function main(args) {
     project,
     targets: selection.targets,
     target_source: selection.source,
+    target_readiness: selection.readiness,
     provider: selection.provider,
     changes_count: all.length,
     auto_count,

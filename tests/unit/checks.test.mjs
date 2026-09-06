@@ -420,6 +420,20 @@ test('M9 judges content images only, and asks for VideoObject when a video is em
   assert.deepEqual(ids(clean), []);
 });
 
+test('M9 quotes the tag a framework-bound image actually ships, and says the alt is JS-written', async () => {
+  // The live allbirds run quoted a Vue-bound <img :src :alt> as `<img src="" width="96" ...>`:
+  // markup the page does not contain. The claim (no alt in the static HTML) is true and stays.
+  const page = mkPage(ORIGIN + '/a', HTML('<title>A Vue-rendered cart thumbnail</title>',
+    '<main><p>Some copy for the page body.</p>'
+    + '<img v-if="added" :src="added.image" :alt="added.title" width="96" height="96">'
+    + '<img src="/hero.png" alt="A described hero" width="10" height="10"></main>'));
+  const alt = one(await run(images, mkCtx({ pages: [page] })), 'M9.alt.missing');
+  assert.match(alt.evidence.observed, /1 content <img> of 2 has no alt attribute: <img width="96" height="96">/);
+  assert.ok(!/src=""/.test(alt.evidence.observed), 'never quote an attribute the markup does not carry: ' + alt.evidence.observed);
+  assert.match(alt.evidence.observed, /1 of them carries framework-bound attributes instead \(:alt, :src\); the alt on 1 of those is written by JavaScript/);
+  assert.equal(alt.expected_impact.confidence, 'established', 'the attribute is absent from the HTML a non-JS consumer reads — that is still a fact');
+});
+
 /* ------------------------------------------------------------------ M10 */
 
 test('M10 counts in-body links, generic anchors and the missing landmark', async () => {
@@ -619,6 +633,34 @@ test('M14 posture: citation bots, Google-Extended and Content-Signal', async () 
   const open = await run(aiCrawlers, mkCtx({ site: { robots: robotsArtifact('User-agent: *\nDisallow:\n') }, crawl: { target: ORIGIN + '/', origin: ORIGIN } }));
   assert.equal(one(open, 'M14.retrieval.allowed').status, 'pass');
   assert.equal(one(open, 'M14.content_signal.absent').status, 'not_applicable');
+});
+
+test('a citation-bot block resting only on undocumented tokens is directional, not established', async () => {
+  // lib/bots.mjs records Claude-Web and MistralAI-User with doc_url null / robots_reliability
+  // "unknown", and references/ai-crawlers.md marks them TO-VERIFY. A severity-4 `established` fail
+  // whose rationale is "each vendor documents its token and states that it honours robots.txt"
+  // cannot rest on those — the repo's own rule is that only vendor-documented claims may be
+  // `established`.
+  const legacyOnly = ['User-agent: Claude-Web', 'Disallow: /', '', 'User-agent: MistralAI-User', 'Disallow: /', '', 'User-agent: *', 'Disallow:'].join('\n');
+  const out = await run(aiCrawlers, mkCtx({ site: { robots: robotsArtifact(legacyOnly) }, crawl: { target: ORIGIN + '/', origin: ORIGIN } }));
+  const f = one(out, 'M14.citation_bots.blocked');
+  assert.equal(f.status, 'fail', 'the block is still reported — it is real');
+  assert.equal(f.expected_impact.confidence, 'directional');
+  assert.match(f.evidence.observed, /Claude-Web/);
+  assert.match(f.evidence.observed, /no vendor documentation/);
+  assert.doesNotMatch(f.expected_impact.rationale, /documents that the crawler honours robots\.txt/);
+
+  // One documented token in the set restores the documented claim, and the legacy ones stay visible
+  // as evidence that does not carry it.
+  const mixedText = ['User-agent: OAI-SearchBot', 'Disallow: /', '', 'User-agent: Claude-Web', 'Disallow: /', '', 'User-agent: *', 'Disallow:'].join('\n');
+  const mixed = one(await run(aiCrawlers, mkCtx({ site: { robots: robotsArtifact(mixedText) }, crawl: { target: ORIGIN + '/', origin: ORIGIN } })), 'M14.citation_bots.blocked');
+  assert.equal(mixed.expected_impact.confidence, 'established');
+  assert.match(mixed.evidence.observed, /Claude-Web .*no vendor documentation/);
+  // One excluded token takes the singular verb: evidence a person reads is undermined by
+  // "it is listed as evidence but do not carry the claim".
+  assert.match(mixed.evidence.observed, /Claude-Web is a legacy or undocumented token .*so it is listed as evidence but does not carry the claim\./);
+  assert.match(f.evidence.observed, /are legacy or undocumented tokens .*so they are listed as evidence but do not carry the claim\./,
+    'the plural set keeps the plural verb');
 });
 
 test('M14 eligibility escalates a site-wide blocker to severity 5 and reports an undecidable page as needs_api', async () => {
@@ -958,6 +1000,47 @@ test('loadRunContext reads a run directory, its site artifacts and the ua-diff s
   }
 });
 
+test('a snapshot the crawler dropped as non-HTML is not loaded back as a page', async () => {
+  // crawl.mjs takes a 200 that is not an HTML document (/agents.md, llms.txt, a JSON endpoint) out of
+  // the manifest on purpose and leaves the snapshot on disk as evidence. The "manually added page"
+  // fallback used to add it straight back, so the checks context held 4 pages where crawl.json and
+  // report.json said 3, and every site check that iterates ctx.pages directly saw a markdown file.
+  const root = mkdtempSync(join(tmpdir(), 'cseo-nonhtml-'));
+  try {
+    const runDir = join(root, 'run');
+    mkdirSync(join(runDir, 'pages'), { recursive: true });
+    const html = HTML('<title>The one real page in this run</title>');
+    writeFileSync(join(runDir, 'pages', 'index--abcd1234.html'), html);
+    writeFileSync(join(runDir, 'pages', 'index--abcd1234.json'), JSON.stringify({
+      snapshot_version: 2, target: { final_url: ORIGIN + '/', slug: 'index--abcd1234' }, status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' }, raw_html_path: 'pages/index--abcd1234.html',
+      parsed: parseDocument(html, ORIGIN + '/'),
+    }));
+    // Dropped by the crawler, kept on disk: markdown, and a hand-added HTML page the manifest missed.
+    writeFileSync(join(runDir, 'pages', 'agents-md--ffff0000.json'), JSON.stringify({
+      snapshot_version: 2, target: { final_url: ORIGIN + '/agents.md', slug: 'agents-md--ffff0000' }, status: 200,
+      headers: { 'content-type': 'text/markdown; charset=utf-8' }, html_inline: { raw: '# Agents\n\nNot a web page.\n' },
+    }));
+    const extra = HTML('<title>A page added by hand after the crawl</title>');
+    writeFileSync(join(runDir, 'pages', 'extra--11112222.json'), JSON.stringify({
+      snapshot_version: 2, target: { final_url: ORIGIN + '/extra', slug: 'extra--11112222' }, status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' }, html_inline: { raw: extra }, parsed: parseDocument(extra, ORIGIN + '/extra'),
+    }));
+    writeFileSync(join(runDir, 'crawl.json'), JSON.stringify({
+      crawl_version: 1, origin: ORIGIN, target: ORIGIN + '/',
+      pages: [{ url: ORIGIN + '/', slug: 'index--abcd1234', snapshot: 'pages/index--abcd1234.json', status: 200, role: 'homepage', template: '/|', inlinks: 0, in_sitemap: true, discovered_via: 'origin' }],
+    }));
+
+    const ctx = loadRunContext(runDir, {});
+    const urls = ctx.pages.map((p) => p.url).sort();
+    assert.deepEqual(urls, [ORIGIN + '/', ORIGIN + '/extra'],
+      'the markdown snapshot stays evidence on disk; the hand-added HTML page is still checked');
+    assert.equal(contentPages(ctx).length, 2, 'and the two views of the run agree');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 /* ------------------------------------------------------------------ discovery hydration */
 
 const PROBE_TEXT_HEAD = 4096;
@@ -1244,6 +1327,217 @@ test('M18 catalogue eligibility describes the primary node, not a url-only hasVa
   assert.match(elig.evidence.observed, /price=110 \(ProductGroup\.offers\)/);
   assert.ok(!/missing/.test(elig.evidence.observed), elig.evidence.observed);
   assert.equal(byId(out, 'M18.variants.no_productgroup').length, 0, 'variant stubs are not "several Product blocks"');
+});
+
+/* The shape a real Shopify variant page emits (allbirds.com/products/mens-wool-runners-…): one
+   ProductGroup carrying brand/sku/offers, 20 url-only hasVariant stubs, one fully described variant,
+   and a review widget whose itemReviewed points back at the item. Every module that reads Product
+   nodes has to agree that this page declares ONE product — the live run reported "29 Product nodes",
+   "ProductGroup.hasVariant[0] lacks brand, sku, gtin, offers.url" and a missing Offer at once. */
+const ALLBIRDS_JSONLD = (origin) => {
+  const stubs = Array.from({ length: 20 }, (_, i) => ({ '@type': 'Product', url: origin + '/products/wool-runners?size=' + (i + 5) }));
+  return JSON.stringify({
+    '@context': 'https://schema.org', '@type': 'ProductGroup', name: 'Wool Runners',
+    brand: { '@type': 'Brand', name: 'Allbirds' }, sku: 'WR-NAT-WHITE', gtin13: '0123456789012', image: origin + '/i.png',
+    productGroupID: 'WR', url: origin + '/products/wool-runners',
+    offers: { '@type': 'Offer', price: '110.00', priceCurrency: 'USD', availability: 'https://schema.org/InStock', url: origin + '/products/wool-runners' },
+    hasVariant: [...stubs, {
+      '@type': 'Product', name: 'Wool Runners — 9', sku: 'WR-9', image: origin + '/9.png',
+      offers: { '@type': 'Offer', price: '110.00', priceCurrency: 'USD', availability: 'https://schema.org/InStock', url: origin + '/products/wool-runners?size=9' },
+    }],
+    aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.6', reviewCount: '812', itemReviewed: { '@type': 'Product', name: 'Wool Runners', image: origin + '/i.png' } },
+  });
+};
+
+const allbirdsPage = () => mkPage(ORIGIN + '/products/wool-runners', HTML(
+  '<title>Wool Runners — a ProductGroup with 21 variants</title>'
+  + '<script type="application/ld+json">' + ALLBIRDS_JSONLD(ORIGIN) + '</script>',
+  '<main><h1>Wool Runners</h1><p>Buy the Wool Runners for $110.00 in every size we stock.</p></main>',
+));
+
+test('a ProductGroup with 20 url-only variant stubs is one declared product, not 21', async () => {
+  const page = allbirdsPage();
+  const shopifyCtx = mkCtx({
+    pages: [page],
+    crawl: { origin: ORIGIN, target: ORIGIN + '/products/wool-runners' },
+    site: { robots: robotsArtifact('User-agent: *\nDisallow: /collections/*+*\nDisallow: /collections/*%2B*\nDisallow: *sort_by*\nDisallow: /collections/*filter*\n') },
+    profile: { platform: { id: 'shopify', confidence: 'high' }, framework: null, cms_plugins: [], target: {} },
+  });
+  const shop = await run(platformShopify, shopifyCtx);
+  assert.equal(byId(shop, 'M5.shopify.duplicate_product_jsonld').length, 0,
+    'hasVariant entries are the documented way to model variants, not a second Product block');
+  assert.equal(byId(shop, 'M5.shopify.theme_jsonld_gaps').length, 0,
+    'brand, sku and offers.url are on the group; the variants inherit them');
+
+  assert.equal(byId(await run(schema, mkCtx({ pages: [page] })), 'M5.product.missing_offer_price').length, 0,
+    'the group carries the Offer and the stubs point at variants defined elsewhere');
+
+  const shopping = await run(ecommerce, mkCtx({ pages: [page], vertical: { primary: 'ecommerce' } }));
+  assert.equal(byId(shopping, 'M18.variants.no_productgroup').length, 0);
+  const elig = one(shopping, 'M18.agentic.catalog_eligibility');
+  assert.equal(elig.status, 'pass', elig.evidence.observed);
+  assert.match(elig.evidence.observed, /ProductGroup: title="Wool Runners"/);
+});
+
+test('Shopify still reports two real Product declarations, and names the pointers it left out', async () => {
+  const themeAndApp = mkPage(ORIGIN + '/products/dup', HTML(
+    '<title>Theme and app both emit Product markup</title>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Runner","sku":"R1","brand":"Acme",'
+    + '"offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD","url":"' + ORIGIN + '/products/dup"},'
+    + '"isSimilarTo":{"@type":"Product","name":"Other","image":"' + ORIGIN + '/o.png","description":"A related product"}}</script>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Runner (app)","sku":"R1",'
+    + '"brand":"Acme","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD","url":"' + ORIGIN + '/products/dup"}}</script>'));
+  const out = await run(platformShopify, mkCtx({
+    pages: [themeAndApp],
+    crawl: { origin: ORIGIN, target: ORIGIN + '/products/dup' },
+    site: { robots: robotsArtifact('User-agent: *\nDisallow:\n') },
+    profile: { platform: { id: 'shopify', confidence: 'high' }, framework: null, cms_plugins: [], target: {} },
+  }));
+  const dupe = one(out, 'M5.shopify.duplicate_product_jsonld');
+  assert.match(dupe.evidence.observed, /^2 Product nodes declared/);
+  assert.match(dupe.evidence.observed, /isSimilarTo/, 'the excluded pointer is named, so the count is auditable');
+  // The gap list may still fire (neither node carries a gtin) — but never against a pointer.
+  for (const gap of byId(out, 'M5.shopify.theme_jsonld_gaps')) {
+    assert.doesNotMatch(gap.evidence.observed, /hasVariant|isSimilarTo|itemReviewed/, gap.evidence.observed);
+  }
+});
+
+test('M18 prices a ProductGroup from its variants when the group carries no offers of its own', async () => {
+  const page = mkPage(ORIGIN + '/products/tree', HTML(
+    '<title>A ProductGroup priced through its variants</title>'
+    + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProductGroup","name":"Tree Runners",'
+    + '"image":"' + ORIGIN + '/t.png","brand":"Acme","hasVariant":['
+    + '{"@type":"Product","name":"Tree Runners — 8","sku":"T8","offers":{"@type":"Offer","price":"98.00","priceCurrency":"USD","availability":"https://schema.org/InStock","url":"' + ORIGIN + '/products/tree?size=8"}},'
+    + '{"@type":"Product","name":"Tree Runners — 9","sku":"T9","offers":{"@type":"Offer","price":"110.00","priceCurrency":"USD","availability":"https://schema.org/InStock","url":"' + ORIGIN + '/products/tree?size=9"}}]}</script>',
+    '<main><h1>Tree Runners</h1><p>From $98.00.</p></main>',
+  ));
+  const elig = one(await run(ecommerce, mkCtx({ pages: [page], vertical: { primary: 'ecommerce' } })), 'M18.agentic.catalog_eligibility');
+  assert.equal(elig.status, 'pass', elig.evidence.observed);
+  assert.match(elig.evidence.observed, /price=98 \(ProductGroup\.hasVariant\[0\]\.offers, the lowest of 2 variant offers the group carries\)/);
+  assert.ok(!/missing/.test(elig.evidence.observed), elig.evidence.observed);
+});
+
+/* Two sibling root ProductGroups — a theme and an app each emitting one, the shape
+   M5.shopify.duplicate_product_jsonld exists to report. Both flatten to the path "ProductGroup",
+   so matching variants by path prefix priced group A from group B's cheapest offer and let group
+   B's gtin answer for group A. Membership is object identity; the paths only name the evidence. */
+const TWO_GROUPS_HTML = () => HTML(
+  '<title>A theme and an app each emit a ProductGroup</title>'
+  + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProductGroup","name":"Group A",'
+  + '"url":"' + ORIGIN + '/products/a","image":"' + ORIGIN + '/a.png","brand":"Acme","sku":"A-SKU","hasVariant":['
+  + '{"@type":"Product","name":"A — 8","sku":"A8","offers":{"@type":"Offer","price":"500.00","priceCurrency":"USD","availability":"https://schema.org/InStock","url":"' + ORIGIN + '/products/a?size=8"}},'
+  + '{"@type":"Product","name":"A — 9","sku":"A9","offers":{"@type":"Offer","price":"700.00","priceCurrency":"USD","availability":"https://schema.org/InStock","url":"' + ORIGIN + '/products/a?size=9"}}]}</script>'
+  + '<script type="application/ld+json">{"@context":"https://schema.org","@type":"ProductGroup","name":"Group B",'
+  + '"image":"' + ORIGIN + '/b.png","hasVariant":['
+  + '{"@type":"Product","name":"B — 8","gtin13":"0123456789012","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD","availability":"https://schema.org/InStock"}}]}</script>',
+  '<main><h1>Group A</h1><p>Group A costs $500.00 and up.</p></main>',
+);
+
+test('M18 prices a ProductGroup from its own variants when a second group shares its flatten path', async () => {
+  const page = mkPage(ORIGIN + '/products/a', TWO_GROUPS_HTML());
+  const out = await run(ecommerce, mkCtx({ pages: [page], vertical: { primary: 'ecommerce' } }));
+  const elig = one(out, 'M18.agentic.catalog_eligibility');
+  assert.equal(elig.status, 'pass', elig.evidence.observed);
+  assert.match(elig.evidence.observed, /ProductGroup: title="Group A"/);
+  assert.match(elig.evidence.observed, /price=500 \(ProductGroup\.hasVariant\[0\]\.offers, the lowest of 2 variant offers the group carries\)/,
+    'the page renders $500; 10 is the other group\'s price and stating it would be a false claim');
+  assert.ok(!/price=10\b/.test(elig.evidence.observed), elig.evidence.observed);
+});
+
+test('Shopify judges each sibling ProductGroup on its own identifiers, and counts only its variants', async () => {
+  const page = mkPage(ORIGIN + '/products/a', TWO_GROUPS_HTML());
+  const out = await run(platformShopify, mkCtx({
+    pages: [page],
+    crawl: { origin: ORIGIN, target: ORIGIN + '/products/a' },
+    site: { robots: robotsArtifact('User-agent: *\nDisallow:\n') },
+    profile: { platform: { id: 'shopify', confidence: 'high' }, framework: null, cms_plugins: [], target: {} },
+  }));
+
+  const dupe = one(out, 'M5.shopify.duplicate_product_jsonld');
+  assert.match(dupe.evidence.observed, /ProductGroup "Group A", ProductGroup\[1\] "Group B"/,
+    'two roots of one type share a path, so the second is named — evidence has to point at one node');
+
+  const gaps = one(out, 'M5.shopify.theme_jsonld_gaps');
+  assert.match(gaps.evidence.observed, /ProductGroup \(with its 2 variant nodes\) lacks gtin/,
+    'group A really has no gtin; group B\'s gtin13 must not answer for it, and the 2 nested Offers are not variants');
+  assert.match(gaps.evidence.observed, /ProductGroup\[1\] \(with its 1 variant node\) lacks brand, sku, offers\.url/,
+    'group B carries neither brand nor sku — group A\'s must not satisfy it');
+});
+
+/* M17.wordpress.duplicate_sitemaps — the id that told techcrunch.com it had three sitemap sources
+   when /wp-sitemap.xml 301s to /sitemap_index.xml, which 302s to /sitemap.xml. Duplication is a
+   claim about two different URL sets, so it is only made when two different documents were read. */
+const smFile = (path, over = {}) => ({
+  url: ORIGIN + path,
+  final_url: over.final_url || ORIGIN + path,
+  redirected: !!over.final_url && over.final_url !== ORIGIN + path,
+  alias_of: over.alias_of || null,
+  source: 'well-known', parent: over.parent || null, depth: 0,
+  status: over.status === undefined ? 200 : over.status,
+  kind: over.kind || 'urlset', url_count: (over.locs || []).length, errors: [], lastmod: null, error: null,
+});
+const smSite = (files, over = {}) => ({
+  found: files.filter((f) => f.kind && f.kind !== 'invalid' && !f.alias_of).length,
+  files,
+  urls: files.flatMap((f) => (f.locs || []).map((loc) => ({ loc, lastmod: null, sitemap: f.url }))),
+  truncated_files: false, truncated_urls: false, ...over,
+});
+const wpCtx = (sitemaps) => mkCtx({
+  pages: [mkPage(ORIGIN + '/', HTML('<title>A WordPress site with more than one sitemap path</title>'))],
+  crawl: { origin: ORIGIN, target: ORIGIN + '/' },
+  site: { robots: robotsArtifact('User-agent: *\nDisallow:\n'), sitemaps },
+  profile: { platform: { id: 'wordpress', confidence: 'high' }, cms_plugins: [], target: {} },
+});
+/** files carry `locs` for the fixture builder; the check reads site.sitemaps.urls. */
+const withLocs = (path, locs, over = {}) => Object.assign(smFile(path, { ...over, locs }), { locs });
+
+test('three sitemap paths that redirect to one document are one source, not three', async () => {
+  const canonical = withLocs('/sitemap.xml', [ORIGIN + '/a', ORIGIN + '/b']);
+  const files = [
+    canonical,
+    withLocs('/sitemap_index.xml', [], { final_url: ORIGIN + '/sitemap.xml', alias_of: ORIGIN + '/sitemap.xml', kind: 'sitemapindex' }),
+    withLocs('/wp-sitemap.xml', [], { final_url: ORIGIN + '/sitemap.xml', alias_of: ORIGIN + '/sitemap.xml', kind: 'sitemapindex' }),
+  ];
+  const f = one(await run(platformWordpress, wpCtx(smSite(files))), 'M17.wordpress.duplicate_sitemaps');
+  assert.equal(f.status, 'pass', f.evidence.observed);
+  assert.match(f.evidence.observed, /redirects to \/sitemap\.xml/);
+  assert.doesNotMatch(f.evidence.observed, /\bboth\b/, 'three items joined with "and" plus "both" was the grammar bug');
+});
+
+test('two sitemap paths serving the same URL set are one source; different sets are the real defect', async () => {
+  const same = [
+    withLocs('/wp-sitemap.xml', [ORIGIN + '/a', ORIGIN + '/b']),
+    withLocs('/sitemap_index.xml', [ORIGIN + '/a', ORIGIN + '/b']),
+  ];
+  const identical = one(await run(platformWordpress, wpCtx(smSite(same))), 'M17.wordpress.duplicate_sitemaps');
+  assert.equal(identical.status, 'pass', identical.evidence.observed);
+  assert.match(identical.evidence.observed, /the same set/);
+
+  const different = [
+    withLocs('/wp-sitemap.xml', [ORIGIN + '/a', ORIGIN + '/b']),
+    withLocs('/sitemap_index.xml', [ORIGIN + '/c']),
+  ];
+  const dupe = one(await run(platformWordpress, wpCtx(smSite(different))), 'M17.wordpress.duplicate_sitemaps');
+  assert.equal(dupe.status, 'warn');
+  assert.equal(dupe.expected_impact.confidence, 'established', 'both URL lists were read, so the disagreement is measured');
+  assert.match(dupe.evidence.observed, /\/wp-sitemap\.xml lists 2 URLs/);
+  assert.match(dupe.evidence.observed, /\/sitemap_index\.xml lists 1 URL\b/);
+});
+
+test('an unread URL list downgrades the duplicate-sitemap claim to directional', async () => {
+  const files = [withLocs('/wp-sitemap.xml', [ORIGIN + '/a']), withLocs('/sitemap_index.xml', [ORIGIN + '/c'])];
+  const f = one(await run(platformWordpress, wpCtx(smSite(files, { truncated_files: true }))), 'M17.wordpress.duplicate_sitemaps');
+  assert.equal(f.status, 'warn');
+  assert.equal(f.expected_impact.confidence, 'directional');
+  assert.match(f.evidence.observed, /not both collected/);
+  assert.doesNotMatch(f.expected_impact.rationale, /different URL sets/);
+});
+
+test('one sitemap path stays silent, and no reachable sitemap at all is still a failure', async () => {
+  const solo = await run(platformWordpress, wpCtx(smSite([withLocs('/sitemap.xml', [ORIGIN + '/a'])])));
+  assert.equal(byId(solo, 'M17.wordpress.duplicate_sitemaps').length, 0, 'nothing to say about one source');
+  const none = await run(platformWordpress, wpCtx({ found: 0, files: [], urls: [] }));
+  assert.equal(one(none, 'M17.wordpress.no_sitemap_any').status, 'fail');
 });
 
 test('WordPress thin-archive detection matches date archives and never a dated post permalink', async () => {

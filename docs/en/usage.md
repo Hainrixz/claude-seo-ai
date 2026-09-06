@@ -340,9 +340,13 @@ with Write/Edit; every auditor is read-only by tool allowlist).
 2. **Confirm the platform profile.** When platform confidence is below `high`, or `--target auto`
    leaves more than one plausible write path, you see what was detected — with the signals — and
    confirm or override. A wrong profile writes to the wrong surface.
-3. **Check readiness.** Each adapter's `capabilities` op reports what it can do and which credential
-   keys are missing, **by name only**. A missing key downgrades that target to `instructions`; it
-   never stops the run.
+3. **Check readiness.** Credentials are re-checked **against the environment the fix is running in**,
+   not against the `ready` flag the audit froze into `profile.json`: export the keys (or fill the
+   `/plugin` prompts) and `--target auto` picks the adapter up on the next run, without re-auditing.
+   The plan prints one line per adapter — ready / not ready, the keys it needs, and the ones still
+   missing, **by name only**. Each adapter's `capabilities` op then reports what it can do. A missing
+   key downgrades that target to `instructions`; it never stops the run. (Tool detection — a
+   `shopify` or `wp` binary on `PATH` — still comes from the audit-time profile.)
 4. **Plan.** One `fix-plan.mjs` call groups the report's fixable findings by the adapter that owns
    each surface and writes `plan.json` + `manifest.json`. Unresolved real-world inputs — a locale
    map, `sameAs` profile URLs, the robots preset, a redirect destination, a publication date — are
@@ -428,8 +432,10 @@ machine, so the manifest can be replayed honestly.
 
 ### Other safety guarantees
 
-- **Git-aware** — refuses to write into a dirty working tree unless `--force`, and prefers a
-  `seo-fix/<date>` branch.
+- **Git-aware** (*writer protocol, not code*) — `skills/seo-fix-apply` instructs the writer subagent
+  to run `git status --porcelain` first, refuse a dirty working tree unless `--force`, and prefer a
+  `seo-fix/<date>` branch. No adapter runs git: this one holds because the writer follows its
+  protocol, unlike the guarantees below it, which hold whatever the model does.
 - **Idempotent** — every change carries a marker or an existence check, so re-running produces
   `skipped_idempotent`, never a duplicate block.
 - **Never touches** `.git/`, `.env*`, lockfiles, key material, `wp-config.php`, or a Shopify

@@ -30,6 +30,88 @@ export const SITEMAP_SOURCES = [
   { path: '/sitemaps.xml', owner: 'SEOPress' },
 ];
 
+const pathOf = (u) => { try { return new URL(u).pathname; } catch { return ''; } };
+const usableFile = (f) => !!(f && f.status >= 200 && f.status < 300 && f.kind && f.kind !== 'invalid');
+
+/**
+ * What each WordPress sitemap path actually serves, from site/sitemaps.json.
+ *
+ * The distinction this exists to draw: a path that 301s to another path is the SAME sitemap under a
+ * second name, and so is a path that serves a byte-identical URL set. `/wp-sitemap.xml` ->
+ * `/sitemap_index.xml` -> `/sitemap.xml` is one source doing the right thing, and reporting it as
+ * "two sitemap sources report different URL sets and lastmod values" was a false claim about a
+ * correctly configured site. Duplication is only claimed when two DIFFERENT documents were fetched
+ * and their URL sets differ.
+ *
+ * @returns {{sources: Array, live: Array, aliases: Array, comparable: boolean}}
+ *   `live` holds one entry per distinct document; `aliases` the paths that resolve onto one of them;
+ *   `comparable` is true only when every live source's URL list was actually collected.
+ */
+export function sitemapSources(sitemaps) {
+  const files = (sitemaps && Array.isArray(sitemaps.files) ? sitemaps.files : []);
+  const urls = (sitemaps && Array.isArray(sitemaps.urls) ? sitemaps.urls : []);
+  const truncated = !!(sitemaps && (sitemaps.truncated_files || sitemaps.truncated_urls));
+  const byUrl = new Map(files.map((f) => [f.url, f]));
+
+  /** Every file reachable from `root` through the parent links, including root itself. */
+  const treeOf = (root) => {
+    const ids = new Set([root.url]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of files) if (!ids.has(f.url) && f.parent && ids.has(f.parent)) { ids.add(f.url); grew = true; }
+    }
+    return ids;
+  };
+
+  const sources = [];
+  for (const spec of SITEMAP_SOURCES) {
+    const file = files.find((f) => pathOf(f.url) === spec.path);
+    if (!file) continue;
+    const tree = treeOf(file);
+    const collected = urls.filter((u) => tree.has(u.sitemap)).map((u) => u.loc);
+    // An alias contributes no URLs of its own (lib/sitemaps.mjs stops at the alias), and neither
+    // does a tree the file budget cut short — either way the set is unknown, not empty.
+    const knowable = !file.alias_of && !truncated;
+    sources.push({
+      ...spec,
+      url: file.url,
+      final_url: file.final_url || file.url,
+      redirected: !!file.redirected || !!(file.final_url && file.final_url !== file.url),
+      status: file.status,
+      kind: file.kind,
+      alias_of: file.alias_of || null,
+      usable: usableFile(file),
+      url_count: file.url_count || 0,
+      urls: collected,
+      urls_known: knowable && collected.length > 0,
+    });
+  }
+
+  // Group by the document each path actually serves: the post-redirect URL, or the file another
+  // path already fetched. The path that OWNS the document is the live one, so a redirect is always
+  // described as pointing at its target rather than the other way round.
+  const live = [];
+  const aliases = [];
+  const seen = new Map();
+  const usable = sources.filter((x) => x.usable);
+  for (const s of [...usable.filter((x) => !x.alias_of), ...usable.filter((x) => x.alias_of)]) {
+    const id = s.alias_of ? ((byUrl.get(s.alias_of) || {}).final_url || s.alias_of) : s.final_url;
+    if (seen.has(id)) { aliases.push({ ...s, alias_for: seen.get(id).path }); continue; }
+    seen.set(id, s);
+    live.push(s);
+  }
+  return { sources, live, aliases, comparable: live.every((s) => s.urls_known) };
+}
+
+/** True when two URL lists describe the same set of pages. */
+export function sameUrlSet(a, b) {
+  const A = new Set(a || []), B = new Set(b || []);
+  if (A.size !== B.size) return false;
+  for (const u of A) if (!B.has(u)) return false;
+  return true;
+}
+
 export const check = {
   id: 'platform-wordpress',
   module: 'M2',
@@ -155,23 +237,51 @@ export const check = {
     }
 
     /* ---- sitemap sources ------------------------------------------------------------------------ */
-    const files = (ctx.site && ctx.site.sitemaps && ctx.site.sitemaps.files) || [];
-    const live = SITEMAP_SOURCES.filter((s) => files.some((f) => {
-      let path = '';
-      try { path = new URL(f.url).pathname; } catch { path = ''; }
-      return path === s.path && f.status >= 200 && f.status < 300 && f.kind && f.kind !== 'invalid';
-    }));
-    if (live.length >= 2) {
+    const { sources, live, aliases, comparable } = sitemapSources(ctx.site && ctx.site.sitemaps);
+    const describe = (s) => s.path + ' (' + s.owner + ')';
+    const aliasNote = aliases.length
+      ? ' ' + listing(aliases.map((a) => a.path + ' ' + (a.redirected ? 'redirects to' : 'serves the same document as') + ' ' + a.alias_for), 3)
+        + ', so ' + agree(aliases.length, 'it is', 'they are') + ' the same sitemap under another name.'
+      : '';
+    // Two paths that answer are not two sitemaps: the URL sets decide. See sitemapSources().
+    const differing = live.length >= 2 && comparable
+      ? live.filter((s, i) => live.some((other, j) => i !== j && !sameUrlSet(s.urls, other.urls)))
+      : [];
+    if (live.length >= 2 && (!comparable || differing.length)) {
+      const known = comparable && differing.length;
       push(out, mk({
         id: 'M17.wordpress.duplicate_sitemaps', title: 'Core and plugin sitemaps are both live', status: 'warn', severity: 3, scope: 'site',
-        location: { url: (origin || '') + live[0].path },
-        evidence: { observed: live.map((s) => s.path + ' (' + s.owner + ')').join(' and ') + ' both return a usable sitemap.' },
+        location: { url: live[0].final_url || ((origin || '') + live[0].path) },
+        evidence: { observed: listing(live.map(describe), 4) + ' — ' + plural(live.length, 'separate document')
+          + ' ' + agree(live.length, 'returns', 'return') + ' a usable sitemap'
+          + (known
+            ? ': ' + listing(live.map((s) => s.path + ' lists ' + plural(s.urls.length, 'URL')), 4) + ', and the sets are not the same.'
+            : ', and their URL lists were not both collected in this run, so whether they disagree is unmeasured.')
+          + aliasNote },
         expected: 'One sitemap source per site.',
         recommendation: 'Disable the core sitemap when an SEO plugin generates one (or the reverse), and keep a single `Sitemap:` line in robots.txt.',
         fixable: 'advisory',
         verification: { method: 'xml_parse', assertion: 'Exactly one sitemap index is served by the site.' },
         reproduce: robotsRepro,
-        expected_impact: { axis: 'search', confidence: 'established', rationale: 'Two sitemap sources report different URL sets and lastmod values for the same site, which Search Console surfaces as conflicting coverage.' },
+        expected_impact: known
+          ? { axis: 'search', confidence: 'established', rationale: 'The two sources publish different URL sets for the same site, which Search Console surfaces as conflicting coverage.' }
+          : { axis: 'search', confidence: 'directional', rationale: 'Two documents answer, but this run did not collect both URL lists, so the cost is an inference rather than a measured disagreement.' },
+      }));
+    } else if (live.length >= 2 || aliases.length) {
+      // The honest version of the old false positive: several paths answered, one sitemap.
+      const same = live.length >= 2;
+      push(out, mk({
+        id: 'M17.wordpress.duplicate_sitemaps', title: 'One sitemap source, reachable under more than one path', status: 'pass', severity: 3, scope: 'site',
+        location: { url: live.length ? (live[0].final_url || ((origin || '') + live[0].path)) : (origin || '') + aliases[0].path },
+        evidence: { observed: listing(sources.filter((s) => s.usable).map(describe), 4) + ' ' + agree(sources.filter((s) => s.usable).length, 'answers', 'answer') + '.'
+          + aliasNote
+          + (same ? ' ' + listing(live.map((s) => s.path + ' lists ' + plural(s.urls.length, 'URL')), 4) + ' — the same set, so there is one source, not two.' : '') },
+        expected: 'One sitemap source per site.',
+        recommendation: 'No action needed: the extra paths resolve to the one sitemap. Keep a single `Sitemap:` line in robots.txt pointing at it.',
+        fixable: 'advisory',
+        verification: { method: 'xml_parse', assertion: 'The extra sitemap paths redirect to, or serve, the same document as the declared one.' },
+        reproduce: robotsRepro,
+        expected_impact: { axis: 'search', confidence: 'established', rationale: 'A redirect or an identical URL set is one sitemap under two names; Google follows the redirect and reads one source.' },
       }));
     } else if (!live.length && (!ctx.site || !ctx.site.sitemaps || !ctx.site.sitemaps.found)) {
       push(out, mk({

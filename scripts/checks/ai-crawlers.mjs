@@ -15,6 +15,15 @@ export const CITATION_CLASSES = ['retrieval', 'user'];
 
 const botsIn = (classes) => BOTS.filter((b) => classes.includes(b.class));
 
+/**
+ * May this bot back an `established` claim? Only when the vendor publishes the token AND states that
+ * it honours robots.txt. lib/bots.mjs records `doc_url: null` / `robots_reliability: 'unknown'` for
+ * the tokens nobody documents (Claude-Web, MistralAI-User) and `'limited'` where the vendor says it
+ * may bypass robots.txt (Meta-ExternalFetcher) — resting "each vendor documents its token and states
+ * that it honours robots.txt" on one of those says something the repo cannot support.
+ */
+export const isDocumentedBot = (b) => !!(b && b.doc_url) && b.robots_reliability === 'documented';
+
 /** Flatten site/robots.json ai_posture ({class: {bot: verdict}}) into one lookup. */
 function postureIndex(robots) {
   const idx = new Map();
@@ -72,16 +81,29 @@ export const check = {
     const citation = botsIn(CITATION_CLASSES);
     const blocked = citation.filter((b) => { const v = posture.get(b.name); return v && v.url_allowed === false; });
     if (blocked.length) {
+      // A severity-4 `established` failure has to be true of every token it names. When the only
+      // blocked tokens are legacy/undocumented ones the block is still real — it is just not
+      // something a vendor's documentation speaks to, so the claim drops to `directional`.
+      const documented = blocked.filter(isDocumentedBot);
+      const undocumented = blocked.filter((b) => !isDocumentedBot(b));
+      const describe = (b) => b.name + ' (' + b.vendor + ', ' + ruleText(posture.get(b.name))
+        + (isDocumentedBot(b) ? '' : '; ' + (b.doc_url ? 'vendor does not document its robots.txt behaviour' : 'no vendor documentation')) + ')';
       push(out, mk({
         id: 'M14.citation_bots.blocked', title: 'robots.txt blocks crawlers that fetch pages in order to cite them', status: 'fail', severity: 4, scope: 'site',
         location: { url: robotsUrl, resource: 'robots.txt' },
-        evidence: { observed: plural(blocked.length, 'citation crawler') + ' disallowed on ' + auditedPath + ': ' + listing(blocked.map((b) => b.name + ' (' + b.vendor + ', ' + ruleText(posture.get(b.name)) + ')'), 5) + '.' },
+        evidence: { observed: plural(blocked.length, 'citation crawler') + ' disallowed on ' + auditedPath + ': ' + listing(blocked.map(describe), 5) + '.'
+          + (undocumented.length
+            ? ' ' + listing(undocumented.map((b) => b.name), 4) + ' ' + (undocumented.length === 1 ? 'is a legacy or undocumented token' : 'are legacy or undocumented tokens')
+              + ' (see references/ai-crawlers.md), so ' + (undocumented.length === 1 ? 'it is listed as evidence but does not' : 'they are listed as evidence but do not') + ' carry the claim.'
+            : '') },
         expected: 'Retrieval and user-triggered AI crawlers may fetch the pages the site wants cited.',
         recommendation: 'Allow the tokens above in robots.txt if citation traffic is wanted. Keep training-only tokens (GPTBot, ClaudeBot, CCBot, Google-Extended) under separate rules — they are a different decision.',
         fixable: 'auto',
         verification: { method: 'robots_parse', assertion: 'isAllowed(robots, "<token>", "' + auditedPath + '") is true for each listed crawler.' },
         reproduce: repro,
-        expected_impact: { axis: 'ai', confidence: 'established', rationale: 'Each vendor documents its token and states that it honours robots.txt; that the block costs citations is the directional part, since no vendor publishes citation volumes.' },
+        expected_impact: documented.length
+          ? { axis: 'ai', confidence: 'established', rationale: 'Each token this rests on is published by its vendor, which also documents that the crawler honours robots.txt; that the block costs citations is the directional part, since no vendor publishes citation volumes.' }
+          : { axis: 'ai', confidence: 'directional', rationale: 'Every blocked token here is a legacy or undocumented one — no vendor page, or no published robots.txt behaviour — so the block is observable but no vendor documents what it costs.' },
       }));
     } else if (citation.length) {
       push(out, mk({

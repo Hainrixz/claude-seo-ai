@@ -351,7 +351,7 @@ export function manifestFromSinglePage(runDir, opts = {}) {
     } : null,
     sitemaps: sitemapsJson ? {
       path: 'site/sitemaps.json', files: (sitemapsJson.files || []).length, urls: sitemapsJson.url_count || 0, sampled: 0,
-      probe_hits: (sitemapsJson.files || []).filter((f) => f.source === 'well-known' && f.kind && f.kind !== 'invalid').length,
+      probe_hits: (sitemapsJson.files || []).filter((f) => f.source === 'well-known' && f.kind && f.kind !== 'invalid' && !f.alias_of).length,
       declared: (sitemapsJson.declared || []).length, truncated: !!sitemapsJson.truncated,
     } : null,
     pages, templates: groupTemplates(entries),
@@ -800,7 +800,9 @@ export async function crawlSite(target, options = {}) {
     sitemaps: site && site.sitemaps ? {
       path: 'site/sitemaps.json', files: (site.sitemaps.files || []).length, urls: site.sitemaps.url_count || 0,
       sampled: sitemapSampled.length,
-      probe_hits: (site.sitemaps.files || []).filter((f) => f.source === 'well-known' && f.kind && f.kind !== 'invalid').length,
+      // An alias is a second NAME for a sitemap this run already has (a legacy path that redirects
+      // onto the declared one): guessing it found nothing new, so it is not a probe hit.
+      probe_hits: (site.sitemaps.files || []).filter((f) => f.source === 'well-known' && f.kind && f.kind !== 'invalid' && !f.alias_of).length,
       declared: (site.sitemaps.declared || []).length, truncated: !!site.sitemaps.truncated,
     } : { path: null, files: 0, urls: 0, sampled: 0, probe_hits: 0, declared: 0, truncated: false, skipped: !o.useSitemaps },
     pages, templates,

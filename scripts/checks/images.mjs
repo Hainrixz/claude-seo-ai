@@ -15,7 +15,35 @@ function isVideoEmbed(src) {
   try { return VIDEO_EMBED_RE.test(new URL(src).hostname); } catch { return false; }
 }
 
-const tag = (img) => '<img src="' + clip(img.src || img.abs || '', 80) + '"' + (img.alt_present ? ' alt="' + clip(img.alt, 40) + '"' : '') + (img.width ? ' width="' + img.width + '"' : '') + (img.height ? ' height="' + img.height + '"' : '') + '>';
+/**
+ * Quote the tag from the attributes it actually carries. An absent `src` used to be printed as
+ * `src=""`, which reads as markup the page does not contain: a Vue `<img :src=… :alt=…>` was quoted
+ * as `<img src="" width="96" height="96">`, and a reader could conclude the theme ships an empty src.
+ */
+const tag = (img) => {
+  const src = clip(img.src || img.abs || '', 80);
+  return '<img' + (src ? ' src="' + src + '"' : '')
+    + (img.alt_present ? ' alt="' + clip(img.alt, 40) + '"' : '')
+    + (img.width ? ' width="' + img.width + '"' : '')
+    + (img.height ? ' height="' + img.height + '"' : '') + '>';
+};
+
+/**
+ * The caveat a framework-bound image needs: a Vue/Alpine/Angular `:src`/`:alt` is written by
+ * JavaScript, so the plain attribute is absent from the static HTML this check reads. The finding
+ * still stands for a consumer that does not run scripts — the evidence just stops implying the
+ * theme shipped an empty attribute.
+ */
+const boundNote = (imgs) => {
+  const bound = imgs.filter((i) => Array.isArray(i.bound) && i.bound.length);
+  if (!bound.length) return '';
+  const attrs = [...new Set(bound.flatMap((i) => i.bound))].sort();
+  const alt = bound.filter((i) => i.bound.some((k) => k.endsWith('alt'))).length;
+  return ' ' + bound.length + ' of them ' + agree(bound.length, 'carries', 'carry')
+    + ' framework-bound attributes instead (' + listing(attrs, 3) + ')'
+    + (alt ? '; the alt on ' + alt + ' of those is written by JavaScript, which a consumer that does not run scripts never sees' : '')
+    + '.';
+};
 
 export const check = {
   id: 'images',
@@ -39,7 +67,7 @@ export const check = {
     if (missingAlt.length) {
       push(out, mk({
         id: 'M9.alt.missing', title: 'Content images have no alt attribute', status: 'fail', severity: 3, scope: 'page', ...at,
-        evidence: { observed: plural(missingAlt.length, 'content <img>') + ' of ' + images.length + ' ' + agree(missingAlt.length, 'has', 'have') + ' no alt attribute: ' + listing(missingAlt.map(tag), 3) + '.' },
+        evidence: { observed: plural(missingAlt.length, 'content <img>') + ' of ' + images.length + ' ' + agree(missingAlt.length, 'has', 'have') + ' no alt attribute: ' + listing(missingAlt.map(tag), 3) + '.' + boundNote(missingAlt) },
         expected: 'Every content image carries an alt attribute — descriptive text, or alt="" when the image is purely decorative.',
         recommendation: 'Add alt text describing what each image shows. Decorative images take an explicit empty alt so assistive technology skips them.',
         fixable: 'proposed',

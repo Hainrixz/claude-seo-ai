@@ -76,6 +76,35 @@ export function flattenNodes(data) {
   return out;
 }
 
+/**
+ * Give repeated root paths a distinct suffix, so evidence can tell two sibling roots apart.
+ * A root (or `@graph` member) is named after its type, so two ProductGroups on one page both
+ * flatten to "ProductGroup" and a finding that quotes the path names neither of them; the second
+ * becomes "ProductGroup[1]", and its descendants follow ("ProductGroup[1].hasVariant[0]").
+ *
+ * This is presentation only. It never makes a path safe to MATCH nodes with — two blocks flattened
+ * separately still collide — so membership is always decided by object identity (variantNodeSet).
+ * @param {Array} entries flattenNodes() output, in order (extra keys are preserved)
+ */
+export function disambiguateRootPaths(entries) {
+  const counts = new Map();
+  let from = null, to = null;
+  const out = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || typeof entry !== 'object') { out.push(entry); continue; }
+    const path = typeof entry.path === 'string' ? entry.path : '';
+    if (Number(entry.depth) === 0) {
+      const n = counts.get(path) || 0;
+      counts.set(path, n + 1);
+      from = n > 0 ? path : null;
+      to = n > 0 ? path + '[' + n + ']' : null;
+    }
+    if (from && (path === from || path.startsWith(from + '.'))) out.push({ ...entry, path: to + path.slice(from.length) });
+    else out.push(entry);
+  }
+  return out;
+}
+
 /* ----------------------------------------------------------------- references vs declarations */
 
 /**
@@ -127,6 +156,130 @@ export function isReferenceStub(entry) {
   const own = ownProps(node);
   if (!own.length) return true;
   return isEntry && Number(entry.depth) > 0 && own.every((k) => NAMING_PROPS.includes(k));
+}
+
+/* ------------------------------------------------------- product declarations (one rule, shared) */
+//
+// M5 (schema), M18 (ecommerce) and the Shopify platform check all have to answer the same question:
+// which of a page's Product-typed nodes DECLARE a product here? Three modules answering it three
+// ways is how a correctly marked-up variant page collected "29 Product nodes", "ProductGroup
+// .hasVariant[0] lacks brand, sku, gtin" and "no Offer" all at once — claims about markup Google
+// documents as correct. The rule lives here so the three cannot drift again.
+
+/** Node types that describe a product. `ProductGroup` is the variant-carrying parent. */
+export const PRODUCT_TYPES = Object.freeze(['Product', 'ProductGroup']);
+
+/**
+ * Properties whose value is a MEMBER of the node carrying them, not a product declared in its own
+ * right. Google documents `hasVariant` as how a ProductGroup lists its variants, and documents the
+ * variants as inheriting the group's properties — so a `hasVariant` entry is never "a second
+ * Product on the page" and never "missing" what the group supplies. (`isVariantOf`, the pointer in
+ * the other direction, is already a BACK_REFERENCE_PROP.)
+ */
+export const VARIANT_PROPS = Object.freeze(['hasVariant']);
+
+/**
+ * Every object a node carries under `hasVariant` — the variants themselves and everything nested
+ * inside them (their Offers above all) — as a Set keyed by object identity.
+ *
+ * Identity, not path text, is what makes a variant "this group's". Two sibling roots of the same
+ * type share a flatten path ("ProductGroup" twice), so `path.startsWith(group.path + '.hasVariant')`
+ * hands one group the other group's variants: a group with no offers of its own then quotes the
+ * neighbour's cheapest price as this product's, and a missing gtin is hidden by the neighbour's.
+ * flattenNodes() dedupes by identity too, so `set.has(entry.node)` is exact.
+ * @param {object} node a raw JSON-LD node (a flattenNodes entry's `.node`)
+ * @returns {Set<object>}
+ */
+export function variantNodeSet(node) {
+  const set = new Set();
+  if (!isPlainObject(node)) return set;
+  const stack = [];
+  for (const prop of VARIANT_PROPS) if (node[prop] !== undefined) stack.push(node[prop]);
+  while (stack.length) {
+    const cur = stack.pop();
+    if (Array.isArray(cur)) { for (const v of cur) stack.push(v); continue; }
+    if (!isPlainObject(cur) || set.has(cur)) continue;
+    set.add(cur);
+    if (Array.isArray(cur['@graph'])) stack.push(cur['@graph']);
+    for (const [k, v] of Object.entries(cur)) {
+      if (k.startsWith('@')) continue;
+      if (Array.isArray(v) || isPlainObject(v)) stack.push(v);
+    }
+  }
+  return set;
+}
+
+/**
+ * Properties that make a Product node a description rather than a pointer. `name`, `url` and `@id`
+ * are deliberately absent: they name a target, they do not describe one (see NAMING_PROPS), so a
+ * nested `{"@type":"Product","url":"…?size=8","name":"Size 8"}` stays a pointer. A node that
+ * carries an offer but no name is still a declaration — M18 must be able to say the title is
+ * missing rather than pretend the node is not there.
+ */
+export const PRODUCT_SUBSTANCE_PROPS = Object.freeze([
+  'offers', 'sku', 'gtin', 'gtin8', 'gtin12', 'gtin13', 'gtin14', 'mpn', 'productID',
+  'brand', 'image', 'description', 'hasVariant', 'productGroupID', 'aggregateRating', 'review',
+]);
+
+/** Accept either a flattenNodes() entry or a raw (node, path) pair; always return an entry shape. */
+function asEntry(value, path) {
+  if (value && typeof value === 'object' && Array.isArray(value.types) && typeof value.path === 'string') return value;
+  const p = typeof path === 'string' ? path : '';
+  return { node: value, path: p, types: typesOf(value), depth: p.includes('.') ? 1 : 0, parent_types: [] };
+}
+
+/** True when the entry is typed Product or ProductGroup. */
+export function isProductNode(entry, path) {
+  const e = asEntry(entry, path);
+  return e.types.some((t) => PRODUCT_TYPES.includes(t));
+}
+
+/** True when the entry was reached through a variant property, so its parent is the declaration. */
+export function isVariantEntry(entry, path) {
+  return VARIANT_PROPS.includes(pathProperty(asEntry(entry, path).path));
+}
+
+/** True when the node carries at least one property that describes a product. */
+export function hasProductSubstance(node) {
+  return ownProps(node).some((k) => PRODUCT_SUBSTANCE_PROPS.includes(k));
+}
+
+/**
+ * True when this node DECLARES a product on this page. Excluded, in order: a back-reference
+ * (`itemReviewed`, `isSimilarTo`, `isRelatedTo`, `isVariantOf`, a review's `mainEntity`), a
+ * `hasVariant` member, a url/name/@id-only stub, and a NESTED node with no substantive property.
+ * A root (or `@graph` member) is judged by the existing stub rule alone, so a top-level Product
+ * carrying just a name stays the thin declaration it is.
+ * @param {object} entry a flattenNodes() entry, or a raw node when `path` is passed
+ * @param {string} [path]
+ */
+export function isProductDeclaration(entry, path) {
+  const e = asEntry(entry, path);
+  if (!isProductNode(e)) return false;
+  if (isBackReference(e) || isVariantEntry(e) || isReferenceStub(e)) return false;
+  return Number(e.depth) === 0 || hasProductSubstance(e.node);
+}
+
+/**
+ * Split flattened nodes into the four groups the findings need to talk about.
+ * @param {Array} entries flattenNodes() output (extra keys are preserved)
+ * @returns {{declarations: Array, variants: Array, back_references: Array, stubs: Array}}
+ */
+export function classifyProductNodes(entries) {
+  const declarations = [], variants = [], back_references = [], stubs = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!isProductNode(entry)) continue;
+    if (isBackReference(entry)) back_references.push(entry);
+    else if (isVariantEntry(entry)) variants.push(entry);
+    else if (isReferenceStub(entry) || (Number(entry.depth) > 0 && !hasProductSubstance(entry.node))) stubs.push(entry);
+    else declarations.push(entry);
+  }
+  return { declarations, variants, back_references, stubs };
+}
+
+/** The Product/ProductGroup nodes a page declares (see isProductDeclaration). */
+export function productDeclarations(entries) {
+  return classifyProductNodes(entries).declarations;
 }
 
 /**
