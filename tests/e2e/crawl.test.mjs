@@ -16,7 +16,7 @@ import { startServer } from '../helpers/server.mjs';
 import { main, manifestFromSinglePage, probeLinkStatus, sampleByPattern, dedupeKey, CRAWL_VERSION, ROLE_WEIGHTS } from '../../scripts/crawl.mjs';
 import { snapshotUrl } from '../../scripts/snapshot.mjs';
 import { readJson } from '../../scripts/lib/store.mjs';
-import { looksLikeHtml } from '../../scripts/lib/site.mjs';
+import { looksLikeHtml, isHtmlDocument, mediaTypeOf } from '../../scripts/lib/site.mjs';
 import { EXIT } from '../../scripts/lib/util.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -275,6 +275,23 @@ test('--include restricts the frontier to what matches (seeds always survive)', 
   assert.ok(m.sampling.skipped_by_filter.urls.every((u) => u.filter === 'include'));
 });
 
+test('a non-HTML response is fetched but never sampled as a page', async () => {
+  const r = await run({ _: [U('/md-host')], pages: 12, 'link-status': 0, json: true });
+  assert.equal(r.code, EXIT.OK);
+  const m = r.result;
+  assert.ok(m.pages.some((p) => p.url === U('/md-host')), 'the HTML host page is sampled');
+  assert.equal(m.pages.some((p) => p.url === U('/notes.md')), false, 'a text/markdown body is not a web page');
+  const skip = m.sampling.skipped_by_filter.urls.find((u) => u.url === U('/notes.md'));
+  assert.ok(skip, 'the drop is logged, never silent: ' + JSON.stringify(m.sampling.skipped_by_filter));
+  assert.equal(skip.filter, 'non-html-response');
+  assert.match(skip.content_type, /^text\/markdown/);
+  assert.ok(srv.hits.some((h) => h.path === '/notes.md'), 'it was fetched — the type is only known from the response');
+
+  const direct = await run({ _: [U('/notes.md')], pages: 2, 'link-status': 0, json: true });
+  assert.ok(direct.result.pages.some((p) => p.url === U('/notes.md')),
+    'an explicitly targeted URL is still audited: the user asked for that URL');
+});
+
 test('--seeds adds URLs the link graph never reaches', async () => {
   const r = await run({ _: [U('/')], pages: 6, seeds: U('/fr/blog/a'), 'link-status': 0, json: true });
   const m = r.result;
@@ -328,6 +345,18 @@ test('looksLikeHtml sees through a BOM or a leading comment (the soft-404 hint d
   assert.equal(looksLikeHtml('<!-- ' + 'x'.repeat(9000) + ' --><html>'), false, 'an unclosed comment inside the sniff window is not a claim of HTML');
   assert.equal(looksLikeHtml(''), false);
   assert.equal(looksLikeHtml(null), false);
+});
+
+test('isHtmlDocument believes the content-type, and the body when the header is wrong', () => {
+  assert.equal(isHtmlDocument({ 'content-type': 'text/html; charset=utf-8' }, '<html>'), true);
+  assert.equal(isHtmlDocument({ 'Content-Type': 'application/xhtml+xml' }, '<html>'), true, 'the header name is matched case-insensitively');
+  assert.equal(isHtmlDocument({ 'content-type': 'text/markdown; charset=utf-8' }, '# Notes'), false);
+  assert.equal(isHtmlDocument({ 'content-type': 'application/json' }, '{"ok":true}'), false);
+  assert.equal(isHtmlDocument({ 'content-type': 'text/plain' }, '<!doctype html><html>'), true, 'a mislabelled HTML page is still a page');
+  assert.equal(isHtmlDocument({}, '# not html'), true, 'an undeclared type is judged by status alone, as before');
+  assert.equal(isHtmlDocument(null, null), true);
+  assert.equal(mediaTypeOf({ 'content-type': 'TEXT/HTML; charset=UTF-8' }), 'text/html');
+  assert.equal(mediaTypeOf({}), '');
 });
 
 test('probeLinkStatus falls back to a ranged GET when HEAD is refused', async () => {

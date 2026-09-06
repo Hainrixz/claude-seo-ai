@@ -26,22 +26,24 @@ A rough proxy for "does this site show up when someone asks this?", built from o
      "queries": [ { "query": "best sustainable running shoes",
                     "results": [ { "rank": 1, "url": "https://…", "title": "…" } ] } ] }
    ```
-3. Pipe it to the reporter over stdin (no temp file, nothing written to the user's project):
+3. Pipe it to the reporter over stdin (nothing is written to the user's project); `--out` saves the probe inside the run directory, which is where `report.mjs` picks it up as `probes.web_search`:
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/probe-report.mjs" --run <run_dir> <<'JSON'
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/probe-report.mjs" --host <host> \
+     --out "<run_dir>/probes/web-search.json" [--history <dir>] <<'JSON'
    { "host": "…", "queries": [ … ] }
    JSON
    ```
-   <!-- reconcile-flags-v0.2 -->
-4. It returns presence rate (queries where the host appears), best rank, the competitor-host tally, and a trend against earlier probe runs stored for that host. Report it under **`probes.web_search`** with this disclaimer, verbatim: **"Web-search presence proxy — one engine, one moment. NOT AI Overview, ChatGPT, or Perplexity citation data."**
+   `--results <file.json>` reads the same JSON from a file instead of stdin. <!-- reconcile-flags-v0.2 -->
+4. It returns presence rate (queries where the host appears), best rank, the competitor-host tally, and a trend against earlier probe runs stored for that host. Report it under **`probes.web_search`** and quote its `disclaimer` field verbatim — echo the string the script emits (`DISCLAIMER` in `scripts/probe-report.mjs`, also written into `report.json` and `report.md`), never a paraphrase of it, so the model's prose and the machine-generated line beside it cannot disagree. Today that string reads: *"Web-search presence for these questions. This is NOT AI Overview, AI Mode, ChatGPT, or Perplexity citation data — no vendor exposes that. Indexing/retrievability is a documented precondition for Google AI features; presence here is necessary, not sufficient."*
 5. The finding is `M14.probe.web_presence`, **severity 0**, method `web_search_probe`. Never let a probe change the AI Visibility score, and never describe a rank as a ranking measurement — WebSearch results are personalized, localized, and volatile.
 
 ## `--gsc-ai-export <csv>` — Search Console generative-AI import
 1. The user exports the **Generative AI** performance report from Search Console by hand; there is no API for it. Pass the file:
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/gsc-ai-import.mjs" --file <csv> --run <run_dir> [--lang en|es]
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/gsc-ai-import.mjs" --csv <file.csv> [--host <host>] [--history <dir>] \
+     > "<run_dir>/probes/gsc-generative-ai.json"
    ```
-   <!-- reconcile-flags-v0.2 -->
+   The script prints the import and writes nothing itself, so redirect it into the run's `probes/` directory — that is what makes `report.mjs` report it under `probes.gsc_generative_ai` at data tier 2. <!-- reconcile-flags-v0.2 -->
 2. English and Spanish column headers are both recognized. The report carries **impressions only** — no clicks, no citations, no per-answer attribution — so the import reports impressions and nothing more.
 3. Report it under **`probes.gsc_generative_ai`**. Findings, all **severity 0**: `M14.gsc_ai.impressions_present` (the export shows generative-AI impressions for this property), `M14.gsc_ai.zero_impressions` (the export parsed but contains none), `M14.gsc_ai.unavailable` (`needs_api` — no export supplied, or the file could not be parsed; the default state).
 4. Say plainly what the number is not: impressions in Google's generative-AI surfaces are not citations, not clicks, and not a score input.

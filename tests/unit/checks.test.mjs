@@ -22,6 +22,7 @@ import { validateFinding } from '../../scripts/lib/validate-finding.mjs';
 import { imageSize, sniffFormat } from '../../scripts/lib/imgsize.mjs';
 
 import { CHECKS, runChecks, loadRunContext, knownIds } from '../../scripts/checks/index.mjs';
+import { isContentPage, contentPages } from '../../scripts/checks/_shared.mjs';
 import { check as crawlability } from '../../scripts/checks/crawlability.mjs';
 import { check as indexability } from '../../scripts/checks/indexability.mjs';
 import { check as indexabilitySite } from '../../scripts/checks/indexability-site.mjs';
@@ -779,11 +780,53 @@ test('M15 is needs_api without a key and reads the PSI field block when one answ
   const cls = one(noKey, 'M15.cls.unsized_image');
   assert.match(cls.evidence.observed, /lab-side/, 'a source heuristic must never read as a measured CLS');
 
+  assert.equal(cls.verification.method, 'dom_assert', 'a static heuristic must not claim the PSI API as its method');
+  assert.ok(noKey.every((f) => f.verification.method !== 'psi_api' || f.status === 'needs_api'),
+    'with no key, every psi_api-labelled finding must be needs_api: ' + JSON.stringify(noKey.map((f) => [f.id, f.status, f.verification.method])));
+
   const psi = async () => ({ result: { status: 'ok', field: { has_field_data: true, origin_fallback: true, scope: 'origin', lcp_ms: 5200, lcp_rating: 'poor', cls: 0.02 } } });
   const withKey = await run(cwv, { ...ctx, options: { psi_key: 'k' }, tools: { psi } });
   const lcp = one(withKey, 'M15.lcp.exceeds_p75');
   assert.match(lcp.evidence.observed, /ORIGIN-level/, 'origin_fallback must be disclosed, not hidden');
   assert.equal(lcp.severity, 4);
+});
+
+test('the run records what the PSI client actually did, so no lab finding can raise the data tier', async () => {
+  // report.mjs reads stats.psi (through checks.json) to fill data_sources.psi and the data tier.
+  // A run with no key must never report PSI data, whatever verification labels the findings carry.
+  const page = mkPage(ORIGIN + '/', HTML('<title>Home page of the site</title>', '<main><h1>Home</h1><p>Some copy.</p><img src="/hero.png" alt="A hero image with no width or height"></main>'), { role: 'homepage' });
+  const base = mkCtx({ pages: [page], crawl: { target: ORIGIN + '/', origin: ORIGIN } });
+  const offline = async () => ({ ok: false, status: 0, error: 'offline in tests', headers: {}, body: null });
+
+  const noKey = await runChecks({ ...base, options: { psi_key: null }, tools: { fetchImpl: offline } });
+  assert.equal(noKey.stats.psi, 'needs_api', 'no key means the PSI client could not answer');
+  assert.ok(noKey.findings.some((f) => f.id === 'M15.cls.unsized_image'), 'the lab-side heuristic still fires');
+
+  const psi = async () => ({ result: { status: 'ok', field: { has_field_data: true, lcp_ms: 1200, lcp_rating: 'good', cls: 0.01 } } });
+  const withKey = await runChecks({ ...base, options: { psi_key: 'k' }, tools: { fetchImpl: offline, psi } });
+  assert.equal(withKey.stats.psi, 'used', 'a PSI call that returned data is recorded as used, even when it emits no finding');
+});
+
+test('a non-HTML 200 is not audited as a web page', async () => {
+  // /agents.md and friends are machine-readable artifacts: a missing <title> there is not a defect.
+  const md = mkPage(ORIGIN + '/agents.md', '# Agent instructions\n\nPlain markdown, not a page.\n', {
+    headers: { 'content-type': 'text/markdown; charset=utf-8' },
+  });
+  assert.equal(isContentPage(md), false, 'a text/markdown response is not a content page');
+  assert.deepEqual(contentPages(mkCtx({ pages: [md] })), [], 'the on-page checks must not see it');
+  assert.deepEqual(await run(onpage, mkCtx({ pages: [md] })), [], 'no title/viewport/canonical findings for a markdown file');
+
+  const mislabelled = mkPage(ORIGIN + '/x', HTML('<title>Served with the wrong content type</title>', '<main><h1>Hi</h1></main>'), {
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  });
+  assert.equal(isContentPage(mislabelled), true, 'a body that parses as HTML is audited whatever the header says');
+
+  const local = mkPage('file:///tmp/page.html', HTML('<title>A local file with no HTTP response</title>', '<main><h1>Hi</h1></main>'), { status: null, headers: {} });
+  delete local.snapshot.headers['content-type'];
+  assert.equal(isContentPage(local), true, 'a local file declares no type and is still a page');
+
+  const notFound = mkPage(ORIGIN + '/gone', HTML('<title>Not found</title>'), { status: 404 });
+  assert.equal(isContentPage(notFound), false, 'the status gate still applies');
 });
 
 /* ------------------------------------------------------------------ platform */

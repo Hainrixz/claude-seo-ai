@@ -36,9 +36,13 @@ export const check = {
   id: 'platform-shopify',
   module: 'M2',
   scope: 'site',
+  // `ids` is the inventory of what this check can actually emit (knownIds() is built from it), so an
+  // id with no code path behind it does not belong here. Shopify's `seo.hidden` metafield is not
+  // implemented: from the storefront it is indistinguishable from any other noindex, which the
+  // generic M2 indexability ids already report. See references/platforms/shopify.md §10.
   ids: [
     'M2.shopify.collection_path_duplicate', 'M2.shopify.variant_param_canonical', 'M2.shopify.collections_all_indexable',
-    'M2.shopify.seo_hidden_detected', 'M1.shopify.tag_combo_urls_crawlable', 'M1.shopify.filter_sort_urls_crawlable',
+    'M1.shopify.tag_combo_urls_crawlable', 'M1.shopify.filter_sort_urls_crawlable',
     'M1.shopify.robots_liquid_drops_defaults', 'M20.shopify.duplicate_hreflang', 'M5.shopify.theme_jsonld_gaps',
     'M5.shopify.duplicate_product_jsonld', 'M7.shopify.description_is_body_fallback', 'M17.shopify.sitemap_platform_owned',
   ],

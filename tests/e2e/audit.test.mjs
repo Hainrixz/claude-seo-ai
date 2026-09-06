@@ -185,6 +185,10 @@ test('a local directory of HTML files is audited without a crawl', async () => {
   assert.ok(validateReport(local).ok, validateReport(local).errors.join('; '));
   assert.ok(local.findings.length > 5, 'the page-level checks still run on local files');
   assert.equal(local.data_sources.render.pages_rendered, 0);
+  // No key was supplied, so no PSI/CrUX data entered this run — whatever verification labels the
+  // static Core Web Vitals heuristics carry. data_sources.psi drives the reported data tier.
+  assert.equal(local.data_sources.psi, 'needs_api');
+  assert.equal(local.tier, 0);
 });
 
 test('usage errors exit 1 and say what is wrong', async () => {

@@ -652,6 +652,13 @@ describe('probe-report (never scored)', () => {
     assert.match(r.disclaimer, /necessary, not sufficient/);
   });
 
+  it('the geo skill quotes the same disclaimer the script emits', () => {
+    // One source of truth: a model following skills/geo/SKILL.md must not print a sentence that
+    // contradicts the machine-generated line next to it in report.md.
+    const skill = readFileSync(resolve(ROOT, 'skills', 'geo', 'SKILL.md'), 'utf8');
+    assert.ok(skill.includes(DISCLAIMER), 'skills/geo/SKILL.md must quote scripts/probe-report.mjs DISCLAIMER verbatim');
+  });
+
   it('www and host case do not change the match', () => {
     const r = analyzeProbes({ queries: [{ query: 'q', results: [{ rank: 1, url: 'https://WWW.Shop.Fixture.example/x' }] }] }, { host: 'shop.fixture.example' });
     assert.equal(r.queries[0].host_present_top10, true);

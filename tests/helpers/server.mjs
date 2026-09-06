@@ -84,6 +84,12 @@ export function startServer(opts = {}) {
           'x-robots-tag': 'noindex, nofollow', link: '<' + origin + '/canonical-target>; rel="canonical", <' + origin + '/es/header-alt>; rel="alternate"; hreflang="es"',
         });
       }
+      // a page whose only outlink is a non-HTML sibling: the crawler must not sample the markdown
+      if (p === '/md-host') {
+        return send(200, '<html lang="en"><head><title>Machine-readable notes for the fixture site</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+          + '<body><main><h1>Notes</h1><p>The machine-readable copy lives in <a href="/notes.md">notes.md</a>.</p></main></body></html>');
+      }
+      if (p === '/notes.md') return send(200, '# Notes\n\nPlain markdown for agents, not a web page.\n', { 'content-type': 'text/markdown; charset=utf-8' });
       if (p === '/cookies') {
         res.setHeader('set-cookie', ['session=abc123; Path=/; HttpOnly', 'theme=dark; Path=/']);
         return send(200, '<html><title>cookies</title></html>');

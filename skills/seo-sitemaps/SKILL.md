@@ -36,6 +36,11 @@ Emit findings per `schema/finding.schema.json`. Examples:
 - `M17.sitemap.missing` — no XML sitemap found at `/sitemap.xml` or in robots.txt (status `fail`, severity 3, `fixable: auto`, axis `search`, confidence `established`).
 - `M17.robots.no_sitemap_line` — sitemap exists but no `Sitemap:` line in robots.txt (status `warn`, severity 3, `fixable: auto`, axis `search`, confidence `established`).
 - `M17.sitemap.noindex_url` — a `<loc>` in the sitemap points to a `noindex`/non-canonical URL (status `fail`, severity 3, `fixable: proposed`, axis `search`, confidence `established`).
+- `M17.sitemap.error_url` — a `<loc>` the crawl fetched returned 4xx/5xx (status `fail`, severity 3, `fixable: proposed`, axis `search`, confidence `established`).
+- `M17.sitemap.redirected_url` — a `<loc>` redirects instead of returning the final URL (status `warn`, severity 3, `fixable: proposed`, axis `search`, confidence `established`).
+- `M17.sitemap.missing_indexable_url` — an indexable URL the crawl found is listed in no sitemap (status `warn`, severity 3, `fixable: proposed`, axis `search`, confidence `directional` — a well-linked page is discovered without a sitemap).
+- `M17.sitemap.lastmod_identical` — every `<loc>` carries the same `<lastmod>`, so the file cannot distinguish a changed page from an unchanged one (status `warn`, severity 2, `fixable: advisory`, axis `search`, confidence `directional`).
+Per-URL verdicts are only emitted for `<loc>` entries the crawl actually fetched; a URL that was never visited is left unreported rather than guessed. `M17.sitemap.missing` is also emitted as `needs_api` when sitemap discovery never ran in the run (`--artifacts none` / `--no-sitemaps`), which is a different fact from "no sitemap exists".
 Each finding: `evidence.observed` quotes the page/sitemap verbatim; `verification.reproduce` is the runnable command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

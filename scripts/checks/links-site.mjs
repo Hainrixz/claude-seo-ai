@@ -5,7 +5,7 @@
 // and whether the frontier was truncated. Forced seeds (the origin, the requested target and
 // --seeds URLs) are excluded — they entered the crawl by instruction, not by being linked.
 
-import { mk, push, listing, plural, originOf } from './_shared.mjs';
+import { mk, push, listing, plural, originOf, isHtmlResponse, urlKey } from './_shared.mjs';
 
 const SEED_ROLES = new Set(['homepage', 'target']);
 const SEED_SOURCES = new Set(['origin', 'target', 'seeds']);
@@ -43,12 +43,20 @@ export const check = {
       + (budget.max_reached ? ', frontier cap reached' : '')
       + (budget.pages_exhausted === false ? ', page budget not exhausted' : '');
 
+    // A manifest written before the crawler learned to skip non-HTML responses can still list an
+    // /agents.md or a JSON endpoint. "No page links to your machine-readable file" is not a defect,
+    // so those are dropped here too, using the snapshot the run persisted next to the manifest.
+    const snapshots = new Map();
+    for (const page of ctx.pages || []) { const k = urlKey(page.url); if (k) snapshots.set(k, page); }
+    const isHtmlUrl = (url) => { const p = snapshots.get(urlKey(url)); return p ? isHtmlResponse(p) : true; };
+
     const orphans = crawl.pages.filter((p) => p
       && p.inlinks === 0
       && !SEED_ROLES.has(p.role)
       && !SEED_SOURCES.has(p.discovered_via)
       && typeof p.status === 'number' && p.status >= 200 && p.status < 300
-      && p.noindex !== true);
+      && p.noindex !== true
+      && isHtmlUrl(p.url));
 
     for (const p of orphans) {
       push(out, mk({

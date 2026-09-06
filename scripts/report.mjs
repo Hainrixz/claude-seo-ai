@@ -321,7 +321,7 @@ function siteSummary(artifacts, crawl) {
   return Object.keys(out).length ? out : null;
 }
 
-function dataSources(crawl, findings, probes) {
+function dataSources(crawl, findings, probes, checks) {
   const pages = crawl && Array.isArray(crawl.pages) ? crawl.pages : [];
   const used = uniq(pages.map((p) => (p.render && p.render.used) || null).filter(Boolean));
   const render = {
@@ -330,8 +330,14 @@ function dataSources(crawl, findings, probes) {
     pages_rendered: pages.filter((p) => p.render && p.render.used && p.render.used !== 'none').length,
   };
   const method = (m) => findings.filter((f) => f.verification && f.verification.method === m);
+  // Provenance first: checks.json records what the PSI client actually did. Only when a run has no
+  // checks.json (an older run dir, or findings merged from elsewhere) do we fall back to the
+  // verification labels — a label is a claim about how to verify, not proof that an API answered.
+  const psiRecorded = checks && checks.stats && Object.prototype.hasOwnProperty.call(checks.stats, 'psi') ? checks.stats.psi : undefined;
   const psiFindings = method('psi_api');
-  const psi = !psiFindings.length ? null : (psiFindings.some((f) => f.status !== 'needs_api') ? 'used' : 'needs_api');
+  const psi = psiRecorded !== undefined
+    ? (psiRecorded || null)
+    : (!psiFindings.length ? null : (psiFindings.some((f) => f.status !== 'needs_api') ? 'used' : 'needs_api'));
   const gscFindings = method('gsc_api');
   let gsc = null;
   if (probes && probes.gsc_generative_ai) gsc = 'manual_import';
@@ -424,7 +430,7 @@ export function buildReport(runDir, opts = {}) {
   for (const axis of ['search_seo', 'ai_visibility']) scores[axis] = { ...scores[axis], dropped_count: collected.dropped.length };
 
   const probes = readProbes(dir);
-  const sources = dataSources(crawl, findings, probes);
+  const sources = dataSources(crawl, findings, probes, checks);
   const report = {
     target: targetOf(crawl, profile, dir, manifestPages.length || (findings.length ? 1 : 0)),
     generated_at: new Date().toISOString(),

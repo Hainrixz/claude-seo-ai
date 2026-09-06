@@ -36,6 +36,9 @@ Findings conform to `schema/finding.schema.json`. **Severity policy**: 5 is rese
 - `M7.title.length_out_of_band` — title 78 chars, outside the 30-60 pass band and likely truncated in the SERP (warn, severity 3, `fixable: proposed`, axis `search`, confidence `directional`). Quote the length and the band that produced the verdict.
 - `M7.description.length_out_of_band` — description outside the 70-160 pass band (warn, severity 2, `fixable: proposed`, axis `search`, confidence `directional`).
 - `M7.viewport.missing` — no responsive viewport (fail, severity 3, `fixable: auto`, axis `search`, confidence `established`).
+- `M7.title.duplicate_across_urls` — the same `<title>` is served from several sampled URLs (warn, severity 3, `fixable: proposed`, axis `search`, confidence `directional`). One finding per duplicate cluster, quoting the shared title and the URLs.
+- `M7.description.duplicate_across_urls` — the same meta description is served from several sampled URLs (warn, severity 2, `fixable: proposed`, axis `search`, confidence `directional`).
+Both duplicate checks are cross-URL: with fewer than two content pages in the run they are reported once as `M7.title.duplicate_across_urls` with status `needs_api` (severity 0, unscored), never as a pass.
 Each finding: `evidence.observed` quotes the head verbatim (e.g. the exact title string + its length); `verification.reproduce` is the runnable `parse-html.mjs` command above; `expected_impact` is banded + confidence-tagged (no naked %).
 
 ## Honesty

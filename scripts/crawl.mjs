@@ -39,7 +39,7 @@ import { fetchRaw, resolveUa, DEFAULT_ACCEPT_LANGUAGE } from './lib/fetch.mjs';
 import {
   resolveRootInfo, openRun, writeJson, readJson, relPath, pluginVersion, setLatest, prune, keepFor, isHttpUrl, looksLikeHost,
 } from './lib/store.mjs';
-import { fetchSiteArtifacts, normalizeArtifacts } from './lib/site.mjs';
+import { fetchSiteArtifacts, normalizeArtifacts, isHtmlDocument, mediaTypeOf } from './lib/site.mjs';
 import { isAllowed, selectGroup } from './lib/robots.mjs';
 import { normalizeUrl, isInternal } from './lib/urlnorm.mjs';
 import { runPool } from './lib/pool.mjs';
@@ -588,6 +588,16 @@ export async function crawlSite(target, options = {}) {
     }
     const parsed = snap.parsed_rendered || snap.parsed || {};
     const html = snap.raw_html_path ? readHead(join(run.dir, snap.raw_html_path)) : '';
+    // A 200 that is not an HTML document (/agents.md, llms.txt, a JSON endpoint, a feed) is not a
+    // page: the on-page checks would score it as a broken web page and it would carry page weight
+    // in the rollup. The snapshot stays on disk as evidence; the manifest drops it. A forced seed
+    // (the audited target, --seed) is kept — the user asked for that URL explicitly.
+    if (!node.forced && !isHtmlDocument(snap.headers, html)) {
+      logSkip(sampling.skipped_by_filter, { url: finalUrl, filter: 'non-html-response', content_type: mediaTypeOf(snap.headers) || null, from: node.url });
+      node.sampled = true;
+      node.non_html = true;
+      return null;
+    }
     const info = explainTemplate(finalUrl, parsed, { html });
     const links = internalLinks(parsed, finalUrl);
     node.sampled = true;

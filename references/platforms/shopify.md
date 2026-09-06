@@ -135,13 +135,22 @@ Unlocked by this card:
 - `M2.shopify.variant_param_canonical` — fail · 3 · search · established · auto(theme)
 - `M1.shopify.tag_combo_urls_crawlable` — warn · 3 · search · directional · auto(theme)
 - `M1.shopify.filter_sort_urls_crawlable` — warn · 2 · search · directional · proposed
-- `M1.shopify.robots_liquid_drops_defaults` — warn · 3 · search · established · auto(theme); `needs_api` without the theme files
+- `M1.shopify.robots_liquid_drops_defaults` — `needs_api` only, until the theme sources are readable:
+  the audit cannot see `templates/robots.txt.liquid` from the storefront. When robots.txt *was*
+  parsed, the observable symptoms of a dropped `{% for group in robots.default_groups %}` loop are
+  reported as `M1.shopify.tag_combo_urls_crawlable` and `M1.shopify.filter_sort_urls_crawlable`
+  instead — there is no observable `warn` variant of this id.
 - `M2.shopify.collections_all_indexable` — warn · 1 · search · directional · advisory
 - `M20.shopify.duplicate_hreflang` — fail · 3 · search · established · proposed(theme)
-- `M2.shopify.seo_hidden_detected` — warn · 2 · search · directional · proposed(admin)
 - `M5.shopify.theme_jsonld_gaps` — warn · 3 · both · established · proposed(theme)
 - `M5.shopify.duplicate_product_jsonld` — warn · 3 · both · established · proposed
 - `M7.shopify.description_is_body_fallback` — warn · 2 · search · directional · proposed(admin)
+
+Not implemented: `M2.shopify.seo_hidden_detected`. From the storefront, a resource hidden with the
+`seo.hidden` metafield is indistinguishable from any other `noindex`, so claiming the metafield as
+the cause would be a guess; the noindex itself is reported by the generic M2 indexability ids. The id
+is deliberately absent from `check.ids[]`, so `knownIds()` stays an inventory of what the registry
+can actually produce.
 
 Suppressed: `M17.shopify.sitemap_platform_owned` (`not_applicable`, owner Shopify) replaces every
 M17 sitemap fix. Theme-duplicate hreflang aside, M20 fixes are `not_applicable` too.

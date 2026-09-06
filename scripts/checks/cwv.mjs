@@ -6,7 +6,7 @@
 // not this URL, and a finding must never present them as page-level.
 
 import { THRESH } from '../psi-client.mjs';
-import { mk, push, clip, listing, plural, contentPages, finalUrl, snapRepro, originOf } from './_shared.mjs';
+import { mk, push, clip, listing, plural, contentPages, finalUrl, snapRepro, originOf, runState } from './_shared.mjs';
 
 /** The URL PSI is asked about: the crawl target, else the homepage, else the first sampled page. */
 function subject(ctx) {
@@ -33,6 +33,7 @@ export const check = {
 
     const key = (ctx.options && ctx.options.psi_key) || process.env.PSI_API_KEY || null;
     const psi = (ctx.tools && ctx.tools.psi) || null;
+    const state = runState(ctx);
     let field = null;
     let apiNote = null;
 
@@ -42,8 +43,11 @@ export const check = {
       const r = (res && res.result) || {};
       if (r.status === 'needs_api') apiNote = clip(r.error || (r.api_error && r.api_error.detail) || 'PageSpeed Insights was unavailable', 160);
       else field = r.field || null;
+      // Provenance for the report's data_sources block: the request went out, so say what came back.
+      state.psi = r.status === 'needs_api' ? 'needs_api' : 'used';
     } else {
       apiNote = key ? 'no PSI client was injected into this run' : 'no PSI/CrUX API key was supplied (--psi-key or PSI_API_KEY)';
+      state.psi = 'needs_api';
     }
 
     if (!field || field.has_field_data === false) {
@@ -90,7 +94,10 @@ export const check = {
         expected: 'Every content image reserves its space through width/height attributes or a CSS aspect-ratio.',
         recommendation: 'Add intrinsic width and height to the images listed above, then confirm the effect with a real CLS measurement.',
         fixable: 'advisory',
-        verification: { method: 'psi_api', assertion: 'A PSI/CrUX run reports CLS at or below ' + THRESH.CLS.good + ' for this URL.' },
+        // dom_assert, not psi_api: nothing was measured here. A method label is also a
+        // provenance claim (report.mjs falls back to it when no checks.json records what the
+        // PSI client did), so a lab-side heuristic must never borrow one.
+        verification: { method: 'dom_assert', assertion: 'Every content image carries numeric width/height (or a CSS aspect-ratio), and a PSI/CrUX run then reports CLS at or below ' + THRESH.CLS.good + ' for this URL.' },
         reproduce: snapRepro(ctx, first.page, 'parse-html.mjs'),
         expected_impact: { axis: 'search', confidence: 'directional', rationale: 'Unsized images are a documented cause of layout shift, but this finding is a source-level heuristic — no CLS value was measured for this page.' },
       }));

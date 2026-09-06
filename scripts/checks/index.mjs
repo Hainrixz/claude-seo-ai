@@ -211,7 +211,7 @@ const message = (e) => String((e && e.stack ? e.stack.split('\n').slice(0, 3).jo
  * Run every registered check against `ctx`.
  * @returns {Promise<{findings: object[], stats: {checks_run:number, per_module:object,
  *   needs_api:number, manual_review:number, not_applicable:number, dropped:number,
- *   errors:{check:string,message:string,page?:string}[]}}>}
+ *   psi:('used'|'needs_api'|null), errors:{check:string,message:string,page?:string}[]}}>}
  */
 export async function runChecks(ctx) {
   const findings = [];
@@ -222,6 +222,9 @@ export async function runChecks(ctx) {
     manual_review: 0,
     not_applicable: 0,
     dropped: 0,
+    // What the PSI client actually did in this run (M15 sets it). Recorded here rather than
+    // inferred from verification.method downstream, so no check can imply an API call it never made.
+    psi: null,
     errors: [],
   };
   const context = ctx && typeof ctx === 'object' ? ctx : { pages: [], site: {}, options: {}, tools: {} };
@@ -273,6 +276,7 @@ export async function runChecks(ctx) {
     if (ran) stats.checks_run++;
   }
 
+  stats.psi = (context._state && context._state.psi) || null;
   return { findings, stats };
 }
 

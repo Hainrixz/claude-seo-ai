@@ -58,6 +58,33 @@ export function looksLikeHtml(body) {
 }
 const looksHtml = looksLikeHtml;
 
+/** Media types a fetched URL must declare to count as an HTML page. */
+export const HTML_MEDIA_TYPES = Object.freeze(new Set(['text/html', 'application/xhtml+xml']));
+
+/** A response's declared media type, lowercased and without parameters ('' when undeclared). */
+export function mediaTypeOf(headers) {
+  const h = headers || {};
+  for (const name of Object.keys(h)) {
+    if (name.toLowerCase() !== 'content-type') continue;
+    return String(h[name] == null ? '' : h[name]).split(';')[0].trim().toLowerCase();
+  }
+  return '';
+}
+
+/**
+ * True when a response is an HTML document. An undeclared type (a local file, or a server that
+ * sends no content-type) is accepted as HTML, as it always was; a declared non-HTML type is
+ * believed unless the body itself parses as HTML, so a mislabelled page is still audited while
+ * /agents.md, a JSON endpoint or a feed is not. The crawler (which pages to sample) and the checks
+ * (which pages to audit) both decide it here, so the two can never disagree.
+ */
+export function isHtmlDocument(headers, body) {
+  const type = mediaTypeOf(headers);
+  if (!type) return true;
+  if (HTML_MEDIA_TYPES.has(type)) return true;
+  return looksLikeHtml(body);
+}
+
 /** Normalize the --artifacts flag: 'all' | 'none' | 'robots,sitemaps' | array | object → { robots, sitemaps, discovery, any }. */
 export function normalizeArtifacts(value) {
   const all = { robots: true, sitemaps: true, discovery: true };

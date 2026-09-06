@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path';
 import { makeFinding, isTestMode } from '../lib/finding.mjs';
 import { normalizeUrl, urlsEquivalent, hostKey } from '../lib/urlnorm.mjs';
 import { tokenize } from '../lib/html.mjs';
+import { isHtmlDocument, mediaTypeOf } from '../lib/site.mjs';
 
 /** Statuses that never enter a score; makeFinding defaults their severity to 0. */
 export const UNSCORED = new Set(['not_applicable', 'needs_api', 'manual_review']);
@@ -77,10 +78,25 @@ export function pageStatus(page) {
   return page.snapshot && page.snapshot.status != null ? page.snapshot.status : null;
 }
 
-/** True for pages whose body is real content: 2xx, or a local file (status null). */
+/** The page's declared media type, lowercased and without parameters ('' when undeclared). */
+export function contentTypeOf(page) {
+  return mediaTypeOf((page && page.snapshot && page.snapshot.headers) || null);
+}
+
+/** True when this page's response is an HTML document (lib/site.mjs owns the rule). */
+export function isHtmlResponse(page) {
+  return isHtmlDocument((page && page.snapshot && page.snapshot.headers) || null, page && page.html);
+}
+
+/**
+ * True for pages whose body is real HTML content: 2xx (or a local file, status null) AND an HTML
+ * response. A markdown, JSON or feed URL that the crawl happened to follow must not collect
+ * "missing <title>" style findings — it is a machine-readable artifact, not a web page.
+ */
 export function isContentPage(page) {
   const s = pageStatus(page);
-  return s === null || (s >= 200 && s < 300);
+  if (!(s === null || (s >= 200 && s < 300))) return false;
+  return isHtmlResponse(page);
 }
 
 /** Content pages only — the set every on-page check should iterate. */
@@ -93,8 +109,13 @@ export function contentPages(ctx) {
  * runChecks() hands each page-scoped check a fresh `{...ctx, page}` object, so anything written
  * onto `ctx` itself would be thrown away between pages — this holder is created once and the copies
  * all reference the same object. `newRunState()` is what loadRunContext()/runChecks() install.
+ *
+ * `psi` records what the PageSpeed Insights client actually did — 'used' when it returned data,
+ * 'needs_api' when it was asked and could not answer, null when it was never called. report.mjs
+ * reads it (through checks.json) instead of inferring PSI provenance from a finding's
+ * verification.method, which a lab-side heuristic could otherwise inflate.
  */
-export const newRunState = () => ({ tokens: new Map(), og_probes: 0 });
+export const newRunState = () => ({ tokens: new Map(), og_probes: 0, psi: null });
 
 export function runState(ctx) {
   if (!ctx._state) ctx._state = newRunState();
