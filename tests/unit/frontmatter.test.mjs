@@ -97,6 +97,27 @@ test('CRLF documents round-trip with their line endings intact', () => {
   assert.equal(r.text, '---\r\ntitle: A\r\ndescription: D\r\n---\r\nBody\r\n');
 });
 
+test('a CRLF file parses to exactly the same keys and body as the LF one', () => {
+  // A Windows checkout hands the same content with CRLF. Every key, value, order entry and
+  // unsupported name must match; only the recorded `eol` and the body's own newlines differ,
+  // because a fix must never silently rewrite a file's line endings.
+  const lf = '---\ntitle: "Rain shadow"\ntags:\n  - weather\n  - "wet season"\ndraft: false\nauthor:\n  name: Ada\n---\n\nBody line one.\nBody line two.\n';
+  const crlf = lf.replace(/\n/g, '\r\n');
+  const a = F.parseFrontmatter(lf);
+  const b = F.parseFrontmatter(crlf);
+  assert.deepEqual(b.data, a.data);
+  assert.deepEqual(b.order, a.order);
+  assert.deepEqual(b.unsupported, a.unsupported);
+  assert.deepEqual([b.present, b.format, b.supported, b.delimiter], [a.present, a.format, a.supported, a.delimiter]);
+  assert.equal(b.body.replace(/\r\n/g, '\n'), a.body);
+  assert.equal(b.raw.replace(/\r\n/g, '\n'), a.raw);
+  assert.deepEqual([a.eol, b.eol], ['\n', '\r\n']);
+  assert.ok(!JSON.stringify(b.data).includes('\\r'), 'no value carries a trailing carriage return');
+  // And the merge preserves each file's own EOL rather than converting it.
+  assert.equal(F.mergeFrontmatter(crlf, { description: 'D' }).text,
+    F.mergeFrontmatter(lf, { description: 'D' }).text.replace(/\n/g, '\r\n'));
+});
+
 test('stringifyScalar quotes exactly what needs quoting', () => {
   assert.equal(F.stringifyScalar('plain'), 'plain');
   assert.equal(F.stringifyScalar('with: colon'), '"with: colon"');

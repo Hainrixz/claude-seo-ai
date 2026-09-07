@@ -1,0 +1,47 @@
+# Line endings are part of this repo's test contract.
+#
+# The test suite compares fixture text against literal '\n' strings (markdown knowledge cards,
+# front-matter bodies, HTML attribute values, unified diffs handed to `git apply`). A Windows
+# checkout with autocrlf=true rewrites those files to CRLF and the comparisons stop matching,
+# so every text file is checked out with LF on every platform. The readers are CRLF-tolerant
+# too (see scripts/lib/html.mjs, frontmatter.mjs, adapters/instructions.mjs) — this file keeps
+# the *repo's own* fixtures byte-identical everywhere; that tolerance is for user content.
+
+* text=auto eol=lf
+
+# Explicit for the text formats we ship, so a future `core.autocrlf` cannot reinterpret them.
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.vue   text eol=lf
+*.svelte text eol=lf
+*.astro text eol=lf
+*.njk   text eol=lf
+*.liquid text eol=lf
+*.json  text eol=lf
+*.jsonl text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.xml   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.csv   text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Binaries must never be touched.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.gz    binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary

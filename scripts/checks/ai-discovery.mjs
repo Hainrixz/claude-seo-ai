@@ -10,7 +10,7 @@
 // here are emitted as not_applicable naming M18 as the owner, so nothing is double-counted.
 
 import { analyzeDiscovery } from '../ai-discovery.mjs';
-import { mk, push, clip, listing, describeExample, plural, isEcommerce, originOf } from './_shared.mjs';
+import { mk, push, clip, listing, describeExample, plural, isEcommerce, originOf, runRepro } from './_shared.mjs';
 
 const SPECULATIVE = 'No search or answer engine documents that this file affects retrieval, ranking or citation; it is a convention some agent frameworks read.';
 
@@ -48,7 +48,7 @@ export const check = {
     const out = [];
     const discovery = ctx.site && ctx.site.discovery;
     const origin = originOf(ctx);
-    const repro = { script: 'ai-discovery.mjs', args: { 'run-dir': ctx.run_dir } };
+    const repro = runRepro(ctx, 'ai-discovery.mjs');
 
     if (!discovery) {
       push(out, mk({
@@ -109,7 +109,7 @@ export const check = {
           recommendation: 'Regenerate /llms.txt from the same source as the sitemap so its links cannot rot.',
           fixable: 'proposed',
           verification: { method: 'header_check', assertion: 'Every link in /llms.txt returns a 2xx.' },
-          reproduce: { script: 'ai-discovery.mjs', args: { 'run-dir': ctx.run_dir, deep: true } },
+          reproduce: runRepro(ctx, 'ai-discovery.mjs', { deep: true }),
           expected_impact: { axis: 'ai', confidence: 'directional', rationale: 'A dead link is a measurable defect in the file regardless of whether any engine reads it.' },
         }));
       }

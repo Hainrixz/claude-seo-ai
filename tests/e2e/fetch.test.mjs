@@ -4,7 +4,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
-import { fetchRaw, fetchText, UA_PRESETS } from '../../scripts/lib/fetch.mjs';
+import { decodeWindows1252, fetchRaw, fetchText, isWindows1252Label, UA_PRESETS } from '../../scripts/lib/fetch.mjs';
 import { startServer } from '../helpers/server.mjs';
 
 let srv;
@@ -119,13 +119,43 @@ describe('fetchRaw headers and body handling', () => {
   it('decodes the charset from the content-type header, else sniffs <meta charset>, else utf-8', async () => {
     const l1 = await fetchRaw(U('/latin1'));
     assert.equal(l1.body.charset, 'iso-8859-1');
+    assert.equal(l1.body.charset_source, 'header');
     assert.equal(l1.body.text, '<p>café</p>');
     const meta = await fetchRaw(U('/meta-charset'));
-    assert.equal(meta.body.charset_source, meta.body.charset_fallback ? 'meta' : 'meta');
-    if (!meta.body.charset_fallback) { assert.equal(meta.body.charset, 'windows-1252'); assert.match(meta.body.text, /“hi”/); }
+    assert.equal(meta.body.charset_source, 'meta');
+    assert.equal(meta.body.charset, 'windows-1252');
+    assert.equal(meta.body.charset_fallback, undefined, 'windows-1252 is decoded, never fallen back from');
+    assert.equal(meta.body.text, '<html><head><meta charset="windows-1252"><title>q</title></head><body><p>“hi”</p></body></html>');
     const plain = await fetchRaw(U('/echo-ua'));
     assert.equal(plain.body.charset, 'utf-8');
     assert.equal(plain.body.charset_source, 'fallback');
+    assert.equal(plain.body.charset_decoded_with, 'text-decoder');
+  });
+
+  it('windows-1252 decodes identically on every runtime, and says who decoded it', async () => {
+    // Node 20 resolves every windows-1252 label to a latin1 table (0x93 -> U+0093 instead of “),
+    // so the same page read differently there than on 18/22/24. lib/fetch.mjs decodes the
+    // windows-1252 family from the spec table and records that on the body.
+    for (const path of ['/meta-charset', '/latin1']) {
+      const r = await fetchRaw(U(path));
+      assert.equal(r.body.charset_decoded_with, 'builtin-windows-1252', path);
+    }
+    assert.ok(['windows-1252', 'cp1252', 'ISO-8859-1', 'latin1', 'us-ascii', 'x-cp1252'].every(isWindows1252Label));
+    assert.ok(!['utf-8', 'shift_jis', 'iso-8859-2', 'windows-1251', ''].some(isWindows1252Label));
+
+    // index-windows-1252: 0x80–0x9F from the Encoding Standard, every other byte is identity.
+    const HIGH = [0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039,
+      0x0152, 0x008D, 0x017D, 0x008F, 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC,
+      0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178];
+    const all = decodeWindows1252(Buffer.from(Array.from({ length: 256 }, (_, i) => i)));
+    assert.equal(all.length, 256);
+    for (let i = 0; i < 256; i++) {
+      const want = i >= 0x80 && i <= 0x9f ? HIGH[i - 0x80] : i;
+      assert.equal(all.codePointAt(i), want, 'byte 0x' + i.toString(16));
+    }
+    assert.equal(decodeWindows1252(Buffer.from([0x93, 0x68, 0x69, 0x94])), '“hi”');
+    assert.equal(decodeWindows1252(Buffer.from('plain ascii')), 'plain ascii', 'the no-high-byte fast path');
+    assert.equal(decodeWindows1252(Buffer.alloc(0)), '');
   });
 });
 

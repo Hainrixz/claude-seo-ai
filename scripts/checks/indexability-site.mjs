@@ -5,7 +5,7 @@
 // Without a crawl there is nothing to cross-check, so the module reports needs_api with the reason
 // instead of passing silently.
 
-import { mk, push, listing, plural, originOf } from './_shared.mjs';
+import { mk, push, listing, plural, originOf, runRepro } from './_shared.mjs';
 
 /** How many hops past the first response count as a chain (1 hop = a single, normal redirect). */
 export const CHAIN_HOPS = 2;
@@ -128,7 +128,7 @@ export const check = {
         recommendation: 'Add a site-wide 301 from http:// to https:// (and an HSTS header once it is stable).',
         fixable: 'advisory',
         verification: { method: 'header_check', assertion: 'GET the http:// origin returns a 301/308 whose Location is the https:// URL.' },
-        reproduce: { script: 'ai-discovery.mjs', args: { 'run-dir': ctx.run_dir } },
+        reproduce: runRepro(ctx, 'ai-discovery.mjs'),
         expected_impact: { axis: 'search', confidence: 'established', rationale: 'Google documents HTTPS as a ranking signal and canonicalises to the secure URL; an unredirected http:// copy splits the two.' },
       }));
     }

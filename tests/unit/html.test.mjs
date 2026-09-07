@@ -298,3 +298,38 @@ describe('util.mjs compat getters', () => {
     assert.equal(stripTags('a < b'), 'a < b');
   });
 });
+
+describe('CRLF input — a Windows checkout, or a server that ships CRLF', () => {
+  // Browsers normalize CR and CRLF to LF before tokenizing (HTML §13.2.3.5). So does
+  // scripts/lib/html.mjs: without it a multi-line attribute value came back as
+  // 'Spring sale\r\nacross lines' and every text node carried a stray \r.
+  const CRLF = MALFORMED.replace(/\r\n?/g, '\n').replace(/\n/g, '\r\n');
+  const crDoc = parseDocument(CRLF, PAGE);
+  /** The one field that is *meant* to differ: it counts bytes in the document as served. */
+  const withoutOffset = (d) => { const c = JSON.parse(JSON.stringify(d)); c.charset.offset_bytes = null; return c; };
+
+  it('parses to exactly the same document model as the LF original', () => {
+    assert.ok(CRLF.includes('\r\n'), 'the input really is CRLF');
+    assert.deepEqual(withoutOffset(crDoc), withoutOffset(doc));
+    assert.ok(!JSON.stringify(crDoc).includes('\\r'), 'no carriage return survives into the model');
+  });
+
+  it('an attribute value spanning two lines reads the same either way', () => {
+    const prop = (p) => crDoc.metas.find((m) => m.property === p).content;
+    assert.equal(prop('og:title'), 'Spring sale\nacross lines');
+  });
+
+  it('tokenize() normalizes too, so token text never carries \\r', () => {
+    const tokens = tokenize('<p>one\r\ntwo</p>\r\n<p>three\rfour</p>');
+    const text = tokens.filter((t) => t.kind === 'text').map((t) => t.text).join('|');
+    assert.equal(text, 'one\ntwo|\n|three\nfour');
+  });
+
+  it('charset.offset_bytes still counts bytes in the document as it was served', () => {
+    const lf = '<html>\n<head>\n<meta charset="utf-8">\n</head>\n<body><p>x</p></body></html>';
+    assert.equal(parseDocument(lf).charset.offset_bytes, 14, "'<html>\\n<head>\\n' is 14 bytes");
+    // Two CRLF pairs precede the tag in the CRLF file, so it really does start two bytes later.
+    assert.equal(parseDocument(lf.replace(/\n/g, '\r\n')).charset.offset_bytes, 16);
+    assert.equal(parseDocument(lf.replace(/\n/g, '\r')).charset.offset_bytes, 14, 'lone CR is one byte, like LF');
+  });
+});

@@ -9,7 +9,8 @@
 // TOKEN SHAPE
 //   { kind: 'open'|'close'|'self'|'raw'|'comment'|'doctype'|'text',
 //     name, attrs (keys lowercased, first occurrence wins, values entity-decoded),
-//     start, end (char offsets into the source), content (raw elements only), text (text tokens),
+//     start, end (char offsets into the newline-normalized source — see normalizeNewlines),
+//     content (raw elements only), text (text tokens),
 //     region ('body' or innermost landmark), regions (landmark stack snapshot),
 //     parent (index of the enclosing open token, -1 at top level), depth,
 //     end_idx (open tokens: index of the first token after the element; implied when no close tag),
@@ -246,10 +247,32 @@ function structure(tokens) {
   return tokens;
 }
 
+/**
+ * Newline preprocessing, exactly as a browser does it before tokenizing (HTML §13.2.3.5):
+ * CR LF collapses to LF and a lone CR becomes LF. Without it a CRLF document yields attribute
+ * values and text nodes carrying `\r`, so the same page parsed from a Windows checkout compares
+ * unequal to the same page fetched over HTTP.
+ */
+export function normalizeNewlines(s) {
+  const str = typeof s === 'string' ? s : String(s ?? '');
+  return str.indexOf('\r') === -1 ? str : str.replace(/\r\n?/g, '\n');
+}
+
+/**
+ * Map an index into the newline-normalized source back to a byte offset in the original.
+ * Normalization only ever deletes CR, so walking both strings once is exact.
+ */
+function rawByteOffset(raw, normIndex) {
+  let ri = 0;
+  for (let ni = 0; ni < normIndex && ri < raw.length; ni++, ri++) {
+    if (raw.charCodeAt(ri) === 13) { if (raw.charCodeAt(ri + 1) === 10) ri++; } // CR or CRLF became one LF
+  }
+  return Buffer.byteLength(raw.slice(0, ri), 'utf8');
+}
+
 /** Tokenize HTML into a structured token list (see TOKEN SHAPE at the top of this file). */
 export function tokenize(html) {
-  const src = typeof html === 'string' ? html : String(html ?? '');
-  return structure(lex(src));
+  return structure(lex(normalizeNewlines(html)));
 }
 
 /** True when the token sits in a content region: not nav/footer/aside; a header only counts inside main/article. */
@@ -348,7 +371,10 @@ const JS_NOTICE = /(enable|turn on|activate|allow)\s+javascript|javascript\s+(is
  * Pass `{ tokens }` to reuse a token list you already have.
  */
 export function parseDocument(html, baseUrl = null, opts = {}) {
-  const src = typeof html === 'string' ? html : String(html ?? '');
+  const raw = typeof html === 'string' ? html : String(html ?? '');
+  // Token offsets index the normalized source; `raw` is kept only to report byte offsets into the
+  // document as it was actually served (the <meta charset> "within the first 1024 bytes" rule).
+  const src = normalizeNewlines(raw);
   const tokens = opts.tokens || tokenize(src);
 
   // <base href> (first wins, browsers ignore later ones)
@@ -430,7 +456,7 @@ export function parseDocument(html, baseUrl = null, opts = {}) {
           let cs = null;
           if (a.charset != null) cs = a.charset.trim();
           else if (m.http_equiv === 'content-type' && m.content) cs = (/charset\s*=\s*["']?([\w-]+)/i.exec(m.content) || [])[1] || null;
-          if (cs) doc.charset = { value: cs, offset_bytes: Buffer.byteLength(src.slice(0, t.start), 'utf8') };
+          if (cs) doc.charset = { value: cs, offset_bytes: raw === src ? Buffer.byteLength(src.slice(0, t.start), 'utf8') : rawByteOffset(raw, t.start) };
         }
         break;
       }

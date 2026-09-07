@@ -1290,6 +1290,34 @@ test('drops past the entry cap are still counted, so the total can never under-r
   assert.deepEqual(shared.takeDropped(), { entries: [], total: 0 }, 'the counter is zeroed with the entries');
 });
 
+test('every reproduce path a check emits is forward-slashed, not just the script path', async () => {
+  const shared = await import('../../scripts/checks/_shared.mjs');
+  // `sep` is injected so the Windows shape is testable from any platform. Without this the args
+  // reached the reader as `--snapshot "D:\\a\\runs\\r1\\pages\\x.json"` (shellQuote escapes every
+  // backslash), which neither cmd.exe nor PowerShell round-trips back to the real file.
+  const win = { sep: '\\' };
+  const page = { snapshot_path: 'D:\\a\\repo\\.claude-seo-ai\\runs\\e.test\\r1\\pages\\index.json' };
+  assert.equal(shared.snapshotPath(null, page, win), 'D:/a/repo/.claude-seo-ai/runs/e.test/r1/pages/index.json');
+  assert.deepEqual(shared.snapRepro(null, page, 'parse-html.mjs', {}, win),
+    { script: 'parse-html.mjs', args: { snapshot: 'D:/a/repo/.claude-seo-ai/runs/e.test/r1/pages/index.json' } });
+  assert.deepEqual(shared.runRepro({ run_dir: 'D:\\a\\repo\\runs\\r1' }, 'ai-discovery.mjs', { deep: true }, win),
+    { script: 'ai-discovery.mjs', args: { 'run-dir': 'D:/a/repo/runs/r1', deep: true } });
+  assert.equal(shared.snapshotPath(null, null, win), null, 'a page with no snapshot still yields null, not "null"');
+  assert.equal(shared.reproPath, (await import('../../scripts/lib/finding.mjs')).reproPath, 'checks share the one normaliser');
+
+  // The end of the pipe: no backslash survives into the command a reader pastes.
+  const f = shared.mk({
+    id: 'M21.llmstxt.missing', title: 'AI discovery paths were not probed in this run', status: 'needs_api', scope: 'site',
+    evidence: { observed: 'No site/discovery.json in the run directory.' },
+    expected: 'A run that probes /llms.txt.', recommendation: 'Re-run the crawl with discovery artifacts enabled.',
+    verification: { method: 'header_check', assertion: 'site/discovery.json exists.' },
+    reproduce: shared.runRepro({ run_dir: 'D:\\a\\repo\\runs\\r1' }, 'ai-discovery.mjs', {}, win),
+    expected_impact: { axis: 'ai', confidence: 'directional', rationale: 'r' },
+  });
+  assert.ok(f.verification.reproduce.endsWith(' --run-dir D:/a/repo/runs/r1'), f.verification.reproduce);
+  for (const m of f.verification.reproduce.matchAll(/"([^"]*)"/g)) assert.ok(!m[1].includes('\\'), 'quoted token must not be backslash-escaped: ' + m[1]);
+});
+
 /* ------------------------------------------------------------------ pointers vs declarations */
 
 test('M5 leaves a review widget\'s itemReviewed alone: a back-reference is not a Product missing its Offer', async () => {

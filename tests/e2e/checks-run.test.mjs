@@ -18,6 +18,7 @@ import { startServer } from '../helpers/server.mjs';
 import { main as crawlMain } from '../../scripts/crawl.mjs';
 import { EXIT } from '../../scripts/lib/util.mjs';
 import { validateFinding } from '../../scripts/lib/validate-finding.mjs';
+import { ABSOLUTE_SCRIPT_PATH } from '../../scripts/lib/finding.mjs';
 import { snapshotUrl } from '../../scripts/snapshot.mjs';
 import { loadRunContext, runChecks } from '../../scripts/checks/index.mjs';
 import { check as sitemapsCheck } from '../../scripts/checks/sitemaps.mjs';
@@ -69,7 +70,19 @@ test('every finding validates against the schema and carries a runnable reproduc
   for (const f of findings) {
     const { ok, errors } = validateFinding(f);
     assert.ok(ok, f.id + ': ' + errors.join('; '));
-    assert.match(f.verification.reproduce, /^node "\/.*\/scripts\/[a-z-]+\.mjs"/, f.id + ' reproduce must be an absolute command');
+    // Absolute means POSIX (/a/b) or Windows drive (D:/a/b) — always forward slashes, never escaped.
+    const quoted = /^node "([^"]+)"/.exec(f.verification.reproduce);
+    assert.ok(quoted, f.id + ' reproduce must start with a quoted script path: ' + f.verification.reproduce);
+    assert.match(quoted[1], ABSOLUTE_SCRIPT_PATH, f.id + ' reproduce must be an absolute command');
+    assert.match(quoted[1], /\/scripts\/(?:[a-z-]+\/)?[a-z-]+\.mjs$/, f.id + ' reproduce must point into scripts/');
+    assert.ok(!quoted[1].includes('\\'), f.id + ' reproduce path must use forward slashes: ' + quoted[1]);
+    // Every quoted token, not just the script: `--run-dir`, `--snapshot` and `--feed` all carry a
+    // native filesystem path, and shellQuote() escapes backslashes — so on Windows those args used
+    // to ship doubled (`"D:\\a\\runs\\r1"`), which no shell round-trips back to the real directory.
+    // Asserting only the first token is what let that survive the previous fix.
+    for (const m of f.verification.reproduce.matchAll(/"([^"]*)"/g)) {
+      assert.ok(!m[1].includes('\\'), f.id + ' reproduce args must use forward slashes: ' + m[1] + ' in ' + f.verification.reproduce);
+    }
     assert.ok(f.evidence.observed.length > 10, f.id + ' must quote what it observed');
     if (['needs_api', 'manual_review', 'not_applicable'].includes(f.status)) {
       assert.ok(f.severity === 0 || f.status === 'needs_api', f.id + ' unscored statuses carry severity 0 (needs_api may keep its module severity)');

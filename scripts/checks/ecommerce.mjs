@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { flattenNodes, disambiguateRootPaths, isProductDeclaration, ownProps, variantNodeSet } from '../lib/jsonld.mjs';
 import { detectFormat, parseFeed, canonicalizeRow, parsePrice } from '../acp-feed-lint.mjs';
-import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, isEcommerce, snapRepro, urlKey, numericPrice } from './_shared.mjs';
+import { mk, push, clip, listing, plural, agree, contentPages, finalUrl, isEcommerce, snapRepro, reproPath, urlKey, numericPrice } from './_shared.mjs';
 
 /** Query keys that mark a faceted/sorted listing URL rather than a distinct page. */
 export const FACET_KEYS = ['filter', 'color', 'colour', 'size', 'sort', 'sort_by', 'orderby', 'order', 'price', 'brand', 'material', 'style', 'pa_color', 'pa_size', 'variant'];
@@ -211,7 +211,7 @@ export const check = {
                 recommendation: 'Regenerate the feed from the same source as the page, and re-check after any price change propagates through the cache.',
                 fixable: 'advisory',
                 verification: { method: 'manual_review', assertion: 'The feed price for this item equals the Offer price on its page.' },
-                reproduce: { script: 'acp-feed-lint.mjs', args: { feed: feedPath } },
+                reproduce: { script: 'acp-feed-lint.mjs', args: { feed: reproPath(feedPath) } },
                 expected_impact: { axis: 'both', confidence: 'directional', rationale: 'A disagreement is exact; which side an agent trusts, and for how long, is not documented.' },
               }));
             }
@@ -227,7 +227,7 @@ export const check = {
                 recommendation: 'Publish availability from one source; an agent that buys from a stale feed fails at checkout.',
                 fixable: 'advisory',
                 verification: { method: 'manual_review', assertion: 'The feed availability for this item matches the Offer availability on its page.' },
-                reproduce: { script: 'acp-feed-lint.mjs', args: { feed: feedPath } },
+                reproduce: { script: 'acp-feed-lint.mjs', args: { feed: reproPath(feedPath) } },
                 expected_impact: { axis: 'both', confidence: 'directional', rationale: 'The disagreement is observable; the consequence depends on the agent\'s refresh policy, which is not published.' },
               }));
             }

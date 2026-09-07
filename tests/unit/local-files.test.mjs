@@ -184,10 +184,14 @@ test('a Hugo front-matter fix merges keys and leaves the body alone', async () =
 
     const applied = await LF.apply(A.transition(change, 'confirmed'), { run, project });
     assert.equal(applied.ok, true);
-    const text = readFileSync(join(project, 'content', 'posts', 'rain-shadow.md'), 'utf8');
+    // Compared with LF: mergeFrontmatter preserves the source file's own EOL byte-for-byte (proved
+    // in tests/unit/frontmatter.test.mjs), so on a CRLF checkout the *content* is what this asserts.
+    const raw = readFileSync(join(project, 'content', 'posts', 'rain-shadow.md'), 'utf8');
+    const text = raw.replace(/\r\n?/g, '\n');
     assert.match(text, /^description: Why the east side of the range stays dry\.$/m);
     assert.match(text, /title: "Rain shadow"/, 'the existing keys are untouched');
     assert.ok(text.endsWith('Why the east side of the range stays dry.\n'), 'the body survives');
+    assert.equal(raw.includes('\r\n'), raw.split('\n')[0].endsWith('\r'), 'the file keeps one EOL flavour throughout');
 
     const verified = await LF.verify(applied.change, { run, project });
     assert.equal(verified.ok, true);

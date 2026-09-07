@@ -21,6 +21,14 @@ const ROOT = resolve(HERE, '..', '..');
 const FIX = resolve(HERE, '..', 'fixtures', 'platforms');
 const CARDS = resolve(ROOT, 'references', 'platforms');
 
+/**
+ * Read a repo text file for structural comparison, with line endings normalized to LF.
+ * .gitattributes checks these files out with LF everywhere, and the card reader
+ * (scripts/adapters/instructions.mjs) normalizes too; this keeps the assertions honest either way
+ * instead of failing on a stray `\r` that no reader ever sees.
+ */
+const readText = (p) => readFileSync(p, 'utf8').replace(/\r\n?/g, '\n');
+
 /** Every fixture's public URL — fixtures carry markers, the URL carries host/environment evidence. */
 const URLS = {
   shopify: 'https://northwind-supply.myshopify.com/products/merino-crew-tee',
@@ -592,7 +600,7 @@ describe('knowledge cards and routing', () => {
 
   for (const file of cardFiles) {
     it(`${file} has the status header and all 12 sections in order`, () => {
-      const text = readFileSync(join(CARDS, file), 'utf8');
+      const text = readText(join(CARDS, file));
       assert.match(text, /^# [a-z0-9-]+\n/, 'the H1 is the detector id');
       assert.match(text, /^\*\*Status:\*\* (stable|beta|instructions-only) · \*\*Last verified:\*\* \d{4}-\d{2}-\d{2}/m);
       const found = [...text.matchAll(/^## (\d{1,2})\. (.+)$/gm)];
@@ -606,14 +614,14 @@ describe('knowledge cards and routing', () => {
 
   it('every card that promises an unconfirmed API detail marks it UNVERIFIED', () => {
     for (const file of ['shopify.md', 'wordpress.md', 'wix.md', 'webflow.md', 'ghost.md', 'hubspot.md', 'bigcommerce.md', 'payload.md']) {
-      const text = readFileSync(join(CARDS, file), 'utf8');
+      const text = readText(join(CARDS, file));
       const honesty = text.slice(text.indexOf('## 12.'));
       assert.match(honesty, /UNVERIFIED/, `${file}: §12 must name what is not vendor-confirmed`);
     }
   });
 
   it('references/routing.md lists all 24 card ids and the profile shape', () => {
-    const routing = readFileSync(resolve(ROOT, 'references', 'routing.md'), 'utf8');
+    const routing = readText(resolve(ROOT, 'references', 'routing.md'));
     for (const id of CARD_IDS) {
       assert.ok(routing.includes(`platforms/${id}.md`), `routing.md does not route to platforms/${id}.md`);
     }
@@ -624,7 +632,7 @@ describe('knowledge cards and routing', () => {
   });
 
   it('the hidden detect skill is not user-invocable and only runs plugin scripts', () => {
-    const skill = readFileSync(resolve(ROOT, 'skills', 'seo-platform-detect', 'SKILL.md'), 'utf8');
+    const skill = readText(resolve(ROOT, 'skills', 'seo-platform-detect', 'SKILL.md'));
     const fm = skill.slice(0, skill.indexOf('\n---', 4));
     assert.match(fm, /^name: seo-platform-detect$/m);
     assert.match(fm, /^user-invocable: false$/m);

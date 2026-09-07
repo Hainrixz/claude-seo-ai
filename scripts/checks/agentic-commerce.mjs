@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { detectFormat, parseFeed, lintFeed } from '../acp-feed-lint.mjs';
 import { analyzeDiscovery } from '../ai-discovery.mjs';
 import { partialReadNote } from './ai-discovery.mjs';
-import { mk, push, clip, listing, plural, isEcommerce, originOf } from './_shared.mjs';
+import { mk, push, clip, listing, plural, isEcommerce, originOf, runRepro, reproPath } from './_shared.mjs';
 
 /** Rows linted from the feed; the rest are reported as un-sampled rather than silently ignored. */
 export const FEED_SAMPLE = 500;
@@ -29,7 +29,7 @@ export const check = {
     if (!isEcommerce(ctx)) return out;
     const origin = originOf(ctx);
     const ucpUrl = (origin || '') + '/.well-known/ucp';
-    const repro = { script: 'ai-discovery.mjs', args: { 'run-dir': ctx.run_dir } };
+    const repro = runRepro(ctx, 'ai-discovery.mjs');
     const site = { scope: 'site', fixable: 'advisory', location: { url: ucpUrl } };
 
     /* ---- UCP profile -------------------------------------------------------------------------- */
@@ -109,7 +109,7 @@ export const check = {
       recommendation: 'Keep a Merchant Center feed in sync with the site. Google documents it as the authoritative source for shopping and AI shopping surfaces; structured data alone is the fallback.',
       fixable: 'advisory',
       verification: { method: 'manual_review', assertion: 'The store has an active, verified Merchant Center feed (visible only inside the merchant account).' },
-      reproduce: { script: 'acp-feed-lint.mjs', args: { feed: (ctx.options && ctx.options.feed_path) || '<feed file>' } },
+      reproduce: { script: 'acp-feed-lint.mjs', args: { feed: reproPath((ctx.options && ctx.options.feed_path) || '<feed file>') } },
       expected_impact: { axis: 'both', confidence: 'established', rationale: 'Google documents Merchant Center as the supported channel for product data on its shopping surfaces; we cannot see the account, so this is a hint, not a measurement.' },
     }));
 
@@ -141,7 +141,7 @@ export const check = {
         recommendation: 'Check the path and permissions, then re-run.',
         fixable: 'advisory',
         verification: { method: 'manual_review', assertion: 'The feed file exists and is readable.' },
-        reproduce: { script: 'acp-feed-lint.mjs', args: { feed: feedPath } },
+        reproduce: { script: 'acp-feed-lint.mjs', args: { feed: reproPath(feedPath) } },
         expected_impact: { axis: 'both', confidence: 'directional', rationale: 'An unreadable file yields no observation either way.' },
       }));
       return out;
@@ -170,7 +170,7 @@ export const check = {
           recommendation: 'Fix the rows listed above at the source that generates the feed; an agent drops the item rather than guessing the missing value.',
           fixable: 'proposed',
           verification: { method: 'manual_review', assertion: 'acp-feed-lint.mjs --strict exits 0 on the feed.' },
-          reproduce: { script: 'acp-feed-lint.mjs', args: { feed: feedPath, strict: true } },
+          reproduce: { script: 'acp-feed-lint.mjs', args: { feed: reproPath(feedPath), strict: true } },
           expected_impact: { axis: 'both', confidence: 'directional', rationale: 'The row errors are exact; how each agent handles an invalid row is not documented, so the consequence is directional.' },
         }));
       }

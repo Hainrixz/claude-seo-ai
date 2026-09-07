@@ -7,7 +7,7 @@ import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const FIX = join(ROOT, 'tests', 'fixtures');
@@ -627,13 +627,63 @@ describe('lib/bands.mjs', () => {
 });
 
 describe('lib/finding.mjs', () => {
+  // Script paths are written with forward slashes on every platform: `D:\a\repo\scripts\x.mjs`
+  // used to come out backslash-escaped (`D:\\a\\repo\\…`) and no longer round-tripped.
+  const POSIX_ROOT = ROOT.split(sep).join('/');
   it('reproduceCommand builds an absolute, quoted node command from import.meta.url', () => {
     const cmd = finding.reproduceCommand('parse-html', ['--snapshot', '/tmp/a b/x.json']);
-    assert.ok(cmd.startsWith('node "' + join(ROOT, 'scripts', 'parse-html.mjs') + '"'), cmd);
+    assert.ok(cmd.startsWith('node "' + POSIX_ROOT + '/scripts/parse-html.mjs"'), cmd);
     assert.ok(cmd.endsWith('--snapshot "/tmp/a b/x.json"'), cmd);
     assert.equal(finding.reproduceCommand('validate-jsonld.mjs', { type: ['A', 'B'], deep: true, url: 'https://e.test/?a=1&b=2', skip: false }),
-      'node "' + join(ROOT, 'scripts', 'validate-jsonld.mjs') + '" --type A --type B --deep --url "https://e.test/?a=1&b=2"');
-    assert.equal(finding.PLUGIN_ROOT, ROOT);
+      'node "' + POSIX_ROOT + '/scripts/validate-jsonld.mjs" --type A --type B --deep --url "https://e.test/?a=1&b=2"');
+    assert.equal(finding.PLUGIN_ROOT, ROOT, 'PLUGIN_ROOT stays native — it is what fs calls use');
+    assert.match(cmd.slice('node "'.length), finding.ABSOLUTE_SCRIPT_PATH);
+  });
+  it('a Windows plugin root yields D:/… — never a backslash-escaped D:\\\\…', () => {
+    const win = { dir: 'D:\\a\\claude-seo-ai\\scripts', sep: '\\' };
+    assert.equal(finding.scriptPath('psi-client', win), 'D:/a/claude-seo-ai/scripts/psi-client.mjs');
+    assert.equal(finding.scriptPath('adapters\\local-files.mjs', win), 'D:/a/claude-seo-ai/scripts/adapters/local-files.mjs');
+    const cmd = finding.reproduceCommand('psi-client', { url: 'https://e.test/' }, win);
+    assert.equal(cmd, 'node "D:/a/claude-seo-ai/scripts/psi-client.mjs" --url https://e.test/');
+    assert.ok(!cmd.includes('\\'), 'no separator survives as a backslash or gets escaped: ' + cmd);
+    assert.match(cmd.slice('node "'.length), finding.ABSOLUTE_SCRIPT_PATH);
+    // A POSIX root with a space still quotes, and still never escapes the separator.
+    assert.equal(finding.reproduceCommand('score', [], { dir: '/opt/my plugins/claude-seo-ai/scripts', sep: '/' }),
+      'node "/opt/my plugins/claude-seo-ai/scripts/score.mjs"');
+    assert.deepEqual(['/a/b.mjs', 'D:/a/b.mjs', 'c:/x'].map((p) => finding.ABSOLUTE_SCRIPT_PATH.test(p)), [true, true, true]);
+    assert.deepEqual(['a/b.mjs', 'D:\\a\\b.mjs', './x'].map((p) => finding.ABSOLUTE_SCRIPT_PATH.test(p)), [false, false, false]);
+    assert.throws(() => finding.quotePath('/opt/we"ird/scripts/x.mjs'), /must not contain a double quote/);
+  });
+  it('a UNC install root keeps its // prefix — posix.normalize would silently repoint it at /server', () => {
+    // \\server\share\repo is a real Windows install root (a plugin on a network share). Collapsing
+    // the leading '//' still passes ABSOLUTE_SCRIPT_PATH, so the failure would be silent.
+    const unc = { dir: '\\\\server\\share\\repo\\scripts', sep: '\\' };
+    assert.equal(finding.scriptPath('psi-client', unc), '//server/share/repo/scripts/psi-client.mjs');
+    assert.equal(finding.scriptPath('./adapters/../psi-client.mjs', unc), '//server/share/repo/scripts/psi-client.mjs', 'and ./ and ../ are still collapsed');
+    assert.match(finding.scriptPath('psi-client', unc), finding.ABSOLUTE_SCRIPT_PATH);
+    assert.equal(finding.reproduceCommand('psi-client', [], unc), 'node "//server/share/repo/scripts/psi-client.mjs"');
+    assert.equal(finding.scriptPath('x', { dir: '/server/share/repo/scripts', sep: '/' }), '/server/share/repo/scripts/x.mjs', 'a single leading slash is not turned into a UNC root');
+  });
+  it('reproPath forward-slashes a path *argument*, which shellQuote would otherwise backslash-escape', () => {
+    // The C2 bug survived in the args after the script path was fixed: --run-dir, --snapshot and
+    // --feed all carry native paths, and escapeDq doubles every backslash into a form no Windows
+    // shell round-trips. reproPath is the one gate; the checks route every path arg through it.
+    const win = { sep: '\\' };
+    assert.equal(finding.reproPath('D:\\a\\repo\\.claude-seo-ai\\runs\\e.test\\r1', win), 'D:/a/repo/.claude-seo-ai/runs/e.test/r1');
+    assert.equal(finding.reproPath('\\\\server\\share\\feed.csv', win), '//server/share/feed.csv');
+    assert.equal(finding.reproPath('D:/already/posix', win), 'D:/already/posix');
+    assert.deepEqual([finding.reproPath(null, win), finding.reproPath(undefined, win)], [null, undefined], 'a missing path stays missing so reproduceCommand can drop the flag');
+    // On POSIX a backslash is a legal filename character and must survive untouched.
+    assert.equal(finding.reproPath('/tmp/we\\ird/x.json', { sep: '/' }), '/tmp/we\\ird/x.json');
+
+    const runDir = finding.reproPath('D:\\a\\repo\\runs\\r1', win);
+    const cmd = finding.reproduceCommand('ai-discovery.mjs', { 'run-dir': runDir }, { dir: 'D:\\a\\repo\\scripts', sep: '\\' });
+    assert.equal(cmd, 'node "D:/a/repo/scripts/ai-discovery.mjs" --run-dir D:/a/repo/runs/r1');
+    assert.ok(!cmd.includes('\\'), 'no backslash reaches the reader, in the script path or in any arg: ' + cmd);
+    // A path with a space still quotes — and the quoting still must not introduce a backslash.
+    const spaced = finding.reproduceCommand('acp-feed-lint', { feed: finding.reproPath('D:\\My Files\\feed.csv', win) }, { dir: 'D:\\a\\scripts', sep: '\\' });
+    assert.equal(spaced, 'node "D:/a/scripts/acp-feed-lint.mjs" --feed "D:/My Files/feed.csv"');
+    for (const m of spaced.matchAll(/"([^"]*)"/g)) assert.ok(!m[1].includes('\\'), 'quoted token must not be escaped: ' + m[1]);
   });
   it('makeFinding fills structural defaults and validates', () => {
     const { finding: f, errors } = finding.makeFinding({
@@ -644,7 +694,7 @@ describe('lib/finding.mjs', () => {
     }, { mode: 'return' });
     assert.deepEqual(errors, []);
     assert.deepEqual([f.module, f.scope, f.fixable, f.severity, f.evidence.observed, f.expected_impact.magnitude], ['M15', 'page', 'advisory', 0, 'no PSI key', 'low']);
-    assert.equal(f.verification.reproduce, 'node "' + join(ROOT, 'scripts', 'psi-client.mjs') + '" --url https://e.test/');
+    assert.equal(f.verification.reproduce, 'node "' + POSIX_ROOT + '/scripts/psi-client.mjs" --url https://e.test/');
     assert.equal('reproduce' in f, false);
     const sev4 = finding.makeFinding(F('M5.x.y', { severity: 4, expected_impact: { axis: 'both', confidence: 'established', rationale: 'r' } }), { mode: 'return' });
     assert.equal(sev4.finding.expected_impact.magnitude, 'high');

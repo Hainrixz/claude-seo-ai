@@ -88,6 +88,29 @@ test('parseManualPaths copes with a bullet that has no label and with a missing 
   assert.equal(I.readCard('../../etc/passwd'), null, 'a card id can never walk out of references/platforms');
 });
 
+test('a CRLF card parses to exactly the same manual paths as an LF one', () => {
+  // A Windows checkout (or a card edited in a CRLF editor) must produce identical click paths:
+  // a trailing `\r` used to ride along in every label and every EN/ES value.
+  const lf = '# shopify\n\n## 11. Manual paths (EN / ES)\n\n- SEO title — EN: Admin → Products.\n  ES: Panel → Productos.\n- EN: edit the theme.\n  ES: edita el tema.\n\n## 12. Honesty\n';
+  const crlf = lf.replace(/\n/g, '\r\n');
+  assert.deepEqual(I.parseManualPaths(crlf), I.parseManualPaths(lf));
+  assert.deepEqual(I.parseManualPaths(crlf), [
+    { label: 'SEO title', en: 'Admin → Products.', es: 'Panel → Productos.' },
+    { label: null, en: 'edit the theme.', es: 'edita el tema.' },
+  ]);
+  assert.ok(!JSON.stringify(I.parseManualPaths(crlf)).includes('\\r'), 'no carriage return survives into a click path');
+  // readCard normalizes too, so a card on disk with CRLF reads exactly like the LF one.
+  const dir = mkdtempSync(join(tmpdir(), 'cseo-card-'));
+  try {
+    writeFileSync(join(dir, 'crlf.md'), crlf);
+    const text = readFileSync(join(dir, 'crlf.md'), 'utf8');
+    assert.ok(text.includes('\r\n'), 'the fixture really is CRLF on disk');
+    assert.deepEqual(I.parseManualPaths(text.replace(/\r\n?/g, '\n')), I.parseManualPaths(lf));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const real = I.readCard('shopify');
+  assert.ok(real && !real.text.includes('\r'), 'readCard hands out LF-only text');
+});
+
 test('a capital Z (or any text) inside section 11 does not truncate it', () => {
   // JavaScript has no \\Z anchor: an end-of-section lookahead written that way silently stops at a
   // literal Z. This is the regression guard for that.

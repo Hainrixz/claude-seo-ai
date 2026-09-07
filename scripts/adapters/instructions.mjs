@@ -40,12 +40,16 @@ export function cardIdOf(ref) {
   return base.replace(/[^a-z0-9._-]/gi, '');
 }
 
-/** Read a platform knowledge card by id (or by the path shape a profile stores). */
+/**
+ * Read a platform knowledge card by id (or by the path shape a profile stores).
+ * Line endings are normalized to LF: a Windows checkout (or a card edited in a CRLF editor) must
+ * parse and render identically to a POSIX one — every heading and bullet matcher below assumes LF.
+ */
 export function readCard(id) {
   const safe = cardIdOf(id);
   if (!safe) return null;
   const path = join(CARDS_DIR, safe + '.md');
-  try { return existsSync(path) ? { id: safe, path, text: readFileSync(path, 'utf8') } : null; }
+  try { return existsSync(path) ? { id: safe, path, text: readFileSync(path, 'utf8').replace(/\r\n?/g, '\n') } : null; }
   catch { return null; }
 }
 

@@ -8,7 +8,7 @@
 //   - `established` is reserved for mechanisms a vendor documents.
 
 import { join, resolve } from 'node:path';
-import { makeFinding, isTestMode } from '../lib/finding.mjs';
+import { makeFinding, isTestMode, reproPath } from '../lib/finding.mjs';
 import { normalizeUrl, urlsEquivalent, hostKey } from '../lib/urlnorm.mjs';
 import { tokenize } from '../lib/html.mjs';
 import { isHtmlDocument, mediaTypeOf } from '../lib/site.mjs';
@@ -71,6 +71,9 @@ export function peekDropped() {
   return dropped.slice();
 }
 
+/** Re-exported so a check can forward-slash any other path it puts in a reproduce arg. */
+export { reproPath };
+
 /** Push non-null findings onto `out` (variadic; accepts arrays). */
 export function push(out, ...items) {
   for (const item of items) {
@@ -81,22 +84,28 @@ export function push(out, ...items) {
 
 /* ----------------------------------------------------------------- run-dir paths */
 
-/** Absolute path of a page's snapshot JSON, for a runnable `--snapshot` reproduce command. */
-export function snapshotPath(ctx, page) {
-  if (page && page.snapshot_path) return page.snapshot_path;
-  if (ctx && ctx.run_dir && page && page.slug) return resolve(join(ctx.run_dir, 'pages', page.slug + '.json'));
+/**
+ * Absolute path of a page's snapshot JSON, for a runnable `--snapshot` reproduce command.
+ *
+ * Forward-slashed through reproPath(): the value is destined for a shell command, where a native
+ * Windows separator comes back out backslash-escaped and no longer round-trips (see finding.mjs).
+ * `opts` only exists so the Windows shape can be unit-tested from any platform.
+ */
+export function snapshotPath(ctx, page, opts) {
+  if (page && page.snapshot_path) return reproPath(page.snapshot_path, opts);
+  if (ctx && ctx.run_dir && page && page.slug) return reproPath(resolve(join(ctx.run_dir, 'pages', page.slug + '.json')), opts);
   return null;
 }
 
 /** `{script, args}` shorthand for a script that accepts `--snapshot <pages/x.json>`. */
-export function snapRepro(ctx, page, script, extra = {}) {
-  const p = snapshotPath(ctx, page);
+export function snapRepro(ctx, page, script, extra = {}, opts) {
+  const p = snapshotPath(ctx, page, opts);
   return p ? { script, args: { snapshot: p, ...extra } } : { script, args: { url: pageUrl(page), ...extra } };
 }
 
 /** `{script, args}` shorthand for a script that takes the run directory. */
-export function runRepro(ctx, script, extra = {}) {
-  return { script, args: { 'run-dir': ctx.run_dir, ...extra } };
+export function runRepro(ctx, script, extra = {}, opts) {
+  return { script, args: { 'run-dir': reproPath(ctx.run_dir, opts), ...extra } };
 }
 
 /* ----------------------------------------------------------------- page helpers */

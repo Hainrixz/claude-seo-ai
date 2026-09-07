@@ -11,6 +11,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const D = await import(pathToFileURL(join(ROOT, 'scripts', 'lib', 'diff.mjs')).href);
 
+/**
+ * Run git with the user's line-ending conversion turned off. A Windows machine (and the GitHub
+ * Windows runner) usually has core.autocrlf=true, which makes `git apply` write CRLF into the
+ * working tree — the patch would apply correctly and the file would still not equal the LF string
+ * this test built. The subject here is the diff, not git's checkout filter.
+ */
+const runGit = (args, cwd) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', ...args], { cwd });
+/** Compare applied output ignoring the platform's newline flavour (see `runGit` above). */
+const lf = (s) => String(s).replace(/\r\n?/g, '\n');
+
 test('splitLines records the EOL and the trailing newline', () => {
   assert.deepEqual(D.splitLines('a\nb\n'), { lines: ['a', 'b'], eol: '\n', trailingNewline: true });
   assert.deepEqual(D.splitLines('a\r\nb'), { lines: ['a', 'b'], eol: '\r\n', trailingNewline: false });
@@ -55,9 +65,9 @@ test('the generated diff is accepted by `git apply` (when git is available)', (t
     const after = 'one\ntwo\nTWO-AND-A-HALF\nthree\nfour\nfive-changed\n';
     writeFileSync(join(dir, 'f.txt'), before);
     writeFileSync(join(dir, 'p.diff'), D.unifiedDiff(before, after, { fromFile: 'a/f.txt', toFile: 'b/f.txt' }));
-    execFileSync('git', ['init', '-q'], { cwd: dir });
-    execFileSync('git', ['apply', 'p.diff'], { cwd: dir });
-    assert.equal(readFileSync(join(dir, 'f.txt'), 'utf8'), after);
+    runGit(['init', '-q'], dir);
+    runGit(['apply', 'p.diff'], dir);
+    assert.equal(lf(readFileSync(join(dir, 'f.txt'), 'utf8')), after);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -80,9 +90,9 @@ test('a missing trailing newline is marked on the right side, and git accepts it
     try {
       writeFileSync(join(dir, 'f.txt'), before);
       writeFileSync(join(dir, 'p.diff'), patch);
-      execFileSync('git', ['init', '-q'], { cwd: dir });
-      execFileSync('git', ['apply', 'p.diff'], { cwd: dir });
-      assert.equal(readFileSync(join(dir, 'f.txt'), 'utf8'), after, JSON.stringify(patch));
+      runGit(['init', '-q'], dir);
+      runGit(['apply', 'p.diff'], dir);
+      assert.equal(lf(readFileSync(join(dir, 'f.txt'), 'utf8')), after, JSON.stringify(patch));
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }
   if (!git) t.diagnostic('git not available: only the format was checked');

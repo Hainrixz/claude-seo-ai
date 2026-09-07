@@ -103,10 +103,61 @@ function sniffCharset(buf) {
   return m ? m[1].toLowerCase() : null;
 }
 
+/**
+ * index-windows-1252 from the WHATWG Encoding Standard: the code points for bytes 0x80–0x9F.
+ * Every other byte maps to the code point of the same value (verified against a correct
+ * TextDecoder for all 256 bytes).
+ */
+const WINDOWS_1252_HIGH =
+  '\u20AC\u0081\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\u008D\u017D\u008F' + // 0x80-0x8F
+  '\u0090\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\u009D\u017E\u0178';   // 0x90-0x9F
+
+/** Every label the Encoding Standard maps to windows-1252 (iso-8859-1 and us-ascii included). */
+const WINDOWS_1252_LABELS = new Set([
+  'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100',
+  'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252',
+  'x-cp1252',
+]);
+
+/**
+ * Decode bytes as windows-1252 using the spec table, with no dependency on the runtime's ICU.
+ * Node 20 resolves every windows-1252 label to a plain latin1 table (0x93 decodes to U+0093
+ * instead of “), so the same bytes read differently there than on 18/22/24. This module promises
+ * deterministic acquisition, so the most common legacy web encoding is decoded from the table.
+ */
+export function decodeWindows1252(buf) {
+  const bytes = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+  let out = '';
+  let start = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b < 0x80 || b > 0x9f) continue;
+    if (i > start) out += bytes.toString('latin1', start, i); // latin1 is byte-identity here
+    out += WINDOWS_1252_HIGH[b - 0x80];
+    start = i + 1;
+  }
+  return start === 0 ? bytes.toString('latin1') : start < bytes.length ? out + bytes.toString('latin1', start) : out;
+}
+
+const normalizeLabel = (label) => String(label == null ? '' : label).trim().toLowerCase().replace(/^["']|["']$/g, '');
+
+/** True when `label` names windows-1252 (or one of the labels the Encoding Standard folds into it). */
+export function isWindows1252Label(label) { return WINDOWS_1252_LABELS.has(normalizeLabel(label)); }
+
+/**
+ * Decode a body under a declared/sniffed charset.
+ * @returns {{text, charset, fallback, decodedWith}} `decodedWith` is 'builtin-windows-1252' or
+ *   'text-decoder', recorded on the result as `body.charset_decoded_with` so a surprising
+ *   transliteration can be traced to who did it.
+ */
 function decodeBody(buf, charset) {
-  const tryDecode = (label) => { try { return new TextDecoder(label).decode(buf); } catch { return null; } };
-  if (charset) { const t = tryDecode(charset); if (t != null) return { text: t, charset, fallback: false }; }
-  return { text: tryDecode('utf-8') ?? buf.toString('utf8'), charset: 'utf-8', fallback: !!charset };
+  const label = normalizeLabel(charset);
+  if (label && WINDOWS_1252_LABELS.has(label)) {
+    return { text: decodeWindows1252(buf), charset, fallback: false, decodedWith: 'builtin-windows-1252' };
+  }
+  const tryDecode = (l) => { try { return new TextDecoder(l).decode(buf); } catch { return null; } };
+  if (label) { const t = tryDecode(label); if (t != null) return { text: t, charset, fallback: false, decodedWith: 'text-decoder' }; }
+  return { text: tryDecode('utf-8') ?? buf.toString('utf8'), charset: 'utf-8', fallback: !!charset, decodedWith: 'text-decoder' };
 }
 
 async function readBody(res, maxBytes) {
@@ -177,7 +228,7 @@ export function redirectFlags(first, last, hops = 0, loop = false, truncated = f
 }
 
 function emptyBody() {
-  return { text: '', bytes: 0, truncated: false, charset: null, sha256: null, content_encoding: null, gunzipped: false };
+  return { text: '', bytes: 0, truncated: false, charset: null, charset_decoded_with: null, sha256: null, content_encoding: null, gunzipped: false };
 }
 
 /**
@@ -273,6 +324,7 @@ export async function fetchRaw(url, opts = {}) {
     const dec = decodeBody(buf, declared || sniffed);
     const body = {
       text: dec.text, bytes: buf.length, truncated: bodyTruncated, charset: dec.charset, charset_source: declared ? 'header' : sniffed ? 'meta' : 'fallback',
+      charset_decoded_with: dec.decodedWith,
       sha256: createHash('sha256').update(buf).digest('hex'), content_encoding: hdrs['content-encoding'] || null, gunzipped,
     };
     if (dec.fallback) body.charset_fallback = true;

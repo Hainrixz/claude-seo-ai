@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { mk, push, listing, frameworkId, originOf } from './_shared.mjs';
+import { mk, push, listing, frameworkId, originOf, reproPath } from './_shared.mjs';
 
 /** Config files are small; refuse to read anything larger so a stray binary cannot be slurped. */
 export const MAX_CONFIG_BYTES = 512 * 1024;
@@ -77,7 +77,7 @@ export const check = {
     if (!fw) return out;
     const origin = originOf(ctx);
     const root = projectRoot(ctx);
-    const repro = { script: 'detect-platform.mjs', args: root ? { path: root } : { url: origin || '' } };
+    const repro = { script: 'detect-platform.mjs', args: root ? { path: reproPath(root) } : { url: origin || '' } };
 
     if (!root) {
       const entry = NEEDS_SOURCE[fw];
