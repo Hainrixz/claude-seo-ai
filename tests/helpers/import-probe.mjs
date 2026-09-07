@@ -22,7 +22,9 @@ const report = { ok: false, main: null, mainAsync: null, exitCode: null, isMain:
 if (!target || !out) {
   report.error = 'usage: import-probe.mjs <module> <report.json>';
 } else {
-  const href = /^[a-z][a-z0-9+.-]*:/i.test(target) ? target : pathToFileURL(target).href;
+  // A real URL scheme is at least two characters long (file:, data:, node:); a single letter followed by
+// a colon is a Windows drive (D:\\a\\repo), which the ESM loader rejects unless it becomes a file:// URL.
+const href = /^[a-z][a-z0-9+.-]+:/i.test(target) ? target : pathToFileURL(target).href;
   try {
     const mod = await import(href);
     // Imported after the target so nothing about this probe is loaded before the module under test.
