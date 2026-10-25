@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Audit hreflang annotations (HTML <link> tags ∪ HTTP Link header). Backs M20 (international).
 //
 // Usage: node hreflang-check.mjs --url https://example.com/page

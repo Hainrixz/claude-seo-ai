@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Compute the two never-blended scores (Search SEO + AI Visibility) from findings.
 // Pure logic — fully reproducible. Implements references/scoring-model.md.
 //

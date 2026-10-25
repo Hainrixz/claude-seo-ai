@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // robots.txt parser + matcher implementing the Robots Exclusion Protocol as Google applies it
 // (RFC 9309 + Google's documented extensions), plus the Content-Signal extension
 // (contentsignals.org). Own implementation; no third-party code.

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // HTML character-reference decoding with zero dependencies.
 // Covers numeric references (&#NNN; / &#xHH;, surrogate-safe, with the browser's
 // Windows-1252 remap for the C1 range) plus the full HTML 4 named set (Latin-1,

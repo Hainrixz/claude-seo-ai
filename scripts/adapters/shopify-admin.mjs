@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // shopify-admin adapter — writes the per-resource SEO fields Shopify keeps in the Admin, not in the
 // theme: a product's or collection's search-engine title and description, the `seo.hidden` metafield
 // that pulls a resource out of the index and the sitemap, and URL redirects.

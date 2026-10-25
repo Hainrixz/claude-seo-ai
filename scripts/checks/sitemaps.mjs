@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M17 — XML sitemaps. Discovery and parse results come from site/sitemaps.json (lib/site.mjs);
 // the per-URL verdicts are the join between the sitemap's <loc> list and the pages the crawl
 // actually fetched, so a URL the crawl never visited is never reported as broken — only as

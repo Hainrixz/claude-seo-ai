@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // YAML front matter for Markdown content files (Hugo, Jekyll, Astro, Eleventy, Docusaurus).
 //
 // Deliberately a *minimal* subset — scalars, quoted strings, inline and block arrays of scalars —

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M13 — freshness, deterministic part only. Dates are normalised by check-freshness.mjs
 // (analyzeFreshness), which reads schema.org, <time datetime>, the article:* metas, Last-Modified
 // and the visible text, and reports what it could not parse instead of guessing.

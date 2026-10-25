@@ -4,6 +4,7 @@ description: Classify a website as ecommerce, local-business, blog-publisher, sa
 user-invocable: false
 allowed-tools: Read, Grep, Glob
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-vertical-detect
 

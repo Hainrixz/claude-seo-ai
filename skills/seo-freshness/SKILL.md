@@ -3,6 +3,7 @@ name: seo-freshness
 description: Audit and repair freshness & temporal signals on a page — reconcile visible publish/update dates with schema datePublished/dateModified, flag staleness against topic volatility, and inject honest dateModified. Module M13. Feeds both the Search SEO and AI Visibility scores.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-freshness (M13)
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Deterministic counts behind the fact-density audit (M12). Judgment calls
 // (is a claim "strong"? is a source "authoritative"?) stay manual_review.
 //

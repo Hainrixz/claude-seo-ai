@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/lib/shell.mjs — quoting, ssh and WP-CLI command construction.
 // Nothing here executes a command; the module only builds argv arrays and printable strings.
 

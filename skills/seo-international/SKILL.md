@@ -3,6 +3,7 @@ name: seo-international
 description: Audit and generate hreflang annotations for multilingual sites — check reciprocity, BCP-47 validity, self-reference, x-default, hreflang/canonical conflicts, and <html lang> agreement, and emit reciprocal hreflang link sets. Module M20 (conditional). Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-international (M20)
 

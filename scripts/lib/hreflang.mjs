@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // hreflang collection (HTML <link rel=alternate hreflang> ∪ HTTP Link header) and reciprocity checks.
 
 import { parseLinkHeader } from './fetch.mjs';

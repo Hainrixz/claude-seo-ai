@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // lib/html.mjs: tokenizer, parseDocument, extractPassages, parseLinkHeader, and the util.mjs
 // compat getters on malformed markup. Fixtures are synthetic (tests/fixtures/malformed.html).
 

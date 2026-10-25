@@ -4,6 +4,7 @@ description: Compute the two never-blended 0-100 scores (Search SEO and AI Visib
 user-invocable: false
 allowed-tools: Read, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-score
 

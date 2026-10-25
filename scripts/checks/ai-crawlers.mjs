@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M14 — AI crawler access and Content-Signal, read from the run's site/robots.json.
 //
 // Two honesty rules are hard-coded here:

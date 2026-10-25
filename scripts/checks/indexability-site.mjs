@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M2 — cross-URL indexability: redirect chains and loops, broken internal links and HTTPS
 // enforcement. These need more than one URL, so they read the crawl manifest (crawl.json) and the
 // site/discovery.json HTTP->HTTPS probe rather than a single snapshot.

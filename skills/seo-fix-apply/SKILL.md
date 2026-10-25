@@ -4,6 +4,7 @@ description: Writer protocol preloaded into the seo-fixer-writer agent — how c
 user-invocable: false
 allowed-tools: Read, Grep, Glob
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-fix-apply (writer protocol)
 

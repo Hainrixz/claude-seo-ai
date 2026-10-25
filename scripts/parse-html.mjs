@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Extract and audit on-page SEO elements from a page (URL or file).
 // Backs verification for M7 (title/meta/headings), M8 (social), M9 (images), M10 (links).
 //

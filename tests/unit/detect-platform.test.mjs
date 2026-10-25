@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // scripts/detect-platform.mjs + scripts/lib/platform-rules.mjs —
 // per-fixture platform/framework/plugin/hosting/environment verdicts, the four independent layers,
 // the confidence bands, credential/tool readiness, the WordPress REST probe, the CLI surface,

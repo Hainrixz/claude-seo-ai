@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Test entry point. Discovers tests/unit/*.test.mjs and tests/e2e/*.test.mjs (no glob needed,
 // so it works on Node 18) and runs them through node:test, printing one line per test and a
 // final summary. Exit code is 1 when any test fails or when no tests ran.

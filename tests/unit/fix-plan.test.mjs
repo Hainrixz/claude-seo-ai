@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // scripts/fix-plan.mjs — target selection and the grouped dry run, on a synthetic report and a
 // throwaway copy of a fixture repo. Offline, and it must leave the project byte-identical: this is
 // the step that plans writes, not the one that performs them.

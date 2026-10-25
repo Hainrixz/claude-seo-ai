@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M8 — Open Graph / Twitter cards. Presence is read from the parsed head; reachability is the only
 // part that costs a request, so it is budgeted, skipped entirely when no fetch implementation is
 // injected, and never performed when CLAUDE_SEO_AI_OFFLINE=1.

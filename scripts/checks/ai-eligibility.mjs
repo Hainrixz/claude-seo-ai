@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M14 — Google AI-feature eligibility per page, plus the two access facts that only a user-agent
 // diff can show. Built on ai-eligibility.mjs analyzeEligibility(), which resolves the meta robots
 // tags, the X-Robots-Tag header, data-nosnippet blocks and the robots.txt verdict for Googlebot.

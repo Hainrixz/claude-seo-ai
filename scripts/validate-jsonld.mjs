@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Extract and validate JSON-LD structured data. Backs M5 (schema), M16 (author/Org),
 // M18 (Product), M19 (LocalBusiness), M13 (dates).
 //

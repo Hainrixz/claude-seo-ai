@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/score.mjs (plan 4e weights, 4f calibration, 4i integrity, 2d site rollup)
 // plus the scorer-adjacent libs scripts/lib/bands.mjs and scripts/lib/finding.mjs.
 

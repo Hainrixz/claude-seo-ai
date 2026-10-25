@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Parse robots.txt (Google REP matcher, AI-crawler posture, Content-Signal) and walk every
 // sitemap of a site. Backs M1 (crawlability), M14 (AI crawlers), M17 (sitemaps).
 //

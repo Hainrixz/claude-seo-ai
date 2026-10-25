@@ -3,6 +3,7 @@ name: seo-mobile
 description: Audit mobile-friendliness of a page from the PageSnapshot — verify the viewport meta, no horizontal-scroll/fixed-width layouts, adequate tap targets, legible base font, and mobile/desktop content parity — and generate the viewport meta when missing. Module M7b. Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-mobile (M7b)
 

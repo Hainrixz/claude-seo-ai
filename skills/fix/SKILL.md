@@ -5,6 +5,7 @@ disable-model-invocation: true
 argument-hint: "<url|path> [--target auto|local|shopify|shopify-theme|shopify-admin|wordpress|wordpress-rest|wordpress-wpcli|page-api|webflow|wix|ghost|hubspot|bigcommerce|instructions] [--category M5 --category auto] [--include-proposed] [--store <shop>] [--provider <webflow|wix|ghost|hubspot|bigcommerce>] [--site <id>] [--wp-url <u>] [--ssh user@host:/path] [--project <dir>] [--dev-url <u>] [--run <run_id|latest>] [--report <path>] [--lang en|es] [--dry-run] [--publish] [--rollback <run_id>] [--force]"
 allowed-tools: Read, Grep, Glob, Bash, Agent
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # fix (opt-in writer)
 

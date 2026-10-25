@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/compare.mjs — the pure halves: option parsing, mode detection, location
 // normalization, the findings diff and its honesty rules, the category/page deltas, the gap matrix
 // and the markdown renderer. Nothing here touches the network or a run directory: the two synthetic

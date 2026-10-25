@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // page-api provider: Ghost Admin API.
 //
 // Ghost authenticates with a short-lived JWT signed from the Admin API key (`<id>:<hex secret>`) —

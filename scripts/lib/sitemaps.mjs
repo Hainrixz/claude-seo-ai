@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // XML sitemap parsing and recursive discovery (sitemaps.org protocol + image/video/news/xhtml
 // extensions). Regex-based on purpose: zero dependencies, tolerant of the sloppy XML CMSs emit.
 

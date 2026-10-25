@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Site-level artifacts fetched once per run (zero dependencies): robots.txt (parsed, with per-bot
 // verdicts for the audited URL), sitemap discovery (robots `Sitemap:` ∪ well-known paths, recursive,
 // gzip-aware) and the AI-discovery probes (/llms.txt, /agents.md, /.well-known/ucp, …) plus an

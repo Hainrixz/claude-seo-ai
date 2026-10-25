@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M20 — hreflang. Runs once over the whole run so reciprocity can be judged inside the crawl:
 // an alternate that was never fetched is reported as unmeasured, never as one-way.
 //

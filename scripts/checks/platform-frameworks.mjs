@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Framework-conditional checks (plan 3c). These are repo checks: the facts they need (a
 // metadataBase, a site URL in the config, where a Head export lives) exist in the source, not in
 // the rendered HTML. So the module only reports a defect when profile.json carries a project root

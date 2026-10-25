@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M22 — agent readiness. Built on agent-readiness.mjs analyzeAgentReadiness(), which counts
 // semantic vs. improvised controls, accessible names, labelled form controls and content trapped in
 // iframes, all from static HTML.

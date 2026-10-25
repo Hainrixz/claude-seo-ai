@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for the page-api adapter and its five providers.
 //
 // Offline throughout: every provider gets an injected `fetchImpl`, so the assertions are about the

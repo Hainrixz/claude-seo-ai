@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M18 (product block) — Offer completeness, faceted URLs, variant modelling and per-product
 // catalogue eligibility. Runs once over the run so faceted URLs can be compared across the crawl
 // and a supplied feed can be joined to the pages by URL.

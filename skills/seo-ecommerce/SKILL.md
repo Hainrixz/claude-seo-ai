@@ -3,6 +3,7 @@ name: seo-ecommerce
 description: Conditionally audit and generate e-commerce structured data and agentic-commerce readiness for product pages — validate Product/Offer (price, priceCurrency, availability), AggregateRating/Review, faceted-navigation canonicalization and variant/ProductGroup handling, cross-check page-to-schema-to-feed consistency, and assess whether shopping agents can read the store (UCP merchant profile, catalog eligibility, ACP feed hygiene). Module M18. Feeds both the Search SEO and AI Visibility scores.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-ecommerce (M18)
 

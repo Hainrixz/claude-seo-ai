@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Probes (plan 4g) — manual import of a Search Console export. NEVER scored (severity 0, tier 2).
 //
 // Google's Search Analytics API has no generative-AI search type, and no export separates AI

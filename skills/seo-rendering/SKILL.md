@@ -3,6 +3,7 @@ name: seo-rendering
 description: Audit a page's rendering strategy and JavaScript dependency — diff raw HTML against the rendered DOM to measure how much primary content, links, headings, and JSON-LD exist only after JS executes, classify CSR-only / SSR / SSG / ISR, and emit framework-specific guidance. Module M4. Feeds both the Search SEO and AI Visibility scores.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-rendering (M4)
 

@@ -3,6 +3,7 @@ name: seo-crawlability
 description: Audit and generate robots.txt and general crawl access for a page — verify robots.txt reachability and syntax, detect Disallow rules that block CSS/JS or important content, sanity-check crawl-delay, confirm a Sitemap directive, and assert overall crawl access for Googlebot/Bingbot. Module M1. Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-crawlability (M1)
 

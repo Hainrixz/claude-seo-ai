@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Build the fix plan: report + platform profile in, one plan.json full of Changes out.
 //
 // This is the step between "we know what is wrong" and "someone writes something". It groups the

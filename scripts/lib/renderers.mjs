@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Render decision + optional headless rendering for claude-seo-ai (zero dependencies).
 //
 // The static HTML is always the primary evidence. `needsRender()` says whether a JS render pass would

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/lib/store.mjs: keys, slugs, run ids, root resolution, run directories,
 // latest/baseline pointers (symlink + latest.json fallback), retention and run references.
 // Everything happens inside a fresh temp directory; nothing touches the real ~/.claude-seo-ai.

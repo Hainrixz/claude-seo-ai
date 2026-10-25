@@ -294,3 +294,10 @@ Built by **Enrique Rocha** — I help teams ship AI: consulting, automations, an
 - **Sin claves funciona** (Tier 0: los scripts de Node sin dependencias son la capa de adquisición). Render de SPAs y Core Web Vitals reales son opcionales (Tier 1+).
 
 Guías completas en español: [`docs/es/`](docs/es/) — [uso](docs/es/usage.md) · [arquitectura](docs/es/architecture.md) · [puntuación](docs/es/scoring.md) · [plataformas](docs/es/platforms.md) · [MCP](docs/es/mcp.md) · [distribución](docs/es/distribution.md). Hecho con cariño por [tododeia.com](https://tododeia.com).
+
+<!-- marca-agua:inicio -->
+
+---
+
+<sub>Hecho por **Enrique Rocha (@soyenriquerocha)** · [tododeia.com](https://www.tododeia.com)⁠​‌‌​​‌​‌​‌‌‌​​‌​​​‌​‌‌​‌​‌‌​​‌​​​​‌‌​​​​​​‌‌​​‌‌​​‌‌​‌‌‌​​‌‌​‌​‌​​‌‌‌​​​​‌‌​​‌​‌​​‌‌​​​‌⁠</sub>
+<!-- marca-agua:fin -->

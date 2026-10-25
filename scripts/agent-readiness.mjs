@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M22 — agent readiness (plan 4d). Can a scripted agent understand and operate this page from the
 // HTML alone? Everything here is directional: the same accessibility semantics that let a screen
 // reader name a control are what an agent parses, but no engine documents an "agent-readiness"

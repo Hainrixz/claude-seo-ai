@@ -3,6 +3,7 @@ name: seo-indexability
 description: Audit a page's indexability and site health — canonical presence/validity (self vs cross-domain vs chain, canonical to redirect/404, and the genuinely lethal canonical+noindex pair where the canonical points elsewhere), robots meta and X-Robots-Tag noindex/nofollow, duplicate clusters, pagination signals, plus redirect chains/loops, 4xx/5xx and soft-404 internal links, mixed content, HTTP-to-HTTPS enforcement, user-agent content divergence (cloaking), orphan pages and click-depth — and generate self-referential canonical / noindex-removal fixes. Module M2 (covers M3 site health). Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-indexability (M2)
 

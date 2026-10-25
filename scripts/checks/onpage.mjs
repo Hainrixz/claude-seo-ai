@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M7 / M7b / M7c — head hygiene, mobile viewport and heading structure for one page.
 //
 // Length verdicts come from lib/bands.mjs so the skill text, parse-html.mjs and this check can

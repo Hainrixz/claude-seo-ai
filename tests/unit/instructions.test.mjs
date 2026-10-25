@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/adapters/instructions.mjs — card parsing, EN/ES rendering, and the
 // honesty rules (it writes nothing, it never claims a verified fix).
 

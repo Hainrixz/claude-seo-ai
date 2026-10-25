@@ -3,6 +3,7 @@ name: seo-crawl-render
 description: Acquire a page or site into the shared PageSnapshot every audit module reads — real HTTP status chain, headers, robots directives, raw HTML on disk, parsed document, optional headless-Chrome render with a raw-vs-rendered delta, and once-per-run site artifacts (robots, sitemaps, AI discovery files). Acquisition is done by the bundled scripts (snapshot.mjs / crawl.mjs), never by WebFetch. Records the data tier reached.
 allowed-tools: Read, Grep, Glob, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-crawl-render
 

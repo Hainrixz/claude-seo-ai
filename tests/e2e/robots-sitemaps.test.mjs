@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end against the local fixture server: parse-robots-sitemap (robots + verdicts + Content-Signal +
 // recursive sitemap discovery, 4xx/5xx robots semantics), discoverSitemaps with the real fetcher,
 // link-graph crawl (seed never an orphan, redirect-keyed adjacency, robots respected, depth/status),

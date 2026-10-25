@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Platform-conditional checks for Shopify (plan 3c). They only run when detect-platform.mjs put a
 // medium/high-confidence `shopify` verdict in the run's profile.json — a low-confidence guess never
 // produces platform findings.

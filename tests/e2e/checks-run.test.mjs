@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end: crawl the local fixture server with scripts/crawl.mjs, load the persisted run with
 // loadRunContext() and run the whole checks registry over it.
 //

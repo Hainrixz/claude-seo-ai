@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Shared zero-dependency helpers for claude-seo-ai scripts.
 // HTML parsing runs on the zero-dependency tokenizer in lib/html.mjs (browser-like attribute
 // and implied-end-tag handling), so the scripts run anywhere `node` exists, with no install

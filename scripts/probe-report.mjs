@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Probes (plan 4g) — a web-search presence proxy. NEVER scored.
 //
 // The `geo` skill runs Claude Code's WebSearch for a handful of questions and pipes the raw results

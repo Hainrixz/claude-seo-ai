@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end: scripts/report.mjs merging a deterministic pass with the synthetic agent arrays in
 // tests/fixtures/agents-sample/. No network and no crawl — the run directory is built from
 // synthetic JSON so the merge rules (validate, dedupe, most-severe-wins) are asserted exactly.

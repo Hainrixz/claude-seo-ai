@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // The two PreToolUse hooks, exercised the way Claude Code runs them: a JSON payload on stdin, a
 // JSON decision on stdout, an exit code that means block or not. Everything here is offline and
 // uses throwaway directories — no ticket is ever read from the real ~/.claude-seo-ai.

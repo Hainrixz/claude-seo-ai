@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Compare audit runs: a baseline against a re-run, staging against production, a small set of
 // competitors, or a content-gap matrix against the pages a search engine returned for a query.
 //

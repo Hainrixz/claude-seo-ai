@@ -4,6 +4,7 @@ description: Compare a site against its own baseline, against a staging deployme
 argument-hint: "<urlA> <urlB> [<urlC>…] | --baseline [latest] --against <url|run> | --staging <url> --prod <url> | <url> --gap \"<query>\""
 allowed-tools: Read, Glob, Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/*"), WebSearch
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # /claude-seo-ai:compare
 

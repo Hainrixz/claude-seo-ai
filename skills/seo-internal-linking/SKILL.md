@@ -3,6 +3,7 @@ name: seo-internal-linking
 description: Audit and improve a site's internal-linking topology and semantic HTML — map pillar/cluster structure, count and grade contextual in-body links and anchor text, surface orphan pages and nav-heavy templates, and propose specific source→target link insertions. Module M10. Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-internal-linking (M10)
 

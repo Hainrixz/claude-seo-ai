@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M14 — snippet/index eligibility for AI features (plan 4a).
 //
 // Google documents one gate for AI Overviews / AI Mode: the page must be indexable AND

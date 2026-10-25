@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Shared plumbing for the API write adapters (wordpress-rest, wordpress-wpcli, page-api + its five
 // providers). Not an adapter itself — it exports no `main`, and nothing here talks to the network
 // on its own.

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // page-api provider: Webflow (Data API v2).
 //
 // Webflow is the one no-code platform in this set with a real staging boundary: a `PUT /v2/pages/{id}`

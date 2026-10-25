@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // URL -> source file mapping for the local-files adapter.
 //
 // The question this module answers is the one that decides whether `fix` can work on a framework

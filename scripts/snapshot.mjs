@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Acquire one page (or a built site on disk) into a persisted PageSnapshot v2 that every other script
 // can read back with `--snapshot <pages/<slug>.json>`.
 //

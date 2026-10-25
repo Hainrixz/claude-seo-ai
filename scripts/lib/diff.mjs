@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Text diffing and exact-anchor editing for the file-writing adapters (zero dependencies).
 //
 // Two halves:

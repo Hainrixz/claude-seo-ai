@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Structural validation of findings against schema/finding.schema.json using lib/schema-lite.mjs.
 // Used by score.mjs (drop + report invalid findings), report.mjs and lib/finding.mjs.
 

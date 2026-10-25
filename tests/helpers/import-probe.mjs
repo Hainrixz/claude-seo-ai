@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Import one module in a pristine child process and report what happened — without ever writing to
 // stdout, because the caller's main assertion is that this child's stdout stayed empty.
 //

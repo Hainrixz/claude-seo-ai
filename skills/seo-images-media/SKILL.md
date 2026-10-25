@@ -3,6 +3,7 @@ name: seo-images-media
 description: Audit and fix image & media accessibility for a page — detect missing/empty/duplicated/keyword-stuffed alt text, check alt quality and length, missing width/height (CLS), legacy formats, and absent VideoObject schema; generate contextual alt and dimensions. Module M9. Feeds both the Search SEO and AI Visibility scores.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-images-media (M9)
 

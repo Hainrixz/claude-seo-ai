@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Language detection + EN/ES lexicons for the content heuristics (M11 answer blocks, M12 fact
 // density, M13 freshness). Pure: no I/O, no network.
 //

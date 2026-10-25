@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/lib/renderers.mjs — the pure parts (render decision, delta), browser lookup
 // order with an env override, Playwright detection without the package, and renderWithChrome's error
 // path on a missing binary. The real Chrome run lives in tests/e2e/snapshot.test.mjs (skipped when absent).

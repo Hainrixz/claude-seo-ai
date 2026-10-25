@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Every CLI script must be importable as a module with no side effects (no output, no exit,
 // no exit code) and must export `main`. Also checks the CLI error contract of score.mjs.
 

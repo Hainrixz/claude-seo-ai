@@ -3,6 +3,7 @@ name: seo-ai-crawlers
 description: Audit AI crawler access and Google AI-feature eligibility for a page — check the snippet controls that actually gate AI Overviews and AI Mode (noindex, nosnippet, max-snippet, data-nosnippet), resolve per-bot effective access from robots.txt for the audited path (training vs retrieval vs user-fetch tokens), read Content-Signal posture, diff what different user-agents are served, confirm non-JS crawlers can read the page, and generate a choice-gated robots.txt preset. Module M14. Feeds the AI Visibility score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-ai-crawlers (M14)
 

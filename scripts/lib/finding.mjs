@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Finding constructor for the deterministic checks. Fills safe defaults, validates against the
 // schema and either throws (test mode) or returns { finding, errors } so a caller can drop + warn.
 // Also builds absolute, runnable `verification.reproduce` commands.

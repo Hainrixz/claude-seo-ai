@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Freshness & temporal-signal checks (M13): schema dates vs visible dates vs the
 // HTTP Last-Modified header, plus content age. Never used to backdate anything.
 //

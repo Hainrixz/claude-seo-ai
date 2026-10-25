@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Fetch Core Web Vitals via the Google PageSpeed Insights API. Backs M15.
 // Field (CrUX, p75) data is what Google ranks on; lab data is labeled separately.
 //

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Content passages for the M11/M12/M13 heuristics. Pure: no I/O.
 //
 // contentMask(tokens)              -> boilerplate policy as a per-token keep mask (see POLICY below)

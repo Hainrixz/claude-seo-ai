@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M9 — images and media. Alt text and intrinsic dimensions come straight from the parsed DOM;
 // video coverage is inferred from the embeds the page actually carries, never from the topic.
 //

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/lib/route-map.mjs — the URL -> source file mapping, against the synthetic
 // repositories in tests/fixtures/repos. Covers the cases named in the plan (3i) plus the class rule.
 

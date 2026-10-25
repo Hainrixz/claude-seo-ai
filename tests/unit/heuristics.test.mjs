@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // The three content heuristics (check-answerblocks, factdensity, check-freshness) on top of
 // lib/passages.mjs + lib/lang.mjs: Spanish coverage, div-only markup, the boilerplate policy,
 // numeric classification, date normalization and the manual_review path for unsupported languages.

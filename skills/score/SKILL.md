@@ -4,6 +4,7 @@ description: Recompute and display the two scores (Search SEO + AI Visibility) f
 argument-hint: "[findings.json | run-dir | latest[:host]]"
 allowed-tools: Read, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # /claude-seo-ai:score
 

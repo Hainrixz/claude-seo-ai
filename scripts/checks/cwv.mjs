@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M15 — Core Web Vitals. Field data is the only thing Google ranks on, and field data needs the
 // PageSpeed Insights API, so without a key this module reports needs_api and clearly labels the two
 // static heuristics it can still offer as lab-side hints.

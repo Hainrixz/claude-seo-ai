@@ -3,6 +3,7 @@ name: seo-sitemaps
 description: Audit and generate sitemaps and discovery files — validate XML sitemap presence/size/extensions/lastmod, check robots.txt referencing and sitemap-to-canonical consistency, reconcile orphans against the link graph, and produce repaired sitemap entries plus a robots.txt Sitemap line. Module M17. Feeds the Search SEO score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-sitemaps (M17)
 

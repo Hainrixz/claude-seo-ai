@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // PreToolUse guard for Bash. Closes the hole guard-write cannot see: the writer agent holds Bash,
 // and a shell command can push a theme live, rewrite a WordPress option, POST to an Admin API or
 // clobber a .env with a redirect — none of which passes through Write/Edit.

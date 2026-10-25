@@ -3,6 +3,7 @@ name: seo-headings-structure
 description: Audit and propose fixes for a page's heading hierarchy and semantic outline — verify exactly one H1, logical H2-H6 nesting with no skipped levels, descriptive heading text, and HTML5 landmarks (article/section/nav/main/footer) — so the document outline is extractable. Module M7c. Feeds the Search SEO score (clean headings also support AI answer-block extraction, which is scored separately under M11).
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-headings-structure (M7c)
 

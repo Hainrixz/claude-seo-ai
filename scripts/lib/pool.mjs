@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Tiny promise pool (zero dependencies). Runs `worker(item, index)` over `items` with at most
 // `concurrency` calls in flight, preserving input order in the results. Used by the site probes,
 // the sitemap discovery and (later) the crawler so a slow host never fans out into hundreds of

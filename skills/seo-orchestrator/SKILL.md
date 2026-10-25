@@ -4,6 +4,7 @@ description: Orchestrates a full SEO + AI-search audit — acquires the site wit
 user-invocable: false
 allowed-tools: Read, Grep, Glob, WebFetch, Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/*"), Bash(mkdir -p "${CLAUDE_PLUGIN_DATA}/runs/*"), Bash(cat > "${CLAUDE_PLUGIN_DATA}/runs/*"), Agent
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-orchestrator (Layer 2)
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M18 — Agentic Commerce Protocol product-feed lint (plan 4c).
 //
 // Checks the shape a feed must have before an agent can read it: the nine required fields, the

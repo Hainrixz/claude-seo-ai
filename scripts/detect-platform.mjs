@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // detect-platform.mjs — build the SiteProfile the orchestrator merges into <run_dir>/profile.json.
 //
 // Four independent layers are scored (platform / framework / cms plugins / hosting), so a headless

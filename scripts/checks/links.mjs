@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M10 — internal linking, per page. Contextual link volume, anchor quality and the semantic
 // landmark that separates in-body links from navigation.
 //

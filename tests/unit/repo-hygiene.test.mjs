@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Repo-side contracts that only exist in the *committed* tree, so a green local run cannot vouch
 // for them on its own.
 //

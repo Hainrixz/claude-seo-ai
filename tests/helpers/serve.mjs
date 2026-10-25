@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Keep the fixture site (tests/helpers/server.mjs) running as its own process and print its URL.
 //
 // The e2e tests start the server in-process, but two things need it in a separate process: a CI

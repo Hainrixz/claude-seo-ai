@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Local fixture HTTP server for e2e tests. Binds 127.0.0.1 on port 0 (ephemeral), serves the
 // synthetic mini site under tests/fixtures/site/ (with `{{ORIGIN}}` substituted by the live origin)
 // plus a set of behavioural routes: redirect chains and loops, a robots.txt that can be forced to

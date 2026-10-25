@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end tests for scripts/crawl.mjs against the local fixture server (tests/helpers/server.mjs):
 // template clustering, the sampling table and every skip reason, robots (a disallowed URL is never
 // requested, a 5xx robots.txt crawls the target only, Crawl-delay paces the crawl), link-status probes

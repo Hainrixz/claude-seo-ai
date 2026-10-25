@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M1 — crawlability. Reads the run's site/robots.json (written by lib/site.mjs) and answers the
 // only questions robots.txt can settle deterministically: can Googlebot fetch the audited path,
 // are the render assets reachable, is the file syntactically sound, is a sitemap declared, and is

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // AI / search crawler user-agent table. Mirrors references/ai-crawlers.md — keep the two in sync.
 //
 // Classes: training (model training corpora) · retrieval (search index / live answers, may cite)

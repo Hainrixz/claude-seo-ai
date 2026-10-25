@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // page-api provider: BigCommerce (Catalog API for products, Content API for pages).
 //
 // The interesting constraint here is not SEO advice, it is a platform limit: `page_title` is capped

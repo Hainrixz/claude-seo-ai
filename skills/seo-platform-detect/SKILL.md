@@ -4,6 +4,7 @@ description: Build the SiteProfile for an audited site — platform, framework, 
 user-invocable: false
 allowed-tools: Read, Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/*")
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-platform-detect
 

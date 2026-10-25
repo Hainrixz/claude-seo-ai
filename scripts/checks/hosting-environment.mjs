@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M2 (hosting) — states, once, that the audited host is not production.
 //
 // This matters for the score, not just the report: scripts/score.mjs suppresses the severity-5 caps

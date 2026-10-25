@@ -4,6 +4,7 @@ description: Analyze and score only a page's AI-search visibility (GEO/AEO) — 
 argument-hint: "<url|path> [--pages N] [--render static|auto|js] [--feed <path>] [--probe \"<question>\"] [--gsc-ai-export <csv>]"
 allowed-tools: Read, Grep, Glob, WebFetch, WebSearch, Bash, Agent
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # /claude-seo-ai:geo
 

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // page-api provider: HubSpot CMS pages (API v3).
 //
 // HubSpot has the one draft model in this set that is genuinely useful: a `PATCH …/{id}/draft`

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Analyze internal linking. Backs M10 (internal linking & semantics).
 //
 // Usage: node link-graph.mjs --url https://example.com/page        (single-page link profile)

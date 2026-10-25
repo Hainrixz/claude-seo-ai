@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // instructions adapter — the fallback that always works, and the only one for closed platforms.
 //
 //   node scripts/adapters/instructions.mjs <op> --run <fix-run-dir> [--change <id>] [--lang en|es] [--json]

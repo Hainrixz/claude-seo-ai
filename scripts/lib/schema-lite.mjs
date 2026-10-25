@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // A small JSON-Schema-subset validator (zero dependencies). Enough to validate the plugin's own
 // schemas (schema/finding.schema.json, schema/audit-report.schema.json) at runtime without a
 // full draft-2020 implementation.

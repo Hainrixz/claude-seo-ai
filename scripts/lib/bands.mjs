@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Shared numeric bands. One source of truth for the title/description length bands used by
 // parse-html.mjs, the on-page checks and the seo-meta-onpage skill, and for the letter bands of
 // the two scores. Pure constants + tiny helpers; no I/O.

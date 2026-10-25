@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Phase 4 GEO scripts: ai-eligibility, ua-diff, ai-discovery, acp-feed-lint, agent-readiness,
 // probe-report and gsc-ai-import. Everything is fixture- or injection-driven: the only network is
 // the local fixture server in tests/helpers/server.mjs, and ua-diff runs against an injected

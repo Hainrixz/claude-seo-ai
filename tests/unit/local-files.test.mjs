@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for scripts/adapters/local-files.mjs — plan/preview/apply/verify/rollback on a
 // throwaway copy of a fixture repository. Nothing here touches the network or the real fixtures.
 

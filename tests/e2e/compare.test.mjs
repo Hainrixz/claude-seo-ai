@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end: scripts/compare.mjs over real run directories.
 //
 // The pairwise case is two audits of the same origin on the local fixture server, with the site

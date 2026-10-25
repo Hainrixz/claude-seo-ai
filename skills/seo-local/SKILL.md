@@ -3,6 +3,7 @@ name: seo-local
 description: Audit and generate Local SEO signals for local-business pages — verify LocalBusiness JSON-LD, NAP consistency, geo coordinates, openingHoursSpecification, and service-area, advise on Google Business Profile alignment, and produce ready-to-inject LocalBusiness JSON-LD. Module M19 (conditional). Feeds both the Search SEO and AI Visibility scores.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-local (M19)
 

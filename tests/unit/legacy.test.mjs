@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // The original 30 smoke assertions (v0.1.0 tests/run.mjs), ported unchanged to node:test.
 // Each script is spawned as a CLI against tests/fixtures — no network required.
 

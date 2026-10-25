@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Deterministic part of the answer-extractability audit (M11). The semantic-completeness
 // judgment stays a manual_review pass; this provides the reproducible counts.
 //

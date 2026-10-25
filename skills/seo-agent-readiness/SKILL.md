@@ -3,6 +3,7 @@ name: seo-agent-readiness
 description: "Audit how well a page can be operated by AI agents and agentic browsers — semantic interactive controls (<button>/<a href> instead of div/span click handlers), named buttons and links, labeled form controls, no javascript: hrefs, primary content outside iframes, and WebMCP detection — following Google's generative-AI guidance and the web.dev agent-friendly websites guide. Module M22 \"Agent-readiness\". Feeds the AI Visibility score (weight 4, all directional)."
 allowed-tools: Read, Grep, Glob, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-agent-readiness (M22 — Agent-readiness)
 

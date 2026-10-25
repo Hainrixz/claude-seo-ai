@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M2 — per-page indexability. Canonicalisation, the noindex pair, mixed content, and the
 // user-agent divergence recorded by ua-diff.mjs.
 //

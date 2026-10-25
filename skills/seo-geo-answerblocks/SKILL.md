@@ -3,6 +3,7 @@ name: seo-geo-answerblocks
 description: Audit and generate answer-extractable content — verify each question heading is followed by a ~40-60 word direct answer, passages are self-contained (~134-167 words, no unresolved anaphora), and lists/tables/definitions/TL;DR blocks exist; draft answer-block and summary rewrites for the user to accept. Module M11. Feeds the AI Visibility score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-geo-answerblocks (M11)
 

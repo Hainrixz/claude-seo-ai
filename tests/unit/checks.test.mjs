@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Unit tests for the deterministic checks registry (scripts/checks/*) and lib/imgsize.mjs.
 //
 // Every test builds a synthetic context by hand — no network, no run directory unless the test

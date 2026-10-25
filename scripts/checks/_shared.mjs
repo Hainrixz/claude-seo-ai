@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Shared helpers for the deterministic checks in scripts/checks/*.mjs.
 //
 // Not a check module: it exports no `check`. Every check imports `mk()` from here so that all

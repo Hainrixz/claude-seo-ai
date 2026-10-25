@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end exit-code taxonomy of the CLI scripts (EXIT.OK=0, USAGE=1, RUNTIME=2).
 // Spawns real processes. The only "network" is a connection to a just-closed loopback port,
 // which fails immediately with ECONNREFUSED — nothing leaves the machine.

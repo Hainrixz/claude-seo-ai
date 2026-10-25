@@ -3,6 +3,7 @@ name: seo-entity-linking
 description: Audit and generate entity & knowledge-graph linkage for a page — verify sameAs identity links (Wikidata/Wikipedia/LinkedIn/Crunchbase/official profiles) on Organization/Person, check NAP/entity consistency for local, confirm a defined primary entity, and measure entity density, then propose ready-to-inject sameAs/about/mentions references. Module M6. Feeds the AI Visibility score.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-entity-linking (M6)
 

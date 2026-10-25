@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M7 — cross-URL head hygiene: the same <title> or meta description served from several distinct
 // URLs. Distinctness is decided by lib/urlnorm normalizeUrl (lower-case host, no fragment, no
 // trailing slash, tracking parameters removed), so `/a` and `/a/#x` are one URL while `/a` and

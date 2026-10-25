@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M18 (agentic block) — the site-level half of agentic commerce readiness: the UCP profile and the
 // Agentic Commerce Protocol feed. Only runs when the e-commerce vertical is active, because these
 // endpoints mean nothing on a site with no catalogue.

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M21 — AI discovery and agent endpoints (/llms.txt, /agents.md, /.well-known/ucp,
 // /.well-known/ai-catalog.json, /sitemap_agentic_discovery.xml), built on ai-discovery.mjs
 // analyzeDiscovery() over the probes site/discovery.json already recorded.

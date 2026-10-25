@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Intrinsic image dimensions sniffed from the first bytes of a file. Pure, zero-dependency,
 // no I/O: the caller supplies a Buffer/Uint8Array (usually the head of an HTTP response).
 //

@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // End-to-end tests for scripts/snapshot.mjs against the local fixture server (tests/helpers/server.mjs) and
 // temp directories: redirect chain/loop/truncation flags, headers, header canonical + hreflang, --max-bytes,
 // site artifacts (robots verdicts, gz sitemap child, discovery statuses, saved bodies, reuse within a run),

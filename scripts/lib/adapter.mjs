@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Adapter plumbing shared by every scripts/adapters/*.mjs: the Change record, its status machine,
 // the fix-run directory, and the confirmation tickets that gate `apply`/`publish`/`rollback`.
 //

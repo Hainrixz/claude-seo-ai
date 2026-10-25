@@ -4,6 +4,7 @@ description: Audit a website or web codebase for SEO and AI-search (GEO/AEO) —
 argument-hint: "<url|path> [--pages N] [--max N] [--render static|auto|js] [--ua default|googlebot|bingbot|gptbot|oai-searchbot|claude-searchbot] [--vertical ecommerce,docs] [--environment production|preview|staging|local] [--feed <path>] [--out <dir>]"
 allowed-tools: Read, Grep, Glob, WebFetch, Bash, Agent
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # /claude-seo-ai:audit
 

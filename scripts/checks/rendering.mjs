@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M4 — rendering. Everything here is read from the snapshot's own render block: whether a render
 // was needed, whether one actually ran, and what the raw-vs-rendered delta contained.
 //

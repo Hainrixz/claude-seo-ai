@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Template clustering for the crawler (pure functions, no I/O).
 //
 // A "template" is the page type behind a URL: the product page, the blog post, the category

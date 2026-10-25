@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // M21 — AI discovery & agent endpoints (plan 4b). Weight 0 on both axes on purpose: no engine
 // documents that any of these files changes retrieval or citation. This script only reports whether
 // the files exist, whether they parse, and whether robots.txt blocks them for the very agents they

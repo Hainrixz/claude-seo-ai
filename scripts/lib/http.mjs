@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // Tiny JSON-over-HTTP client for the write adapters (zero dependencies, Node >= 18 global fetch).
 //
 // Why not lib/fetch.mjs: that module is the *crawler* — redirect chains, byte caps, charset

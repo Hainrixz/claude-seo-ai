@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // page-api — one CLI over the five hosted platforms that expose a page-metadata API.
 //
 //   node scripts/adapters/page-api.mjs <op> --provider webflow|wix|ghost|hubspot|bigcommerce \

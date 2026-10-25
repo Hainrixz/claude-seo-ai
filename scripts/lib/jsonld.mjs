@@ -1,3 +1,6 @@
+// Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors
+// SPDX-License-Identifier: MIT
+// id: er-d03758e1
 // JSON-LD helpers shared by validate-jsonld.mjs, html.mjs and the audit pipeline.
 // Pure functions, no I/O. Nodes are objects carrying an @type; flattenNodes() walks
 // `@graph` AND every nested object/array property so nested Offer/Person/AggregateRating

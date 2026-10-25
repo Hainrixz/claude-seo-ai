@@ -3,6 +3,7 @@ name: seo-core-web-vitals
 description: Audit Core Web Vitals & page performance — measure LCP, INP, and CLS against p75 field thresholds, diagnose render-blocking resources, unoptimized images, and layout-shift sources, and produce prioritized, advisory-only remediation guidance. Module M15. Feeds the Search SEO score (heavily) and the AI Visibility score (minimally).
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-core-web-vitals (M15)
 

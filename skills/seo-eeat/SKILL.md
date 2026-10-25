@@ -3,6 +3,7 @@ name: seo-eeat
 description: Audit and strengthen E-E-A-T and trust signals on a page — verify author identity/credentials (Person schema, byline, author page, sameAs), Organization about/contact/policies, visible experience/expertise markers, and transparency (sourcing, disclosures), and generate Person/Organization trust JSON-LD. Module M16. Feeds both the Search SEO and AI Visibility scores.
 allowed-tools: Read, Grep, Glob, WebFetch, Bash
 ---
+<!-- Portions Copyright (c) 2026 Enrique Rocha (@soyenriquerocha) - see LICENSE for original authors · tododeia.com · id er-d03758e1 -->
 
 # seo-eeat (M16)
 
